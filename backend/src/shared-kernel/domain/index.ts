@@ -2,6 +2,8 @@ export { AggregateRoot } from './aggregate-root.js';
 export { DomainEvent } from './domain-event.js';
 export { Entity } from './entity.js';
 export {
+  AuthenticationError,
+  AuthorizationError,
   BusinessRuleViolationError,
   ConflictError,
   DomainError,

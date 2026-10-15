@@ -35,3 +35,9 @@ export abstract class ConflictError extends DomainError {}
 
 /** A operação viola uma regra de negócio do agregado (ex.: transição inválida). */
 export abstract class BusinessRuleViolationError extends DomainError {}
+
+/** Não foi possível comprovar a identidade de quem faz a requisição. */
+export abstract class AuthenticationError extends DomainError {}
+
+/** A identidade é conhecida, mas não tem permissão para a operação. */
+export abstract class AuthorizationError extends DomainError {}
