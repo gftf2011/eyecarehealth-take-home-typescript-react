@@ -1,0 +1,10 @@
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index.js';
+import type { OrderStatusValue } from '../value-objects/order-status.js';
+
+export class DeliveryPersonAssignmentNotAllowedError extends BusinessRuleViolationError {
+  readonly code = 'ASSIGNMENT_NOT_ALLOWED';
+
+  constructor(status: OrderStatusValue) {
+    super(`Não é possível atribuir entregador a um pedido com status '${status}'`, [{ status }]);
+  }
+}
