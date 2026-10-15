@@ -27,7 +27,10 @@ export function validateInput<TFactories extends Factories>(
     try {
       built[key] = factory() as ReturnType<TFactories[typeof key]>;
     } catch (error) {
-      if (!(error instanceof InvalidValueError)) throw error;
+      // Aceita também validações já agrupadas (ex.: PageRequest com page e limit inválidos).
+      if (!(error instanceof InvalidValueError || error instanceof InputValidationError)) {
+        throw error;
+      }
       details.push(...error.details);
     }
   }
