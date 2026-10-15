@@ -26,8 +26,13 @@ export type ProductDetails = {
   preparationTime: PreparationTime;
 };
 
-/** Alteração parcial: campos ausentes não mudam; `imageUrl: null` remove a imagem. */
-export type ProductDetailsChanges = Partial<ProductDetails>;
+/**
+ * Alteração parcial: campos ausentes (ou `undefined`) não mudam;
+ * `imageUrl: null` remove a imagem.
+ */
+export type ProductDetailsChanges = {
+  readonly [K in keyof ProductDetails]?: ProductDetails[K] | undefined;
+};
 
 export type CreateProductParams = ProductDetails & {
   id: ProductId;

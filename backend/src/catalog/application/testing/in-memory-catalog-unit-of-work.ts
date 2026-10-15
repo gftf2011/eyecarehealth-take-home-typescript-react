@@ -1,7 +1,7 @@
 import type { DomainEvent } from '../../../shared-kernel/domain/index.js';
 import {
   Product,
-  type ProductId,
+  ProductId,
   type ProductRepository,
   type ProductSnapshot,
 } from '../../domain/index.js';
@@ -19,6 +19,20 @@ export class InMemoryCatalogUnitOfWork implements CatalogUnitOfWork {
   commits = 0;
   rollbacks = 0;
   #failNextCommit: Error | null = null;
+
+  /** Pré-carrega produtos já confirmados (estado inicial do teste), descartando os eventos. */
+  givenProducts(...products: Product[]): void {
+    for (const product of products) {
+      product.pullDomainEvents();
+      this.products.set(product.id.value, product.snapshot());
+    }
+  }
+
+  /** Lê o estado confirmado de um produto, como o próximo caso de uso o veria. */
+  committedProduct(id: string): Product | undefined {
+    const snapshot = this.products.get(id);
+    return snapshot === undefined ? undefined : Product.reconstitute(ProductId.from(id), snapshot);
+  }
 
   /** Faz o próximo commit falhar, simulando erro do banco após as escritas. */
   failNextCommitWith(error: Error): void {

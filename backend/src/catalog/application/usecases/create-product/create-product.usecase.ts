@@ -4,7 +4,6 @@ import {
   type UseCase,
 } from '../../../../shared-kernel/application/index.js';
 import {
-  ImageUrl,
   PreparationTime,
   Product,
   ProductCategory,
@@ -14,6 +13,7 @@ import {
   ProductPrice,
 } from '../../../domain/index.js';
 import { toProductDto, type ProductDto } from '../../dtos/product.dto.js';
+import { parseImageUrlInput } from '../../inputs/image-url.input.js';
 import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work.js';
 
 export type CreateProductInput = {
@@ -41,7 +41,7 @@ export class CreateProductUseCase implements UseCase<CreateProductInput, Product
       description: () => ProductDescription.create(input.description),
       price: () => ProductPrice.fromDecimal(input.price),
       category: () => ProductCategory.create(input.category),
-      imageUrl: () => toOptionalImageUrl(input.imageUrl),
+      imageUrl: () => parseImageUrlInput(input.imageUrl) ?? null,
       preparationTime: () => PreparationTime.ofMinutes(input.preparationTime),
     });
 
@@ -57,9 +57,4 @@ export class CreateProductUseCase implements UseCase<CreateProductInput, Product
       return toProductDto(product);
     });
   }
-}
-
-function toOptionalImageUrl(raw: string | null | undefined): ImageUrl | null {
-  const value = raw?.trim() ?? '';
-  return value === '' ? null : ImageUrl.create(value);
 }
