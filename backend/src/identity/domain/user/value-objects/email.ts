@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidEmailError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidEmailError } from '../errors';
 
 const MAX_LENGTH = 255;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

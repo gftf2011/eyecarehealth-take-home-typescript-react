@@ -1,4 +1,4 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import { DomainEvent } from '../../../../shared-kernel/domain';
 import type { RefreshSessionId } from '../refresh-session-id';
 import { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type';
 

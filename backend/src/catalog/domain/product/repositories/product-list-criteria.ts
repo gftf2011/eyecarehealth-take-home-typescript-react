@@ -1,4 +1,4 @@
-import type { Sort } from '../../../../shared-kernel/domain/index';
+import type { Sort } from '../../../../shared-kernel/domain';
 import type { ProductCategoryValue } from '../value-objects/product-category';
 
 export const PRODUCT_SORT_FIELDS = ['name', 'price', 'createdAt'] as const;

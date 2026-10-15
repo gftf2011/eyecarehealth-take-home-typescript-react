@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidOrderStatusError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidOrderStatusError } from '../errors';
 
 export const ORDER_STATUSES = [
   'pending',

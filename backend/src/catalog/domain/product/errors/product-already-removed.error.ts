@@ -1,4 +1,4 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain';
 import type { ProductId } from '../product-id';
 
 export class ProductAlreadyRemovedError extends BusinessRuleViolationError {

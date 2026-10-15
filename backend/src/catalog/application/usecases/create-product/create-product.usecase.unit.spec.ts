@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { InputValidationError } from '../../../../shared-kernel/application';
 import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
-import { ProductCreated } from '../../../domain/index';
+import { ProductCreated } from '../../../domain';
 import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
 import { CreateProductUseCase, type CreateProductInput } from './create-product.usecase';
 

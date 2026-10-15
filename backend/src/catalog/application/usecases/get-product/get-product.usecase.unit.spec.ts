@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index';
-import { ProductName, ProductNotFoundError, type Product } from '../../../domain/index';
+import { InputValidationError } from '../../../../shared-kernel/application';
+import { ProductName, ProductNotFoundError, type Product } from '../../../domain';
 import { buildProduct, CREATED_AT } from '../../../domain/product/testing/product.fixture';
 import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
 import { GetProductUseCase } from './get-product.usecase';

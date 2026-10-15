@@ -1,4 +1,4 @@
-import type { Repository } from '../../../../shared-kernel/domain/index';
+import type { Repository } from '../../../../shared-kernel/domain';
 import type { DeliveryPerson } from '../delivery-person';
 
 /**

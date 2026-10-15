@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidCustomerNameError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidCustomerNameError } from '../errors';
 
 const MIN_LENGTH = 3;
 const MAX_LENGTH = 100;

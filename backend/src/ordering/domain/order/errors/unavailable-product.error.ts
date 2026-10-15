@@ -1,4 +1,4 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain';
 import type { ProductSnapshot } from '../value-objects/product-snapshot';
 
 export class UnavailableProductError extends BusinessRuleViolationError {

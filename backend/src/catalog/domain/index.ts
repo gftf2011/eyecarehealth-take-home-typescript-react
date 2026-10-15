@@ -14,8 +14,8 @@ export {
   type ProductVisibility,
 } from './product/repositories/product-list-criteria';
 export type { ProductRepository } from './product/repositories/product.repository';
-export * from './product/errors/index';
-export * from './product/events/index';
+export * from './product/errors';
+export * from './product/events';
 export { ImageUrl } from './product/value-objects/image-url';
 export { PreparationTime } from './product/value-objects/preparation-time';
 export {

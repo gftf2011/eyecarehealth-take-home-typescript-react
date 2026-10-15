@@ -1,4 +1,4 @@
-import { UniqueId } from '../../../../shared-kernel/domain/index';
+import { UniqueId } from '../../../../shared-kernel/domain';
 
 /** Referência a um entregador do contexto Delivery. */
 export class DeliveryPersonId extends UniqueId {

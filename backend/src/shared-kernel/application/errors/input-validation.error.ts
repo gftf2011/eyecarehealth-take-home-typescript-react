@@ -1,4 +1,4 @@
-import { DomainError, type DomainErrorDetail } from '../../domain/index';
+import { DomainError, type DomainErrorDetail } from '../../domain';
 
 /**
  * Entrada de um caso de uso com um ou mais campos inválidos. Agrupa os erros

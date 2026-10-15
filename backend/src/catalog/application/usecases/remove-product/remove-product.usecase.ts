@@ -2,8 +2,8 @@ import {
   validateInput,
   type Clock,
   type UseCase,
-} from '../../../../shared-kernel/application/index';
-import { ProductId, ProductNotFoundError } from '../../../domain/index';
+} from '../../../../shared-kernel/application';
+import { ProductId, ProductNotFoundError } from '../../../domain';
 import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';
 
 export type RemoveProductInput = {

@@ -18,7 +18,7 @@ export type {
   OrdersByStatusQuery,
   OrderStatusCountRow,
 } from './orders-by-status/queries/orders-by-status.query';
-export * from './period/errors/index';
+export * from './period/errors';
 export { BUSINESS_TIME_ZONE } from './period/time-zone';
 export { LocalDate } from './period/value-objects/local-date';
 export {

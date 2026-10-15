@@ -1,4 +1,4 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import { DomainEvent } from '../../../../shared-kernel/domain';
 import type { UserId } from '../user-id';
 import { USER_AGGREGATE_TYPE } from './user-aggregate-type';
 

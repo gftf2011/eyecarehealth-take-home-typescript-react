@@ -1,4 +1,4 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain';
 import type { OrderStatusValue } from '../value-objects/order-status';
 
 export class InvalidStatusTransitionError extends BusinessRuleViolationError {

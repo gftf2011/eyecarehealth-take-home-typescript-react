@@ -1,4 +1,4 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
 import type { GeoPoint } from '../../location/geo-point';
 import type { OrderId } from './order-id';
 

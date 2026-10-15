@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { InputValidationError } from '../../../../shared-kernel/application';
 import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
 import {
   ProductInUseError,
   ProductNotFoundError,
   ProductRemoved,
   type Product,
-} from '../../../domain/index';
+} from '../../../domain';
 import { buildProduct } from '../../../domain/product/testing/product.fixture';
 import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
 import { RemoveProductUseCase } from './remove-product.usecase';

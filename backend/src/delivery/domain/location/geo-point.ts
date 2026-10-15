@@ -1,4 +1,4 @@
-import { ValueObject } from '../../../shared-kernel/domain/index';
+import { ValueObject } from '../../../shared-kernel/domain';
 import { InvalidGeoPointError } from './errors/invalid-geo-point.error';
 
 /** Raio médio da Terra, em km. */

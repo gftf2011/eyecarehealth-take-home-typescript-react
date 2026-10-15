@@ -6,13 +6,13 @@ import {
   validateInput,
   type Page,
   type UseCase,
-} from '../../../../shared-kernel/application/index';
+} from '../../../../shared-kernel/application';
 import {
   PRODUCT_SORT_FIELDS,
   ProductCategory,
   type ProductListCriteria,
   type ProductVisibility,
-} from '../../../domain/index';
+} from '../../../domain';
 import { toProductDto, type ProductDto } from '../../dtos/product.dto';
 import { InvalidSearchError } from '../../errors/invalid-search.error';
 import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';

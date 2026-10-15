@@ -1,4 +1,4 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
 import type { DeliveryPersonId } from './delivery-person-id';
 
 /**

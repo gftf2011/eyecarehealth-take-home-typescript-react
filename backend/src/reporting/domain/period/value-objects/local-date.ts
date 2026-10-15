@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidLocalDateError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidLocalDateError } from '../errors';
 import { startOfDayInstant } from '../time-zone';
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;

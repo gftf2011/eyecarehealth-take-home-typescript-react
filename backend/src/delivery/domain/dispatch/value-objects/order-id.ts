@@ -1,4 +1,4 @@
-import { UniqueId } from '../../../../shared-kernel/domain/index';
+import { UniqueId } from '../../../../shared-kernel/domain';
 
 /** Referência a um pedido do contexto Ordering. */
 export class OrderId extends UniqueId {

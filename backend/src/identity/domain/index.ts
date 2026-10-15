@@ -1,5 +1,5 @@
-export * from './session/errors/index';
-export * from './session/events/index';
+export * from './session/errors';
+export * from './session/events';
 export {
   RefreshSession,
   type RefreshSessionSnapshot,
@@ -10,8 +10,8 @@ export { RefreshSessionId } from './session/refresh-session-id';
 export type { RefreshSessionRepository } from './session/repositories/refresh-session.repository';
 export type { RevocationReason } from './session/value-objects/revocation-reason';
 export { TokenHash } from './session/value-objects/token-hash';
-export * from './user/errors/index';
-export * from './user/events/index';
+export * from './user/errors';
+export * from './user/events';
 export type { UserRepository } from './user/repositories/user.repository';
 export { User, type RegisterUserParams, type UserSnapshot } from './user/user';
 export { UserId } from './user/user-id';

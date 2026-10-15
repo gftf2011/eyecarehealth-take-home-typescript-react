@@ -1,5 +1,5 @@
-import { Money, ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidProductPriceError } from '../errors/index';
+import { Money, ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidProductPriceError } from '../errors';
 
 /** Teto imposto pela coluna DECIMAL(10, 2). */
 const MAX_PRICE_IN_CENTS = 9_999_999_999;

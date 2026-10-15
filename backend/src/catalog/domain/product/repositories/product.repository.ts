@@ -1,4 +1,4 @@
-import type { Repository, Slice } from '../../../../shared-kernel/domain/index';
+import type { Repository, Slice } from '../../../../shared-kernel/domain';
 import type { Product } from '../product';
 import type { ProductListCriteria } from './product-list-criteria';
 

@@ -1,4 +1,4 @@
-import { Money } from '../../../shared-kernel/domain/index';
+import { Money } from '../../../shared-kernel/domain';
 import { LocalDate } from '../period/value-objects/local-date';
 import { ReportPeriod, type BoundedReportPeriod } from '../period/value-objects/report-period';
 import type { DailyRevenueRow } from './queries/revenue.query';

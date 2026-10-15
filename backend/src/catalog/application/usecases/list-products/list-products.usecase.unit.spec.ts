@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { InputValidationError } from '../../../../shared-kernel/application';
 import {
   ProductCategory,
   ProductName,
   ProductPrice,
   type Product,
-} from '../../../domain/index';
+} from '../../../domain';
 import { buildProduct } from '../../../domain/product/testing/product.fixture';
 import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
 import { ListProductsUseCase } from './list-products.usecase';

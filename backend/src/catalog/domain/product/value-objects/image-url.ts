@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidImageUrlError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidImageUrlError } from '../errors';
 
 const MAX_LENGTH = 500;
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);

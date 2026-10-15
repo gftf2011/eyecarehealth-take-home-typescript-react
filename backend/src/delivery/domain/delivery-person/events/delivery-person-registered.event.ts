@@ -1,4 +1,4 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import { DomainEvent } from '../../../../shared-kernel/domain';
 import type { DeliveryPersonId } from '../delivery-person-id';
 import type { VehicleTypeValue } from '../value-objects/vehicle-type';
 import { DELIVERY_PERSON_AGGREGATE_TYPE } from './delivery-person-aggregate-type';

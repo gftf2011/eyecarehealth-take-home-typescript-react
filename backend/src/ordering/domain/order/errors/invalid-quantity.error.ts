@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain/index';
+import { InvalidValueError } from '../../../../shared-kernel/domain';
 
 export class InvalidQuantityError extends InvalidValueError {
   readonly code = 'INVALID_QUANTITY';

@@ -1,4 +1,4 @@
-import { ImageUrl } from '../../domain/index';
+import { ImageUrl } from '../../domain';
 
 /**
  * Interpreta o campo `imageUrl` vindo do cliente:

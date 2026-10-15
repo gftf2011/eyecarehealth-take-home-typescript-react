@@ -1,4 +1,4 @@
-import type { ProductId } from '../../domain/index';
+import type { ProductId } from '../../domain';
 
 /**
  * Camada anticorrupção para o contexto Ordering: responde, na linguagem do

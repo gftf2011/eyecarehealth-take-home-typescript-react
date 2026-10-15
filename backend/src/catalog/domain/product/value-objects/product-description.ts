@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidProductDescriptionError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidProductDescriptionError } from '../errors';
 
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 500;

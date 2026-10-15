@@ -1,4 +1,4 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import { DomainEvent } from '../../../../shared-kernel/domain';
 import type { ProductId } from '../product-id';
 import { PRODUCT_AGGREGATE_TYPE } from './product-aggregate-type';
 

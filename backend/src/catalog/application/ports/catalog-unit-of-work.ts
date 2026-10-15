@@ -1,5 +1,5 @@
-import type { UnitOfWork } from '../../../shared-kernel/application/index';
-import type { ProductRepository } from '../../domain/index';
+import type { UnitOfWork } from '../../../shared-kernel/application';
+import type { ProductRepository } from '../../domain';
 import type { ActiveOrdersChecker } from './active-orders-checker';
 
 /**

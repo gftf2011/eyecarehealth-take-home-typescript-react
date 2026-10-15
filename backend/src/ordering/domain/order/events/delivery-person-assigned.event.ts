@@ -1,4 +1,4 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import { DomainEvent } from '../../../../shared-kernel/domain';
 import type { OrderId } from '../order-id';
 import { ORDER_AGGREGATE_TYPE } from './order-aggregate-type';
 

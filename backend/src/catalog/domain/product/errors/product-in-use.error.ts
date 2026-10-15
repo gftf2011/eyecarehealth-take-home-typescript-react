@@ -1,4 +1,4 @@
-import { ConflictError } from '../../../../shared-kernel/domain/index';
+import { ConflictError } from '../../../../shared-kernel/domain';
 import type { ProductId } from '../product-id';
 
 export class ProductInUseError extends ConflictError {

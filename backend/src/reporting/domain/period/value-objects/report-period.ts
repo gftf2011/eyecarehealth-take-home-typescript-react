@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidReportPeriodError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidReportPeriodError } from '../errors';
 import { BUSINESS_TIME_ZONE } from '../time-zone';
 import type { LocalDate } from './local-date';
 

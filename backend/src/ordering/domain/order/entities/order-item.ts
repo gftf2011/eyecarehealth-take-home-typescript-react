@@ -1,4 +1,4 @@
-import { Entity, type Money } from '../../../../shared-kernel/domain/index';
+import { Entity, type Money } from '../../../../shared-kernel/domain';
 import type { ProductId } from '../value-objects/product-id';
 import type { ProductSnapshot } from '../value-objects/product-snapshot';
 import type { Quantity } from '../value-objects/quantity';

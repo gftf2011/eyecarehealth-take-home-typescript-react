@@ -1,5 +1,5 @@
-import { validateInput, type UseCase } from '../../../../shared-kernel/application/index';
-import { ProductId, ProductNotFoundError, type ProductVisibility } from '../../../domain/index';
+import { validateInput, type UseCase } from '../../../../shared-kernel/application';
+import { ProductId, ProductNotFoundError, type ProductVisibility } from '../../../domain';
 import { toProductDto, type ProductDto } from '../../dtos/product.dto';
 import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';
 

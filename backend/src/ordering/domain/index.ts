@@ -1,7 +1,7 @@
 export { OrderItem, type OrderItemSnapshot } from './order/entities/order-item';
 export { OrderItemId } from './order/entities/order-item-id';
-export * from './order/errors/index';
-export * from './order/events/index';
+export * from './order/errors';
+export * from './order/events';
 export {
   Order,
   type OrderSnapshot,

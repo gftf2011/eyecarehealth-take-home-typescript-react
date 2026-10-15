@@ -1,4 +1,4 @@
-import { ConflictError } from '../../../../shared-kernel/domain/index';
+import { ConflictError } from '../../../../shared-kernel/domain';
 import type { Email } from '../value-objects/email';
 
 export class EmailAlreadyInUseError extends ConflictError {

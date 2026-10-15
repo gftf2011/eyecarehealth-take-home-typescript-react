@@ -1,8 +1,8 @@
-import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain/index';
+import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain';
 import { DispatchCandidate } from '../dispatch/value-objects/dispatch-candidate';
 import type { GeoPoint } from '../location/geo-point';
 import type { DeliveryPersonId } from './delivery-person-id';
-import { DeliveryPersonAlreadyRemovedError, DeliveryPersonInUseError } from './errors/index';
+import { DeliveryPersonAlreadyRemovedError, DeliveryPersonInUseError } from './errors';
 import {
   DeliveryPersonActivationChanged,
   DeliveryPersonRegistered,
@@ -10,7 +10,7 @@ import {
   DeliveryPersonRemoved,
   DeliveryPersonUpdated,
   type DeliveryPersonDetailField,
-} from './events/index';
+} from './events';
 import type { PersonName } from './value-objects/person-name';
 import type { PhoneNumber } from './value-objects/phone-number';
 import type { VehicleType } from './value-objects/vehicle-type';

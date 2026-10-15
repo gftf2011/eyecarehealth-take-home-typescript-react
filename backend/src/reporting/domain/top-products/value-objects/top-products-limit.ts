@@ -1,4 +1,4 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
 import { InvalidTopProductsLimitError } from '../errors/invalid-top-products-limit.error';
 
 const DEFAULT_LIMIT = 10;

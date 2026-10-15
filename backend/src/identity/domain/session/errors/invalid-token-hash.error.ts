@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain/index';
+import { InvalidValueError } from '../../../../shared-kernel/domain';
 
 export class InvalidTokenHashError extends InvalidValueError {
   readonly code = 'INVALID_TOKEN_HASH';

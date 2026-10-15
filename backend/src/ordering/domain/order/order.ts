@@ -1,4 +1,4 @@
-import { AggregateRoot, Money } from '../../../shared-kernel/domain/index';
+import { AggregateRoot, Money } from '../../../shared-kernel/domain';
 import { OrderItemId } from './entities/order-item-id';
 import { OrderItem } from './entities/order-item';
 import {
@@ -7,8 +7,8 @@ import {
   EmptyOrderError,
   InvalidStatusTransitionError,
   UnavailableProductError,
-} from './errors/index';
-import { DeliveryPersonAssigned, OrderPlaced, OrderStatusChanged } from './events/index';
+} from './errors';
+import { DeliveryPersonAssigned, OrderPlaced, OrderStatusChanged } from './events';
 import type { OrderId } from './order-id';
 import type { CustomerName } from './value-objects/customer-name';
 import type { DeliveryAddress } from './value-objects/delivery-address';

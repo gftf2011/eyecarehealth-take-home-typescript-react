@@ -1,4 +1,4 @@
-import { InvalidMoneyError, ValueObject, type Money } from '../../../../shared-kernel/domain/index';
+import { InvalidMoneyError, ValueObject, type Money } from '../../../../shared-kernel/domain';
 import type { ProductId } from './product-id';
 
 /**

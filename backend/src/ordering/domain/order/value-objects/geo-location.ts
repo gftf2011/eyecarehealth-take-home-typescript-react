@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidGeoLocationError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidGeoLocationError } from '../errors';
 
 const MAX_LATITUDE = 90;
 const MAX_LONGITUDE = 180;

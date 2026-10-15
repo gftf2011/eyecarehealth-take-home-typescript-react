@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index';
-import { InvalidRoleError, PermissionDeniedError } from '../errors/index';
+import { ValueObject } from '../../../../shared-kernel/domain';
+import { InvalidRoleError, PermissionDeniedError } from '../errors';
 import { PERMISSIONS, type Permission } from './permission';
 
 export const ROLES = ['admin', 'viewer'] as const;

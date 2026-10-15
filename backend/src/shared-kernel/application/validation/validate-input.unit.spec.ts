@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Money } from '../../domain/index';
+import { Money } from '../../domain';
 import { InputValidationError } from '../errors/input-validation.error';
 import { validateInput } from './validate-input';
 

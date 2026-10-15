@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { InputValidationError } from '../../../../shared-kernel/application';
 import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
 import {
   ProductAvailabilityChanged,
@@ -8,7 +8,7 @@ import {
   ProductPriceChanged,
   ProductUpdated,
   type Product,
-} from '../../../domain/index';
+} from '../../../domain';
 import { buildProduct, CREATED_AT } from '../../../domain/product/testing/product.fixture';
 import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
 import { UpdateProductUseCase } from './update-product.usecase';

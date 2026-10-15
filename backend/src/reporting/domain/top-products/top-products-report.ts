@@ -1,4 +1,4 @@
-import { Money } from '../../../shared-kernel/domain/index';
+import { Money } from '../../../shared-kernel/domain';
 import type { ProductSalesRow } from './queries/top-products.query';
 import type { TopProductsLimit } from './value-objects/top-products-limit';
 

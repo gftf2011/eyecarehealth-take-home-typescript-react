@@ -2,7 +2,7 @@ import {
   validateInput,
   type Clock,
   type UseCase,
-} from '../../../../shared-kernel/application/index';
+} from '../../../../shared-kernel/application';
 import {
   PreparationTime,
   Product,
@@ -11,7 +11,7 @@ import {
   ProductId,
   ProductName,
   ProductPrice,
-} from '../../../domain/index';
+} from '../../../domain';
 import { toProductDto, type ProductDto } from '../../dtos/product.dto';
 import { parseImageUrlInput } from '../../inputs/image-url.input';
 import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';

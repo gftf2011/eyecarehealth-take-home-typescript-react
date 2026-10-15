@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Money } from '../../../../shared-kernel/domain/index';
+import { Money } from '../../../../shared-kernel/domain';
 import { InvalidProductPriceError, ProductPrice } from '../../index';
 
 describe('ProductPrice', () => {

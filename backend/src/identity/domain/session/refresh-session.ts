@@ -1,11 +1,11 @@
-import { AggregateRoot } from '../../../shared-kernel/domain/index';
+import { AggregateRoot } from '../../../shared-kernel/domain';
 import type { UserId } from '../user/user-id';
-import { InvalidRefreshTokenError, InvalidSessionExpirationError } from './errors/index';
+import { InvalidRefreshTokenError, InvalidSessionExpirationError } from './errors';
 import {
   RefreshSessionRevoked,
   RefreshSessionRotated,
   RefreshSessionStarted,
-} from './events/index';
+} from './events';
 import type { RefreshSessionId } from './refresh-session-id';
 import type { RevocationReason } from './value-objects/revocation-reason';
 import type { TokenHash } from './value-objects/token-hash';

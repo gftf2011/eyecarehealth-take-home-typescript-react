@@ -1,4 +1,4 @@
-import type { Slice } from '../../domain/index';
+import type { Slice } from '../../domain';
 import type { PageRequest } from './page-request';
 
 export type Pagination = {

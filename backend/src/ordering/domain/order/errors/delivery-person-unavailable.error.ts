@@ -1,4 +1,4 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain';
 import type { DeliveryPersonAvailability } from '../value-objects/delivery-person-availability';
 
 export class DeliveryPersonUnavailableError extends BusinessRuleViolationError {

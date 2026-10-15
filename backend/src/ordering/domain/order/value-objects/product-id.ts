@@ -1,4 +1,4 @@
-import { UniqueId } from '../../../../shared-kernel/domain/index';
+import { UniqueId } from '../../../../shared-kernel/domain';
 
 /**
  * Referência a um produto do contexto Catalog. É um tipo próprio do Ordering:

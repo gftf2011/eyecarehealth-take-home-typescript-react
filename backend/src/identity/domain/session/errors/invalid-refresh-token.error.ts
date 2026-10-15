@@ -1,4 +1,4 @@
-import { AuthenticationError } from '../../../../shared-kernel/domain/index';
+import { AuthenticationError } from '../../../../shared-kernel/domain';
 
 export type InvalidRefreshTokenReason = 'not-found' | 'expired' | 'revoked' | 'reuse-detected';
 

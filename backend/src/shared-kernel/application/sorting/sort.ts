@@ -1,4 +1,4 @@
-import { InvalidValueError, SORT_DIRECTIONS, type SortDirection } from '../../domain/index';
+import { InvalidValueError, SORT_DIRECTIONS, type SortDirection } from '../../domain';
 
 export class InvalidSortError extends InvalidValueError {
   readonly code = 'INVALID_SORT';

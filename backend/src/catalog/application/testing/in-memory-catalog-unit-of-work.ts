@@ -1,11 +1,11 @@
-import type { DomainEvent, Slice } from '../../../shared-kernel/domain/index';
+import type { DomainEvent, Slice } from '../../../shared-kernel/domain';
 import {
   Product,
   ProductId,
   type ProductListCriteria,
   type ProductRepository,
   type ProductSnapshot,
-} from '../../domain/index';
+} from '../../domain';
 import type { CatalogRepositories, CatalogUnitOfWork } from '../ports/catalog-unit-of-work';
 
 /**

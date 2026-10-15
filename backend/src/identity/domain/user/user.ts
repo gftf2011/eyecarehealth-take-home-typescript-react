@@ -1,5 +1,5 @@
-import { AggregateRoot } from '../../../shared-kernel/domain/index';
-import { UserPasswordChanged, UserRegistered, UserRoleChanged } from './events/index';
+import { AggregateRoot } from '../../../shared-kernel/domain';
+import { UserPasswordChanged, UserRegistered, UserRoleChanged } from './events';
 import type { UserId } from './user-id';
 import type { Email } from './value-objects/email';
 import type { PasswordHash } from './value-objects/password-hash';

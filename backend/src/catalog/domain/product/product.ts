@@ -1,6 +1,6 @@
-import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain/index';
+import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain';
 import type { ProductId } from './product-id';
-import { ProductAlreadyRemovedError, ProductInUseError } from './errors/index';
+import { ProductAlreadyRemovedError, ProductInUseError } from './errors';
 import {
   ProductAvailabilityChanged,
   ProductCreated,
@@ -8,7 +8,7 @@ import {
   ProductRemoved,
   ProductUpdated,
   type ProductDetailField,
-} from './events/index';
+} from './events';
 import type { ImageUrl } from './value-objects/image-url';
 import type { PreparationTime } from './value-objects/preparation-time';
 import type { ProductCategory } from './value-objects/product-category';

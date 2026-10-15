@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain/index';
+import { InvalidValueError } from '../../../../shared-kernel/domain';
 
 export class InvalidProductPriceError extends InvalidValueError {
   readonly code = 'INVALID_PRODUCT_PRICE';

@@ -1,4 +1,4 @@
-import { AuthorizationError } from '../../../../shared-kernel/domain/index';
+import { AuthorizationError } from '../../../../shared-kernel/domain';
 import type { Permission } from '../value-objects/permission';
 import type { RoleValue } from '../value-objects/role';
 

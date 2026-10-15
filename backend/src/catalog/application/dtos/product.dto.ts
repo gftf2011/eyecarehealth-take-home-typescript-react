@@ -1,4 +1,4 @@
-import type { Product, ProductCategoryValue } from '../../domain/index';
+import type { Product, ProductCategoryValue } from '../../domain';
 
 /** Representação de saída de um produto: só tipos primitivos, sem VOs. */
 export type ProductDto = {

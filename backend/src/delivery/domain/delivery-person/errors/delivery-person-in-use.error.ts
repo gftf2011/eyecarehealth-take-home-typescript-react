@@ -1,4 +1,4 @@
-import { ConflictError } from '../../../../shared-kernel/domain/index';
+import { ConflictError } from '../../../../shared-kernel/domain';
 import type { DeliveryPersonId } from '../delivery-person-id';
 
 export class DeliveryPersonInUseError extends ConflictError {
