@@ -1,0 +1,361 @@
+{
+  "users": [
+    {
+      "email": "admin@fastmeals.com",
+      "password": "Admin@123",
+      "role": "admin"
+    },
+    {
+      "email": "viewer@fastmeals.com",
+      "password": "Viewer@123",
+      "role": "viewer"
+    }
+  ],
+  "products": [
+    {
+      "name": "X-Burger Especial",
+      "description": "Hamburguer artesanal com queijo cheddar, bacon crocante, alface e tomate em pao brioche",
+      "price": 32.90,
+      "category": "meal",
+      "imageUrl": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400",
+      "isAvailable": true,
+      "preparationTime": 25
+    },
+    {
+      "name": "Frango Grelhado com Legumes",
+      "description": "Peito de frango grelhado acompanhado de legumes salteados na manteiga e arroz branco",
+      "price": 28.50,
+      "category": "meal",
+      "imageUrl": "https://images.unsplash.com/photo-1532550907401-a500c9a57435?w=400",
+      "isAvailable": true,
+      "preparationTime": 30
+    },
+    {
+      "name": "Lasanha Bolonhesa",
+      "description": "Lasanha tradicional com molho bolonhesa, bechamel e queijo gratinado ao forno",
+      "price": 35.00,
+      "category": "meal",
+      "imageUrl": "https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=400",
+      "isAvailable": true,
+      "preparationTime": 40
+    },
+    {
+      "name": "Salada Caesar",
+      "description": "Alface romana com croutons, parmesao ralado e molho caesar caseiro",
+      "price": 22.00,
+      "category": "meal",
+      "imageUrl": "https://images.unsplash.com/photo-1546793665-c74683f339c1?w=400",
+      "isAvailable": true,
+      "preparationTime": 10
+    },
+    {
+      "name": "Wrap de Carne Seca",
+      "description": "Tortilha integral recheada com carne seca desfiada, cream cheese e rucula",
+      "price": 26.90,
+      "category": "meal",
+      "imageUrl": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=400",
+      "isAvailable": false,
+      "preparationTime": 15
+    },
+    {
+      "name": "Suco de Laranja Natural",
+      "description": "Suco de laranja 100% natural, feito na hora, sem adicao de acucar, 500ml",
+      "price": 12.50,
+      "category": "drink",
+      "imageUrl": "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=400",
+      "isAvailable": true,
+      "preparationTime": 5
+    },
+    {
+      "name": "Refrigerante Lata 350ml",
+      "description": "Refrigerante em lata 350ml, diversas opcoes disponiveis no momento do pedido",
+      "price": 7.00,
+      "category": "drink",
+      "imageUrl": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400",
+      "isAvailable": true,
+      "preparationTime": 1
+    },
+    {
+      "name": "Agua Mineral 500ml",
+      "description": "Garrafa de agua mineral sem gas, 500ml, gelada",
+      "price": 5.00,
+      "category": "drink",
+      "imageUrl": "https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=400",
+      "isAvailable": true,
+      "preparationTime": 1
+    },
+    {
+      "name": "Milkshake de Chocolate",
+      "description": "Milkshake cremoso de chocolate belga com chantilly e calda, 400ml",
+      "price": 18.90,
+      "category": "drink",
+      "imageUrl": "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=400",
+      "isAvailable": true,
+      "preparationTime": 8
+    },
+    {
+      "name": "Pudim de Leite Condensado",
+      "description": "Pudim caseiro de leite condensado com calda de caramelo, porcao individual",
+      "price": 14.00,
+      "category": "dessert",
+      "imageUrl": "https://images.unsplash.com/photo-1624353365286-3f8d62daad51?w=400",
+      "isAvailable": true,
+      "preparationTime": 3
+    },
+    {
+      "name": "Brownie com Sorvete",
+      "description": "Brownie de chocolate meio amargo servido com bola de sorvete de creme e calda quente",
+      "price": 19.90,
+      "category": "dessert",
+      "imageUrl": "https://images.unsplash.com/photo-1564355808539-22fda35bed7e?w=400",
+      "isAvailable": true,
+      "preparationTime": 5
+    },
+    {
+      "name": "Acai 500ml",
+      "description": "Acai natural 500ml com granola, banana fatiada e leite condensado",
+      "price": 24.90,
+      "category": "dessert",
+      "imageUrl": "https://images.unsplash.com/photo-1590080874088-eec64895b423?w=400",
+      "isAvailable": true,
+      "preparationTime": 5
+    },
+    {
+      "name": "Batata Frita Crocante",
+      "description": "Porcao de batata frita crocante com sal e temperos especiais, acompanha ketchup",
+      "price": 16.00,
+      "category": "side",
+      "imageUrl": "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?w=400",
+      "isAvailable": true,
+      "preparationTime": 12
+    },
+    {
+      "name": "Onion Rings",
+      "description": "Porcao de aneis de cebola empanados e fritos, crocantes e dourados, com molho especial",
+      "price": 18.00,
+      "category": "side",
+      "imageUrl": "https://images.unsplash.com/photo-1639024471283-03518883512d?w=400",
+      "isAvailable": true,
+      "preparationTime": 10
+    },
+    {
+      "name": "Pao de Alho",
+      "description": "Pao de alho gratinado com queijo, porcao com 4 unidades",
+      "price": 14.50,
+      "category": "side",
+      "imageUrl": "https://images.unsplash.com/photo-1619535860434-ba1d8fa12536?w=400",
+      "isAvailable": true,
+      "preparationTime": 8
+    }
+  ],
+  "deliveryPersons": [
+    {
+      "name": "Carlos Santos",
+      "phone": "(11) 91234-5678",
+      "vehicleType": "motorcycle",
+      "isActive": true,
+      "currentLatitude": -23.5489,
+      "currentLongitude": -46.6388
+    },
+    {
+      "name": "Ana Ferreira",
+      "phone": "(11) 92345-6789",
+      "vehicleType": "bicycle",
+      "isActive": true,
+      "currentLatitude": -23.5630,
+      "currentLongitude": -46.6544
+    },
+    {
+      "name": "Roberto Lima",
+      "phone": "(11) 93456-7890",
+      "vehicleType": "motorcycle",
+      "isActive": true,
+      "currentLatitude": -23.5350,
+      "currentLongitude": -46.6250
+    },
+    {
+      "name": "Juliana Costa",
+      "phone": "(11) 94567-8901",
+      "vehicleType": "car",
+      "isActive": true,
+      "currentLatitude": -23.5700,
+      "currentLongitude": -46.6480
+    },
+    {
+      "name": "Pedro Oliveira",
+      "phone": "(11) 95678-9012",
+      "vehicleType": "motorcycle",
+      "isActive": false,
+      "currentLatitude": -23.5550,
+      "currentLongitude": -46.6600
+    },
+    {
+      "name": "Mariana Souza",
+      "phone": "(11) 96789-0123",
+      "vehicleType": "bicycle",
+      "isActive": true,
+      "currentLatitude": -23.5420,
+      "currentLongitude": -46.6350
+    }
+  ],
+  "orders": [
+    {
+      "customerName": "Joao Silva",
+      "customerPhone": "(11) 99999-1234",
+      "deliveryAddress": "Rua das Flores, 123, Vila Mariana, Sao Paulo - SP",
+      "latitude": -23.5891,
+      "longitude": -46.6378,
+      "status": "pending",
+      "items": [
+        { "productIndex": 0, "quantity": 2 },
+        { "productIndex": 5, "quantity": 1 }
+      ]
+    },
+    {
+      "customerName": "Maria Oliveira",
+      "customerPhone": "(11) 98888-5678",
+      "deliveryAddress": "Av. Paulista, 1000, Bela Vista, Sao Paulo - SP",
+      "latitude": -23.5632,
+      "longitude": -46.6542,
+      "status": "preparing",
+      "items": [
+        { "productIndex": 2, "quantity": 1 },
+        { "productIndex": 6, "quantity": 2 },
+        { "productIndex": 12, "quantity": 1 }
+      ]
+    },
+    {
+      "customerName": "Pedro Almeida",
+      "customerPhone": "(11) 97777-9012",
+      "deliveryAddress": "Rua Augusta, 500, Consolacao, Sao Paulo - SP",
+      "latitude": -23.5538,
+      "longitude": -46.6580,
+      "status": "ready",
+      "items": [
+        { "productIndex": 1, "quantity": 1 },
+        { "productIndex": 7, "quantity": 1 },
+        { "productIndex": 10, "quantity": 2 }
+      ]
+    },
+    {
+      "customerName": "Lucia Mendes",
+      "customerPhone": "(11) 96666-3456",
+      "deliveryAddress": "Rua Oscar Freire, 200, Jardins, Sao Paulo - SP",
+      "latitude": -23.5618,
+      "longitude": -46.6712,
+      "status": "ready",
+      "items": [
+        { "productIndex": 3, "quantity": 1 },
+        { "productIndex": 8, "quantity": 1 }
+      ]
+    },
+    {
+      "customerName": "Fernando Costa",
+      "customerPhone": "(11) 95555-7890",
+      "deliveryAddress": "Rua Haddock Lobo, 800, Cerqueira Cesar, Sao Paulo - SP",
+      "latitude": -23.5570,
+      "longitude": -46.6650,
+      "status": "delivering",
+      "deliveryPersonIndex": 0,
+      "items": [
+        { "productIndex": 0, "quantity": 1 },
+        { "productIndex": 12, "quantity": 1 },
+        { "productIndex": 6, "quantity": 1 }
+      ]
+    },
+    {
+      "customerName": "Beatriz Santos",
+      "customerPhone": "(11) 94444-1234",
+      "deliveryAddress": "Rua da Consolacao, 1500, Consolacao, Sao Paulo - SP",
+      "latitude": -23.5510,
+      "longitude": -46.6560,
+      "status": "delivered",
+      "deliveryPersonIndex": 1,
+      "items": [
+        { "productIndex": 2, "quantity": 2 },
+        { "productIndex": 9, "quantity": 2 },
+        { "productIndex": 5, "quantity": 2 }
+      ]
+    },
+    {
+      "customerName": "Ricardo Nunes",
+      "customerPhone": "(11) 93333-5678",
+      "deliveryAddress": "Av. Brigadeiro Luis Antonio, 300, Bela Vista, Sao Paulo - SP",
+      "latitude": -23.5660,
+      "longitude": -46.6430,
+      "status": "delivered",
+      "deliveryPersonIndex": 2,
+      "items": [
+        { "productIndex": 1, "quantity": 1 },
+        { "productIndex": 13, "quantity": 1 },
+        { "productIndex": 7, "quantity": 2 }
+      ]
+    },
+    {
+      "customerName": "Camila Torres",
+      "customerPhone": "(11) 92222-9012",
+      "deliveryAddress": "Rua Vergueiro, 2000, Vila Mariana, Sao Paulo - SP",
+      "latitude": -23.5880,
+      "longitude": -46.6360,
+      "status": "cancelled",
+      "items": [
+        { "productIndex": 0, "quantity": 3 },
+        { "productIndex": 8, "quantity": 2 }
+      ]
+    },
+    {
+      "customerName": "Diego Martins",
+      "customerPhone": "(11) 91111-3456",
+      "deliveryAddress": "Rua Pamplona, 150, Jardim Paulista, Sao Paulo - SP",
+      "latitude": -23.5685,
+      "longitude": -46.6510,
+      "status": "delivered",
+      "deliveryPersonIndex": 3,
+      "items": [
+        { "productIndex": 3, "quantity": 2 },
+        { "productIndex": 11, "quantity": 1 },
+        { "productIndex": 14, "quantity": 1 }
+      ]
+    },
+    {
+      "customerName": "Patricia Rocha",
+      "customerPhone": "(11) 90000-7890",
+      "deliveryAddress": "Av. Reboucas, 600, Pinheiros, Sao Paulo - SP",
+      "latitude": -23.5650,
+      "longitude": -46.6790,
+      "status": "pending",
+      "items": [
+        { "productIndex": 0, "quantity": 1 },
+        { "productIndex": 10, "quantity": 1 },
+        { "productIndex": 5, "quantity": 2 }
+      ]
+    },
+    {
+      "customerName": "Gabriel Pereira",
+      "customerPhone": "(11) 98765-4321",
+      "deliveryAddress": "Rua Bela Cintra, 900, Jardins, Sao Paulo - SP",
+      "latitude": -23.5580,
+      "longitude": -46.6620,
+      "status": "ready",
+      "items": [
+        { "productIndex": 2, "quantity": 1 },
+        { "productIndex": 13, "quantity": 1 },
+        { "productIndex": 9, "quantity": 1 }
+      ]
+    },
+    {
+      "customerName": "Sofia Andrade",
+      "customerPhone": "(11) 97654-3210",
+      "deliveryAddress": "Rua Frei Caneca, 400, Consolacao, Sao Paulo - SP",
+      "latitude": -23.5530,
+      "longitude": -46.6530,
+      "status": "delivered",
+      "deliveryPersonIndex": 5,
+      "items": [
+        { "productIndex": 1, "quantity": 2 },
+        { "productIndex": 12, "quantity": 2 },
+        { "productIndex": 8, "quantity": 1 }
+      ]
+    }
+  ]
+}
