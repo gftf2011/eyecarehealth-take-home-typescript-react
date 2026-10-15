@@ -42,14 +42,19 @@ describe('toPage', () => {
     [0, 20, 0],
     [1, 100, 1],
   ])('total %d com limite %d → %d páginas', (total, limit, totalPages) => {
-    const page = toPage({ items: [], total }, PageRequest.create(1, limit));
+    const page = toPage({ items: [], total }, PageRequest.create(1, limit), String);
     expect(page.pagination).toEqual({ page: 1, limit, total, totalPages });
   });
 
+  it('mapeia cada item da fatia para o formato de saída', () => {
+    const page = toPage({ items: [1, 2], total: 2 }, PageRequest.create(), (n) => ({ n }));
+    expect(page.data).toEqual([{ n: 1 }, { n: 2 }]);
+  });
+
   it('rejeita resultado inconsistente do adapter', () => {
-    expect(() => toPage({ items: [1, 2, 3], total: 3 }, PageRequest.create(1, 2))).toThrow(
+    expect(() => toPage({ items: [1, 2, 3], total: 3 }, PageRequest.create(1, 2), String)).toThrow(
       RangeError,
     );
-    expect(() => toPage({ items: [], total: -1 }, PageRequest.create())).toThrow(RangeError);
+    expect(() => toPage({ items: [], total: -1 }, PageRequest.create(), String)).toThrow(RangeError);
   });
 });

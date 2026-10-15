@@ -1,13 +1,4 @@
-import { InvalidValueError } from '../../domain/index';
-
-export const SORT_DIRECTIONS = ['asc', 'desc'] as const;
-
-export type SortDirection = (typeof SORT_DIRECTIONS)[number];
-
-export type Sort<TField extends string> = {
-  readonly field: TField;
-  readonly direction: SortDirection;
-};
+import { InvalidValueError, SORT_DIRECTIONS, type SortDirection } from '../../domain/index';
 
 export class InvalidSortError extends InvalidValueError {
   readonly code = 'INVALID_SORT';

@@ -1,3 +1,4 @@
+import type { Slice } from '../../domain/index';
 import type { PageRequest } from './page-request';
 
 export type Pagination = {
@@ -13,22 +14,21 @@ export type Page<TItem> = {
   readonly pagination: Pagination;
 };
 
-/** Resultado bruto de uma consulta paginada: os itens da página e o total geral. */
-export type PageSlice<TItem> = {
-  readonly items: readonly TItem[];
-  readonly total: number;
-};
-
-export function toPage<TItem>(slice: PageSlice<TItem>, request: PageRequest): Page<TItem> {
+/** Converte a fatia devolvida pelo repositório em página de saída, mapeando cada item. */
+export function toPage<TItem, TOutput>(
+  slice: Slice<TItem>,
+  request: PageRequest,
+  map: (item: TItem) => TOutput,
+): Page<TOutput> {
   if (!Number.isSafeInteger(slice.total) || slice.total < 0) {
     throw new RangeError(`Total inválido para paginação: ${slice.total}`);
   }
   if (slice.items.length > request.limit) {
-    throw new RangeError('A consulta devolveu mais itens que o limite da página');
+    throw new RangeError('O repositório devolveu mais itens que o limite da página');
   }
 
   return {
-    data: [...slice.items],
+    data: slice.items.map(map),
     pagination: {
       page: request.page,
       limit: request.limit,

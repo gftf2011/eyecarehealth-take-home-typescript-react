@@ -3,7 +3,7 @@ import type { DeliveryPerson } from '../delivery-person';
 
 /**
  * Repositório do agregado DeliveryPerson. `findById` retorna `null` para IDs
- * inexistentes ou entregadores removidos. Listagens usam query ports próprios
- * na camada de aplicação.
+ * inexistentes ou entregadores removidos. Escrita e leitura (incluindo as
+ * listagens, quando chegarem) passam por este repositório.
  */
 export interface DeliveryPersonRepository extends Repository<DeliveryPerson> {}

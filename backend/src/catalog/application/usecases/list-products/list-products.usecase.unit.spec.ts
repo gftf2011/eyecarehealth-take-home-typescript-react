@@ -1,73 +1,100 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { InputValidationError } from '../../../../shared-kernel/application/index';
-import { BURGER_DTO, productDto } from '../../testing/product-dto.fixture';
-import { StubProductQuery } from '../../testing/stub-product.query';
+import {
+  ProductCategory,
+  ProductName,
+  ProductPrice,
+  type Product,
+} from '../../../domain/index';
+import { buildProduct } from '../../../domain/product/testing/product.fixture';
+import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
 import { ListProductsUseCase } from './list-products.usecase';
 
+function product(
+  name: string,
+  price: number,
+  category: string,
+  createdAt: string,
+  isAvailable = true,
+): Product {
+  return buildProduct({
+    name: ProductName.create(name),
+    price: ProductPrice.fromDecimal(price),
+    category: ProductCategory.create(category),
+    isAvailable,
+    now: new Date(createdAt),
+  });
+}
+
 describe('ListProductsUseCase', () => {
-  let query: StubProductQuery;
+  let unitOfWork: InMemoryCatalogUnitOfWork;
   let listProducts: ListProductsUseCase;
 
   beforeEach(() => {
-    query = new StubProductQuery();
-    listProducts = new ListProductsUseCase(query);
+    unitOfWork = new InMemoryCatalogUnitOfWork();
+    listProducts = new ListProductsUseCase(unitOfWork);
+    unitOfWork.givenProducts(
+      product('X-Burger Especial', 32.9, 'meal', '2025-01-01T10:00:00Z'),
+      product('Suco de Laranja', 12.5, 'drink', '2025-01-02T10:00:00Z'),
+      product('Burger Vegano', 29.9, 'meal', '2025-01-03T10:00:00Z'),
+      product('Pudim de Leite', 14, 'dessert', '2025-01-04T10:00:00Z', false),
+    );
   });
 
-  it('aplica os padrões: página 1, 20 itens, mais recentes primeiro, visão do backoffice', async () => {
-    await listProducts.execute({});
+  const names = (page: { data: readonly { name: string }[] }): string[] =>
+    page.data.map((item) => item.name);
 
-    const [criteria] = query.listCalls;
-    expect(criteria?.page.page).toBe(1);
-    expect(criteria?.page.limit).toBe(20);
-    expect(criteria).toMatchObject({
-      search: null,
-      category: null,
-      isAvailable: null,
-      sort: { field: 'createdAt', direction: 'desc' },
-      visibility: 'backoffice',
-    });
+  it('por padrão lista todos no backoffice, mais recentes primeiro', async () => {
+    const page = await listProducts.execute({});
+
+    expect(names(page)).toEqual([
+      'Pudim de Leite',
+      'Burger Vegano',
+      'Suco de Laranja',
+      'X-Burger Especial',
+    ]);
+    expect(page.pagination).toEqual({ page: 1, limit: 20, total: 4, totalPages: 1 });
   });
 
-  it('repassa busca, filtros, ordenação e visibilidade já validados', async () => {
-    await listProducts.execute({
-      page: 2,
-      limit: 10,
-      search: '  burger ',
-      category: 'meal',
-      isAvailable: false,
-      sortBy: 'price',
-      sortOrder: 'ASC',
-      visibility: 'public',
-    });
-
-    const [criteria] = query.listCalls;
-    expect(criteria?.page.offset).toBe(10);
-    expect(criteria).toMatchObject({
-      search: 'burger',
-      category: 'meal',
-      isAvailable: false,
-      sort: { field: 'price', direction: 'asc' },
-      visibility: 'public',
-    });
+  it('busca por trecho do nome sem diferenciar maiúsculas', async () => {
+    const page = await listProducts.execute({ search: '  BURGER ' });
+    expect(names(page)).toEqual(['Burger Vegano', 'X-Burger Especial']);
   });
 
-  it('trata busca em branco como ausente', async () => {
-    await listProducts.execute({ search: '   ' });
-    expect(query.listCalls[0]?.search).toBeNull();
+  it('filtra por categoria e disponibilidade', async () => {
+    expect(names(await listProducts.execute({ category: 'meal' }))).toHaveLength(2);
+    expect(names(await listProducts.execute({ isAvailable: false }))).toEqual(['Pudim de Leite']);
   });
 
-  it('monta a página no formato { data, pagination }', async () => {
-    const juice = productDto({ id: '7a1c9e2b-4d3f-4a6b-8c9d-1e2f3a4b5c6d', name: 'Suco' });
-    query.listResult = { items: [BURGER_DTO, juice], total: 47 };
+  it('na visão pública esconde os indisponíveis', async () => {
+    const page = await listProducts.execute({ visibility: 'public' });
 
-    const page = await listProducts.execute({ page: 1, limit: 20 });
-
-    expect(page.data).toEqual([BURGER_DTO, juice]);
-    expect(page.pagination).toEqual({ page: 1, limit: 20, total: 47, totalPages: 3 });
+    expect(names(page)).not.toContain('Pudim de Leite');
+    expect(page.pagination.total).toBe(3);
   });
 
-  it('agrupa todos os parâmetros inválidos e não consulta a base', async () => {
+  it('ordena pelo campo e direção pedidos', async () => {
+    const page = await listProducts.execute({ sortBy: 'price', sortOrder: 'ASC' });
+    expect(page.data.map((item) => item.price)).toEqual([12.5, 14, 29.9, 32.9]);
+  });
+
+  it('pagina e calcula o total de páginas', async () => {
+    const page = await listProducts.execute({ page: 2, limit: 3, sortBy: 'name', sortOrder: 'asc' });
+
+    expect(names(page)).toEqual(['X-Burger Especial']);
+    expect(page.pagination).toEqual({ page: 2, limit: 3, total: 4, totalPages: 2 });
+  });
+
+  it('nunca lista produtos removidos', async () => {
+    const removed = product('Batata Frita', 15, 'side', '2025-01-05T10:00:00Z');
+    removed.remove({ hasActiveOrders: false, now: new Date('2025-01-06T10:00:00Z') });
+    unitOfWork.givenProducts(removed);
+
+    expect(names(await listProducts.execute({}))).not.toContain('Batata Frita');
+  });
+
+  it('agrupa todos os parâmetros inválidos sem abrir transação', async () => {
     const attempt = listProducts.execute({
       page: 0,
       limit: 500,
@@ -88,6 +115,6 @@ describe('ListProductsUseCase', () => {
         { field: 'sortOrder', message: 'O valor deve ser um de: asc, desc' },
       ],
     });
-    expect(query.listCalls).toHaveLength(0);
+    expect(unitOfWork.commits + unitOfWork.rollbacks).toBe(0);
   });
 });

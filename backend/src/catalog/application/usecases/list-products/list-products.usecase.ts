@@ -7,15 +7,15 @@ import {
   type Page,
   type UseCase,
 } from '../../../../shared-kernel/application/index';
-import { ProductCategory } from '../../../domain/index';
-import type { ProductDto } from '../../dtos/product.dto';
-import { InvalidSearchError } from '../../errors/invalid-search.error';
 import {
   PRODUCT_SORT_FIELDS,
+  ProductCategory,
   type ProductListCriteria,
-  type ProductQuery,
   type ProductVisibility,
-} from '../../queries/product.query';
+} from '../../../domain/index';
+import { toProductDto, type ProductDto } from '../../dtos/product.dto';
+import { InvalidSearchError } from '../../errors/invalid-search.error';
+import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';
 
 /** Mesmo tamanho máximo do nome do produto: buscas maiores nunca casariam. */
 const MAX_SEARCH_LENGTH = 120;
@@ -36,7 +36,7 @@ export type ListProductsInput = {
 
 /** Lista produtos com paginação, busca por nome, filtros e ordenação. */
 export class ListProductsUseCase implements UseCase<ListProductsInput, Page<ProductDto>> {
-  constructor(private readonly products: ProductQuery) {}
+  constructor(private readonly unitOfWork: CatalogUnitOfWork) {}
 
   async execute(input: ListProductsInput): Promise<Page<ProductDto>> {
     const validated = validateInput({
@@ -49,7 +49,8 @@ export class ListProductsUseCase implements UseCase<ListProductsInput, Page<Prod
     });
 
     const criteria: ProductListCriteria = {
-      page: validated.page,
+      offset: validated.page.offset,
+      limit: validated.page.limit,
       search: validated.search,
       category: validated.category,
       isAvailable: input.isAvailable ?? null,
@@ -57,7 +58,9 @@ export class ListProductsUseCase implements UseCase<ListProductsInput, Page<Prod
       visibility: input.visibility ?? 'backoffice',
     };
 
-    return toPage(await this.products.list(criteria), validated.page);
+    return this.unitOfWork.transaction(async ({ products }) =>
+      toPage(await products.list(criteria), validated.page, toProductDto),
+    );
   }
 }
 

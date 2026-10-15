@@ -7,6 +7,12 @@ export {
   type RemoveProductParams,
 } from './product/product';
 export { ProductId } from './product/product-id';
+export {
+  PRODUCT_SORT_FIELDS,
+  type ProductListCriteria,
+  type ProductSortField,
+  type ProductVisibility,
+} from './product/repositories/product-list-criteria';
 export type { ProductRepository } from './product/repositories/product.repository';
 export * from './product/errors/index';
 export * from './product/events/index';
