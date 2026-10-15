@@ -8,6 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "migrate:latest": "tsx --env-file-if-exists=.env src/main/database/migrate.ts latest",
+    "migrate:down": "tsx --env-file-if-exists=.env src/main/database/migrate.ts down",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
@@ -15,8 +17,15 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^12.2.1",
     "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "kysely": "^0.29.6",
+    "pg": "^8.23.1"
   }
 }
