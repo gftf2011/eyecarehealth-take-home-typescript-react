@@ -16,6 +16,8 @@ import type { CatalogRepositories, CatalogUnitOfWork } from '../ports/catalog-un
 export class InMemoryCatalogUnitOfWork implements CatalogUnitOfWork {
   readonly products = new Map<string, ProductSnapshot>();
   readonly outbox: DomainEvent[] = [];
+  /** IDs de produtos presentes em pedidos `pending`/`preparing` (fato do Ordering). */
+  readonly productsInActiveOrders = new Set<string>();
   commits = 0;
   rollbacks = 0;
   #failNextCommit: Error | null = null;
@@ -26,6 +28,11 @@ export class InMemoryCatalogUnitOfWork implements CatalogUnitOfWork {
       product.pullDomainEvents();
       this.products.set(product.id.value, product.snapshot());
     }
+  }
+
+  /** Simula pedidos em aberto (no Ordering) contendo estes produtos. */
+  givenActiveOrdersFor(...products: Product[]): void {
+    for (const product of products) this.productsInActiveOrders.add(product.id.value);
   }
 
   /** Lê o estado confirmado de um produto, como o próximo caso de uso o veria. */
@@ -48,6 +55,9 @@ export class InMemoryCatalogUnitOfWork implements CatalogUnitOfWork {
     try {
       const result = await work({
         products: new InMemoryProductRepository(this.products, staged, stagedEvents),
+        activeOrders: {
+          hasActiveOrdersFor: async (productId) => this.productsInActiveOrders.has(productId.value),
+        },
       });
 
       if (this.#failNextCommit !== null) {
