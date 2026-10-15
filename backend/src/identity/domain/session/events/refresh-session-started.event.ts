@@ -1,6 +1,6 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { RefreshSessionId } from '../refresh-session-id.js';
-import { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { RefreshSessionId } from '../refresh-session-id';
+import { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type';
 
 export type RefreshSessionStartedPayload = {
   userId: string;

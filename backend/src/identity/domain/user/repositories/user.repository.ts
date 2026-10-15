@@ -1,6 +1,6 @@
-import type { Repository } from '../../../../shared-kernel/domain/index.js';
-import type { User } from '../user.js';
-import type { Email } from '../value-objects/email.js';
+import type { Repository } from '../../../../shared-kernel/domain/index';
+import type { User } from '../user';
+import type { Email } from '../value-objects/email';
 
 /** Repositório do agregado User. */
 export interface UserRepository extends Repository<User> {

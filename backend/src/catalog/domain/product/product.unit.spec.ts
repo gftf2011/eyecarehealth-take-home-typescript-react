@@ -12,8 +12,8 @@ import {
   ProductPriceChanged,
   ProductRemoved,
   ProductUpdated,
-} from '../index.js';
-import { buildCreateProductParams, buildProduct, CREATED_AT, LATER } from './testing/product.fixture.js';
+} from '../index';
+import { buildCreateProductParams, buildProduct, CREATED_AT, LATER } from './testing/product.fixture';
 
 describe('Product', () => {
   describe('create', () => {

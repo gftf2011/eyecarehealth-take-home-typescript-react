@@ -1,4 +1,4 @@
-import { InvalidValueError } from './domain-error.js';
+import { InvalidValueError } from './domain-error';
 
 export class InvalidUniqueIdError extends InvalidValueError {
   readonly code = 'INVALID_ID';

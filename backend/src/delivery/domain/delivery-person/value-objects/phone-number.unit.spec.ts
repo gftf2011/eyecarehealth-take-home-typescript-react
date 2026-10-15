@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidPhoneNumberError, PhoneNumber } from '../../index.js';
+import { InvalidPhoneNumberError, PhoneNumber } from '../../index';
 
 describe('PhoneNumber', () => {
   it('aceita o formato (XX) XXXXX-XXXX', () => {

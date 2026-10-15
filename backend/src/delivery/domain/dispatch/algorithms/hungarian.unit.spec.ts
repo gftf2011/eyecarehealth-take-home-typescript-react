@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { bruteForceMinCost, randomMatrix, seededRandom } from '../testing/brute-force.js';
-import { solveMinCostAssignment } from './hungarian.js';
+import { bruteForceMinCost, randomMatrix, seededRandom } from '../testing/brute-force';
+import { solveMinCostAssignment } from './hungarian';
 
 function totalCost(cost: readonly (readonly number[])[], assignment: readonly number[]): number {
   return assignment.reduce((sum, col, row) => sum + (cost[row]?.[col] ?? Number.NaN), 0);

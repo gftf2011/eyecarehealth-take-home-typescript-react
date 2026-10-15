@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidPreparationTimeError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidPreparationTimeError } from '../errors/index';
 
 const MIN_MINUTES = 1;
 const MAX_MINUTES = 120;

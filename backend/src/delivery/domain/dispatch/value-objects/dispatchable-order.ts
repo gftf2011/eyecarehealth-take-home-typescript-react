@@ -1,6 +1,6 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import type { GeoPoint } from '../../location/geo-point.js';
-import type { OrderId } from './order-id.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import type { GeoPoint } from '../../location/geo-point';
+import type { OrderId } from './order-id';
 
 /**
  * Visão que o Delivery tem de um pedido `ready` aguardando entregador. É

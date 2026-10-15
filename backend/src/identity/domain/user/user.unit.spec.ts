@@ -7,14 +7,14 @@ import {
   UserPasswordChanged,
   UserRegistered,
   UserRoleChanged,
-} from '../index.js';
+} from '../index';
 import {
   BCRYPT_COST_12,
   buildRegisterUserParams,
   buildUser,
   LATER,
   REGISTERED_AT,
-} from './testing/user.fixture.js';
+} from './testing/user.fixture';
 
 describe('User', () => {
   it('é cadastrado com evento UserRegistered sem expor o hash', () => {

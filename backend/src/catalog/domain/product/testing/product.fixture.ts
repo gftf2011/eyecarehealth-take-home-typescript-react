@@ -8,7 +8,7 @@ import {
   ProductName,
   ProductPrice,
   type CreateProductParams,
-} from '../../index.js';
+} from '../../index';
 
 export const CREATED_AT = new Date('2025-01-15T10:30:00Z');
 export const LATER = new Date('2025-01-16T08:00:00Z');

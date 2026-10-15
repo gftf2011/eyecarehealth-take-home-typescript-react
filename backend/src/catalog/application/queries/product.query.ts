@@ -1,6 +1,6 @@
-import type { PageRequest, PageSlice, Sort } from '../../../shared-kernel/application/index.js';
-import type { ProductCategoryValue, ProductId } from '../../domain/index.js';
-import type { ProductDto } from '../dtos/product.dto.js';
+import type { PageRequest, PageSlice, Sort } from '../../../shared-kernel/application/index';
+import type { ProductCategoryValue, ProductId } from '../../domain/index';
+import type { ProductDto } from '../dtos/product.dto';
 
 export const PRODUCT_SORT_FIELDS = ['name', 'price', 'createdAt'] as const;
 

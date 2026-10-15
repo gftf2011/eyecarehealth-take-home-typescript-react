@@ -1,7 +1,7 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { ProductId } from '../product-id.js';
-import type { ProductCategoryValue } from '../value-objects/product-category.js';
-import { PRODUCT_AGGREGATE_TYPE } from './product-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { ProductId } from '../product-id';
+import type { ProductCategoryValue } from '../value-objects/product-category';
+import { PRODUCT_AGGREGATE_TYPE } from './product-aggregate-type';
 
 export type ProductCreatedPayload = {
   name: string;

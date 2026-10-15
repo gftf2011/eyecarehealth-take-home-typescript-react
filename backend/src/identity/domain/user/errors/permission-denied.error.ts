@@ -1,6 +1,6 @@
-import { AuthorizationError } from '../../../../shared-kernel/domain/index.js';
-import type { Permission } from '../value-objects/permission.js';
-import type { RoleValue } from '../value-objects/role.js';
+import { AuthorizationError } from '../../../../shared-kernel/domain/index';
+import type { Permission } from '../value-objects/permission';
+import type { RoleValue } from '../value-objects/role';
 
 export class PermissionDeniedError extends AuthorizationError {
   readonly code = 'FORBIDDEN';

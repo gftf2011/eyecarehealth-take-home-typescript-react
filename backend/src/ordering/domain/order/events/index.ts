@@ -1,20 +1,20 @@
-import type { DeliveryPersonAssigned } from './delivery-person-assigned.event.js';
-import type { OrderPlaced } from './order-placed.event.js';
-import type { OrderStatusChanged } from './order-status-changed.event.js';
+import type { DeliveryPersonAssigned } from './delivery-person-assigned.event';
+import type { OrderPlaced } from './order-placed.event';
+import type { OrderStatusChanged } from './order-status-changed.event';
 
 export {
   DeliveryPersonAssigned,
   type DeliveryPersonAssignedPayload,
-} from './delivery-person-assigned.event.js';
-export { ORDER_AGGREGATE_TYPE } from './order-aggregate-type.js';
+} from './delivery-person-assigned.event';
+export { ORDER_AGGREGATE_TYPE } from './order-aggregate-type';
 export {
   OrderPlaced,
   type OrderPlacedItemPayload,
   type OrderPlacedPayload,
-} from './order-placed.event.js';
+} from './order-placed.event';
 export {
   OrderStatusChanged,
   type OrderStatusChangedPayload,
-} from './order-status-changed.event.js';
+} from './order-status-changed.event';
 
 export type OrderDomainEvent = OrderPlaced | OrderStatusChanged | DeliveryPersonAssigned;

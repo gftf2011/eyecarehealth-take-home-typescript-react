@@ -1,6 +1,6 @@
-import type { DomainEvent } from './domain-event.js';
-import { Entity } from './entity.js';
-import type { UniqueId } from './unique-id.js';
+import type { DomainEvent } from './domain-event';
+import { Entity } from './entity';
+import type { UniqueId } from './unique-id';
 
 /**
  * Raiz de agregado: único ponto de entrada para alterar o agregado. Registra os

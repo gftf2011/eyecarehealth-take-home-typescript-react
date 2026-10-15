@@ -1,7 +1,7 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { UserId } from '../user-id.js';
-import type { RoleValue } from '../value-objects/role.js';
-import { USER_AGGREGATE_TYPE } from './user-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { UserId } from '../user-id';
+import type { RoleValue } from '../value-objects/role';
+import { USER_AGGREGATE_TYPE } from './user-aggregate-type';
 
 export type UserRegisteredPayload = {
   email: string;

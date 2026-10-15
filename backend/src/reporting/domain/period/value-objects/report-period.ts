@@ -1,7 +1,7 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidReportPeriodError } from '../errors/index.js';
-import { BUSINESS_TIME_ZONE } from '../time-zone.js';
-import type { LocalDate } from './local-date.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidReportPeriodError } from '../errors/index';
+import { BUSINESS_TIME_ZONE } from '../time-zone';
+import type { LocalDate } from './local-date';
 
 /** Intervalo de instantes `[from, to)`; `null` significa sem limite naquele lado. */
 export type InstantRange = {

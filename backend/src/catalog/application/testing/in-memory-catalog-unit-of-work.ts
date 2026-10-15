@@ -1,11 +1,11 @@
-import type { DomainEvent } from '../../../shared-kernel/domain/index.js';
+import type { DomainEvent } from '../../../shared-kernel/domain/index';
 import {
   Product,
   ProductId,
   type ProductRepository,
   type ProductSnapshot,
-} from '../../domain/index.js';
-import type { CatalogRepositories, CatalogUnitOfWork } from '../ports/catalog-unit-of-work.js';
+} from '../../domain/index';
+import type { CatalogRepositories, CatalogUnitOfWork } from '../ports/catalog-unit-of-work';
 
 /**
  * Unidade de trabalho em memória com semântica transacional real: as escritas

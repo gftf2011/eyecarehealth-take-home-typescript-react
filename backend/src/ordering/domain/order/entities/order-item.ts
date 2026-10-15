@@ -1,8 +1,8 @@
-import { Entity, type Money } from '../../../../shared-kernel/domain/index.js';
-import type { ProductId } from '../value-objects/product-id.js';
-import type { ProductSnapshot } from '../value-objects/product-snapshot.js';
-import type { Quantity } from '../value-objects/quantity.js';
-import type { OrderItemId } from './order-item-id.js';
+import { Entity, type Money } from '../../../../shared-kernel/domain/index';
+import type { ProductId } from '../value-objects/product-id';
+import type { ProductSnapshot } from '../value-objects/product-snapshot';
+import type { Quantity } from '../value-objects/quantity';
+import type { OrderItemId } from './order-item-id';
 
 export type OrderItemSnapshot = {
   productId: ProductId;

@@ -1,4 +1,4 @@
-import type { InstantRange } from '../../period/value-objects/report-period.js';
+import type { InstantRange } from '../../period/value-objects/report-period';
 
 /** Estatística de entregas de um tipo de veículo, agregada pelo banco. */
 export type DeliveryTimeGroupRow = {

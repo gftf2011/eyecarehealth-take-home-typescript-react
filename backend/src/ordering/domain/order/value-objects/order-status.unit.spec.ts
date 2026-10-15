@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidOrderStatusError, OrderStatus } from '../../index.js';
+import { InvalidOrderStatusError, OrderStatus } from '../../index';
 
 describe('OrderStatus', () => {
   it('rejeita status desconhecido', () => {

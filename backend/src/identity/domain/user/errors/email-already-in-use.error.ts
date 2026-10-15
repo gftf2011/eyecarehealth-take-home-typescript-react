@@ -1,5 +1,5 @@
-import { ConflictError } from '../../../../shared-kernel/domain/index.js';
-import type { Email } from '../value-objects/email.js';
+import { ConflictError } from '../../../../shared-kernel/domain/index';
+import type { Email } from '../value-objects/email';
 
 export class EmailAlreadyInUseError extends ConflictError {
   readonly code = 'EMAIL_ALREADY_IN_USE';

@@ -1,4 +1,4 @@
-import type { Clock } from '../clock.js';
+import type { Clock } from '../clock';
 
 /** Relógio controlável para testes. */
 export class FixedClock implements Clock {

@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPersonId } from './delivery-person-id.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPersonId } from './delivery-person-id';
 
 /**
  * Fato sobre um entregador, trazido do contexto Delivery pela camada

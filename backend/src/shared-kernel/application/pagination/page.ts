@@ -1,4 +1,4 @@
-import type { PageRequest } from './page-request.js';
+import type { PageRequest } from './page-request';
 
 export type Pagination = {
   readonly page: number;

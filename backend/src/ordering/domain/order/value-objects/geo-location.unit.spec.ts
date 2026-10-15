@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { GeoLocation, InvalidGeoLocationError } from '../../index.js';
+import { GeoLocation, InvalidGeoLocationError } from '../../index';
 
 describe('GeoLocation', () => {
   it.each([

@@ -1,7 +1,7 @@
-import { Money } from '../../../shared-kernel/domain/index.js';
-import { LocalDate } from '../period/value-objects/local-date.js';
-import { ReportPeriod, type BoundedReportPeriod } from '../period/value-objects/report-period.js';
-import type { DailyRevenueRow } from './queries/revenue.query.js';
+import { Money } from '../../../shared-kernel/domain/index';
+import { LocalDate } from '../period/value-objects/local-date';
+import { ReportPeriod, type BoundedReportPeriod } from '../period/value-objects/report-period';
+import type { DailyRevenueRow } from './queries/revenue.query';
 
 export type DailyRevenue = {
   readonly date: LocalDate;

@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../shared-kernel/domain/index.js';
-import { InvalidGeoPointError } from './errors/invalid-geo-point.error.js';
+import { ValueObject } from '../../../shared-kernel/domain/index';
+import { InvalidGeoPointError } from './errors/invalid-geo-point.error';
 
 /** Raio médio da Terra, em km. */
 export const EARTH_RADIUS_KM = 6371;

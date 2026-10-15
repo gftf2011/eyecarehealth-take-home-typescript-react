@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LocalDate, ReportPeriod, RevenueReport } from '../index.js';
+import { LocalDate, ReportPeriod, RevenueReport } from '../index';
 
 const january = ReportPeriod.between(LocalDate.parse('2025-01-01'), LocalDate.parse('2025-01-05'));
 

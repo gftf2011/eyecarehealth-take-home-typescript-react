@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidPersonNameError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidPersonNameError } from '../errors/index';
 
 const MIN_LENGTH = 3;
 const MAX_LENGTH = 100;

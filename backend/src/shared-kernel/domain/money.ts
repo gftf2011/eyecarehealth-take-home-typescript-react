@@ -1,5 +1,5 @@
-import { InvalidMoneyError } from './errors/invalid-money.error.js';
-import { ValueObject } from './value-object.js';
+import { InvalidMoneyError } from './errors/invalid-money.error';
+import { ValueObject } from './value-object';
 
 const CENTS_PER_UNIT = 100;
 const DECIMAL_TOLERANCE = 1e-6;

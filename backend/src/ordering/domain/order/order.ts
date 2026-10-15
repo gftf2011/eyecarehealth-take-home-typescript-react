@@ -1,25 +1,25 @@
-import { AggregateRoot, Money } from '../../../shared-kernel/domain/index.js';
-import { OrderItemId } from './entities/order-item-id.js';
-import { OrderItem } from './entities/order-item.js';
+import { AggregateRoot, Money } from '../../../shared-kernel/domain/index';
+import { OrderItemId } from './entities/order-item-id';
+import { OrderItem } from './entities/order-item';
 import {
   DeliveryPersonAssignmentNotAllowedError,
   DeliveryPersonUnavailableError,
   EmptyOrderError,
   InvalidStatusTransitionError,
   UnavailableProductError,
-} from './errors/index.js';
-import { DeliveryPersonAssigned, OrderPlaced, OrderStatusChanged } from './events/index.js';
-import type { OrderId } from './order-id.js';
-import type { CustomerName } from './value-objects/customer-name.js';
-import type { DeliveryAddress } from './value-objects/delivery-address.js';
-import type { DeliveryPersonAvailability } from './value-objects/delivery-person-availability.js';
-import type { DeliveryPersonId } from './value-objects/delivery-person-id.js';
-import type { GeoLocation } from './value-objects/geo-location.js';
-import { OrderStatus, type OrderStatusValue } from './value-objects/order-status.js';
-import type { PhoneNumber } from './value-objects/phone-number.js';
-import type { ProductSnapshot } from './value-objects/product-snapshot.js';
-import type { Quantity } from './value-objects/quantity.js';
-import { StatusChange } from './value-objects/status-change.js';
+} from './errors/index';
+import { DeliveryPersonAssigned, OrderPlaced, OrderStatusChanged } from './events/index';
+import type { OrderId } from './order-id';
+import type { CustomerName } from './value-objects/customer-name';
+import type { DeliveryAddress } from './value-objects/delivery-address';
+import type { DeliveryPersonAvailability } from './value-objects/delivery-person-availability';
+import type { DeliveryPersonId } from './value-objects/delivery-person-id';
+import type { GeoLocation } from './value-objects/geo-location';
+import { OrderStatus, type OrderStatusValue } from './value-objects/order-status';
+import type { PhoneNumber } from './value-objects/phone-number';
+import type { ProductSnapshot } from './value-objects/product-snapshot';
+import type { Quantity } from './value-objects/quantity';
+import { StatusChange } from './value-objects/status-change';
 
 /** Status em que o entregador ainda pode ser definido ou trocado. */
 const ASSIGNABLE_STATUSES: readonly OrderStatusValue[] = ['pending', 'preparing', 'ready'];

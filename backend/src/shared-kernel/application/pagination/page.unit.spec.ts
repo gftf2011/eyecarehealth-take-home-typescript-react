@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../errors/input-validation.error.js';
-import { toPage } from './page.js';
-import { PageRequest } from './page-request.js';
+import { InputValidationError } from '../errors/input-validation.error';
+import { toPage } from './page';
+import { PageRequest } from './page-request';
 
 describe('PageRequest', () => {
   it('usa página 1 e limite 20 por padrão', () => {

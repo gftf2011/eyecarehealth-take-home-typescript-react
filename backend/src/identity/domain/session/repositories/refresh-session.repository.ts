@@ -1,5 +1,5 @@
-import type { Repository } from '../../../../shared-kernel/domain/index.js';
-import type { RefreshSession } from '../refresh-session.js';
+import type { Repository } from '../../../../shared-kernel/domain/index';
+import type { RefreshSession } from '../refresh-session';
 
 /**
  * Repositório do agregado RefreshSession. A sessão é localizada pelo ID que

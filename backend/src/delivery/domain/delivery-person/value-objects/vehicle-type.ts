@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidVehicleTypeError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidVehicleTypeError } from '../errors/index';
 
 export const VEHICLE_TYPES = ['bicycle', 'motorcycle', 'car'] as const;
 

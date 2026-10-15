@@ -1,7 +1,7 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { OrderId } from '../order-id.js';
-import type { OrderStatusValue } from '../value-objects/order-status.js';
-import { ORDER_AGGREGATE_TYPE } from './order-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { OrderId } from '../order-id';
+import type { OrderStatusValue } from '../value-objects/order-status';
+import { ORDER_AGGREGATE_TYPE } from './order-aggregate-type';
 
 export type OrderStatusChangedPayload = {
   from: OrderStatusValue;

@@ -4,7 +4,7 @@ import {
   DispatchCandidate,
   GeoPoint,
   OrderId,
-} from '../../index.js';
+} from '../../index';
 
 /** UUID v4 válido e legível a partir de um número (ex.: 1 → ...000000000001). */
 export function uuid(n: number): string {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidPhoneNumberError, PhoneNumber } from '../../index.js';
+import { InvalidPhoneNumberError, PhoneNumber } from '../../index';
 
 describe('PhoneNumber', () => {
   it.each(['(11) 99999-1234', '(21) 98765-4321'])('aceita %s', (raw) => {

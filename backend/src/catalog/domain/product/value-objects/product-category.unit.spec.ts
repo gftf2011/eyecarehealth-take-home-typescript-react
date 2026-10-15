@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidProductCategoryError, ProductCategory } from '../../index.js';
+import { InvalidProductCategoryError, ProductCategory } from '../../index';
 
 describe('ProductCategory', () => {
   it.each(['meal', 'drink', 'dessert', 'side'])('aceita %s', (raw) => {

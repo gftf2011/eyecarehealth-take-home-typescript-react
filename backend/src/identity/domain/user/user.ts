@@ -1,10 +1,10 @@
-import { AggregateRoot } from '../../../shared-kernel/domain/index.js';
-import { UserPasswordChanged, UserRegistered, UserRoleChanged } from './events/index.js';
-import type { UserId } from './user-id.js';
-import type { Email } from './value-objects/email.js';
-import type { PasswordHash } from './value-objects/password-hash.js';
-import type { Permission } from './value-objects/permission.js';
-import type { Role } from './value-objects/role.js';
+import { AggregateRoot } from '../../../shared-kernel/domain/index';
+import { UserPasswordChanged, UserRegistered, UserRoleChanged } from './events/index';
+import type { UserId } from './user-id';
+import type { Email } from './value-objects/email';
+import type { PasswordHash } from './value-objects/password-hash';
+import type { Permission } from './value-objects/permission';
+import type { Role } from './value-objects/role';
 
 export type RegisterUserParams = {
   id: UserId;

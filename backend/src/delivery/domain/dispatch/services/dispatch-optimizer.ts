@@ -1,13 +1,13 @@
-import type { DeliveryPersonId } from '../../delivery-person/delivery-person-id.js';
-import type { GeoPoint } from '../../location/geo-point.js';
-import { solveMinCostAssignment } from '../algorithms/hungarian.js';
+import type { DeliveryPersonId } from '../../delivery-person/delivery-person-id';
+import type { GeoPoint } from '../../location/geo-point';
+import { solveMinCostAssignment } from '../algorithms/hungarian';
 import {
   AssignmentPlan,
   type Assignment,
   type UnassignedOrder,
-} from '../value-objects/assignment-plan.js';
-import type { DispatchCandidate } from '../value-objects/dispatch-candidate.js';
-import type { DispatchableOrder } from '../value-objects/dispatchable-order.js';
+} from '../value-objects/assignment-plan';
+import type { DispatchCandidate } from '../value-objects/dispatch-candidate';
+import type { DispatchableOrder } from '../value-objects/dispatchable-order';
 
 type LocatedCandidate = {
   readonly deliveryPersonId: DeliveryPersonId;

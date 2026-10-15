@@ -5,7 +5,7 @@ import {
   User,
   UserId,
   type RegisterUserParams,
-} from '../../index.js';
+} from '../../index';
 
 export const REGISTERED_AT = new Date('2025-01-01T08:00:00Z');
 export const LATER = new Date('2025-01-02T08:00:00Z');

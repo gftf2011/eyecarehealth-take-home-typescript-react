@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain/index.js';
+import { InvalidValueError } from '../../../../shared-kernel/domain/index';
 
 export class InvalidImageUrlError extends InvalidValueError {
   readonly code = 'INVALID_IMAGE_URL';

@@ -1,4 +1,4 @@
-import { AggregateRoot, DomainEvent, Entity, UniqueId } from '../index.js';
+import { AggregateRoot, DomainEvent, Entity, UniqueId } from '../index';
 
 /**
  * Agregado mínimo para exercitar as bases do shared kernel sem depender de

@@ -1,4 +1,4 @@
-import { NotFoundError } from '../../../../shared-kernel/domain/index.js';
+import { NotFoundError } from '../../../../shared-kernel/domain/index';
 
 export class UserNotFoundError extends NotFoundError {
   readonly code = 'USER_NOT_FOUND';

@@ -1,7 +1,7 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { RefreshSessionId } from '../refresh-session-id.js';
-import type { RevocationReason } from '../value-objects/revocation-reason.js';
-import { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { RefreshSessionId } from '../refresh-session-id';
+import type { RevocationReason } from '../value-objects/revocation-reason';
+import { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type';
 
 export type RefreshSessionRevokedPayload = {
   reason: RevocationReason;

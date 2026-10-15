@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../domain/index.js';
+import { InvalidValueError } from '../../domain/index';
 
 export const SORT_DIRECTIONS = ['asc', 'desc'] as const;
 

@@ -2,9 +2,9 @@ import {
   validateInput,
   type Clock,
   type UseCase,
-} from '../../../../shared-kernel/application/index.js';
-import { ProductId, ProductNotFoundError } from '../../../domain/index.js';
-import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work.js';
+} from '../../../../shared-kernel/application/index';
+import { ProductId, ProductNotFoundError } from '../../../domain/index';
+import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';
 
 export type RemoveProductInput = {
   readonly id: string;

@@ -1,4 +1,4 @@
-import type { OrderStatusCountRow } from './queries/orders-by-status.query.js';
+import type { OrderStatusCountRow } from './queries/orders-by-status.query';
 
 /**
  * Status de pedido na ótica do Reporting. Lista própria do contexto (não

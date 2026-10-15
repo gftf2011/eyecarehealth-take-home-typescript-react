@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidQuantityError, Quantity } from '../../index.js';
+import { InvalidQuantityError, Quantity } from '../../index';
 
 describe('Quantity', () => {
   it('aceita inteiros positivos e soma', () => {

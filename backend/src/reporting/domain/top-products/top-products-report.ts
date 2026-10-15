@@ -1,6 +1,6 @@
-import { Money } from '../../../shared-kernel/domain/index.js';
-import type { ProductSalesRow } from './queries/top-products.query.js';
-import type { TopProductsLimit } from './value-objects/top-products-limit.js';
+import { Money } from '../../../shared-kernel/domain/index';
+import type { ProductSalesRow } from './queries/top-products.query';
+import type { TopProductsLimit } from './value-objects/top-products-limit';
 
 export type ProductSales = {
   readonly productId: string;

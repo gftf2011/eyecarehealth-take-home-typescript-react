@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { Money } from '../../domain/index.js';
-import { InputValidationError } from '../errors/input-validation.error.js';
-import { validateInput } from './validate-input.js';
+import { Money } from '../../domain/index';
+import { InputValidationError } from '../errors/input-validation.error';
+import { validateInput } from './validate-input';
 
 describe('validateInput', () => {
   it('devolve os valores construídos quando tudo é válido', () => {

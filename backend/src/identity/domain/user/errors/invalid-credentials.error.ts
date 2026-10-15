@@ -1,4 +1,4 @@
-import { AuthenticationError } from '../../../../shared-kernel/domain/index.js';
+import { AuthenticationError } from '../../../../shared-kernel/domain/index';
 
 /**
  * Email ou senha incorretos. A mensagem é a mesma nos dois casos para não

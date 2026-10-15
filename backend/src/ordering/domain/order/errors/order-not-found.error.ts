@@ -1,4 +1,4 @@
-import { NotFoundError } from '../../../../shared-kernel/domain/index.js';
+import { NotFoundError } from '../../../../shared-kernel/domain/index';
 
 export class OrderNotFoundError extends NotFoundError {
   readonly code = 'ORDER_NOT_FOUND';

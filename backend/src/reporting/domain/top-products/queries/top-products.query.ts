@@ -1,4 +1,4 @@
-import type { InstantRange } from '../../period/value-objects/report-period.js';
+import type { InstantRange } from '../../period/value-objects/report-period';
 
 export type ProductSalesRow = {
   readonly productId: string;

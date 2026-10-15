@@ -1,5 +1,5 @@
-import { InvalidMoneyError, ValueObject, type Money } from '../../../../shared-kernel/domain/index.js';
-import type { ProductId } from './product-id.js';
+import { InvalidMoneyError, ValueObject, type Money } from '../../../../shared-kernel/domain/index';
+import type { ProductId } from './product-id';
 
 /**
  * Visão que o Ordering tem de um produto no instante do pedido. É produzida pela

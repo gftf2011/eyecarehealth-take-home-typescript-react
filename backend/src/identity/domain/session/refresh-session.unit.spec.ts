@@ -8,7 +8,7 @@ import {
   RefreshSessionRotated,
   RefreshSessionStarted,
   type InvalidRefreshTokenReason,
-} from '../index.js';
+} from '../index';
 import {
   buildSession,
   buildStartParams,
@@ -19,7 +19,7 @@ import {
   SEVEN_DAYS_LATER,
   STARTED_AT,
   THIRD_TOKEN,
-} from './testing/refresh-session.fixture.js';
+} from './testing/refresh-session.fixture';
 
 function rejectionReason(act: () => void): InvalidRefreshTokenReason | undefined {
   try {

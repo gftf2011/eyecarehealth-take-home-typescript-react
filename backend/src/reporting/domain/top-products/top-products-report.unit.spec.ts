@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidTopProductsLimitError, TopProductsLimit, TopProductsReport } from '../index.js';
+import { InvalidTopProductsLimitError, TopProductsLimit, TopProductsReport } from '../index';
 
 const row = (productId: string, productName: string, totalQuantity: number, totalRevenueCents: number) => ({
   productId,

@@ -1,5 +1,5 @@
-import type { AggregateRoot } from './aggregate-root.js';
-import type { UniqueId } from './unique-id.js';
+import type { AggregateRoot } from './aggregate-root';
+import type { UniqueId } from './unique-id';
 
 /**
  * Contrato base de repositório. Só aceita raízes de agregado: entidades

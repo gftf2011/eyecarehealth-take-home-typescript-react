@@ -2,7 +2,7 @@ import {
   validateInput,
   type Clock,
   type UseCase,
-} from '../../../../shared-kernel/application/index.js';
+} from '../../../../shared-kernel/application/index';
 import {
   PreparationTime,
   ProductCategory,
@@ -12,10 +12,10 @@ import {
   ProductNotFoundError,
   ProductPrice,
   type Product,
-} from '../../../domain/index.js';
-import { toProductDto, type ProductDto } from '../../dtos/product.dto.js';
-import { parseImageUrlInput } from '../../inputs/image-url.input.js';
-import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work.js';
+} from '../../../domain/index';
+import { toProductDto, type ProductDto } from '../../dtos/product.dto';
+import { parseImageUrlInput } from '../../inputs/image-url.input';
+import type { CatalogUnitOfWork } from '../../ports/catalog-unit-of-work';
 
 /** Atualização parcial: só os campos enviados são alterados. */
 export type UpdateProductInput = {

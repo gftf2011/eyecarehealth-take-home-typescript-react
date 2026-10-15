@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { BUSINESS_TIME_ZONE, startOfDayInstant } from './time-zone.js';
+import { BUSINESS_TIME_ZONE, startOfDayInstant } from './time-zone';
 
 describe('startOfDayInstant', () => {
   it.each([

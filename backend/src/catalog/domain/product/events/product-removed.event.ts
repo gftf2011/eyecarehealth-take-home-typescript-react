@@ -1,6 +1,6 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { ProductId } from '../product-id.js';
-import { PRODUCT_AGGREGATE_TYPE } from './product-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { ProductId } from '../product-id';
+import { PRODUCT_AGGREGATE_TYPE } from './product-aggregate-type';
 
 export class ProductRemoved extends DomainEvent<Record<string, never>> {
   readonly eventName = 'catalog.product.removed';

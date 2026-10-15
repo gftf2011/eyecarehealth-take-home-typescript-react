@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidProductCategoryError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidProductCategoryError } from '../errors/index';
 
 export const PRODUCT_CATEGORIES = ['meal', 'drink', 'dessert', 'side'] as const;
 

@@ -1,5 +1,5 @@
-import { ConflictError } from '../../../../shared-kernel/domain/index.js';
-import type { ProductId } from '../product-id.js';
+import { ConflictError } from '../../../../shared-kernel/domain/index';
+import type { ProductId } from '../product-id';
 
 export class ProductInUseError extends ConflictError {
   readonly code = 'PRODUCT_IN_USE';

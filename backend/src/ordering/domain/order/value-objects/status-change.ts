@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import type { OrderStatusValue } from './order-status.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import type { OrderStatusValue } from './order-status';
 
 /**
  * Registro de uma transição de status. O histórico permite medir o tempo até a

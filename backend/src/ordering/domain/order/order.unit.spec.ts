@@ -13,7 +13,7 @@ import {
   Quantity,
   UnavailableProductError,
   type OrderStatusValue,
-} from '../index.js';
+} from '../index';
 import {
   availableCourier,
   BURGER_ID,
@@ -25,7 +25,7 @@ import {
   LATER,
   PLACED_AT,
   productSnapshot,
-} from './testing/order.fixture.js';
+} from './testing/order.fixture';
 
 const OTHER_COURIER_ID = '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
 

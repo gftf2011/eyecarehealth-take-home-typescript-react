@@ -1,4 +1,4 @@
-import { DomainError, type DomainErrorDetail } from '../../domain/index.js';
+import { DomainError, type DomainErrorDetail } from '../../domain/index';
 
 /**
  * Entrada de um caso de uso com um ou mais campos inválidos. Agrupa os erros

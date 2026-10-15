@@ -1,5 +1,5 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index.js';
-import type { ProductSnapshot } from '../value-objects/product-snapshot.js';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import type { ProductSnapshot } from '../value-objects/product-snapshot';
 
 export class UnavailableProductError extends BusinessRuleViolationError {
   readonly code = 'UNAVAILABLE_PRODUCT';

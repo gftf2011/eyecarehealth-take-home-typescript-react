@@ -7,7 +7,7 @@ import {
   Role,
   type Permission,
   type RoleValue,
-} from '../../index.js';
+} from '../../index';
 
 /** Matriz do enunciado: viewer só lê pedidos, produtos e relatórios. */
 const VIEWER_ALLOWED: ReadonlySet<Permission> = new Set([

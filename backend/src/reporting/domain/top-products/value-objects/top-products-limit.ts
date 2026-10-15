@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidTopProductsLimitError } from '../errors/invalid-top-products-limit.error.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidTopProductsLimitError } from '../errors/invalid-top-products-limit.error';
 
 const DEFAULT_LIMIT = 10;
 const MIN_LIMIT = 1;

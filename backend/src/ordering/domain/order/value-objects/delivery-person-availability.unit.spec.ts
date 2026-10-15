@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { DeliveryPersonAvailability, DeliveryPersonId } from '../../index.js';
-import { COURIER_ID } from '../testing/order.fixture.js';
+import { DeliveryPersonAvailability, DeliveryPersonId } from '../../index';
+import { COURIER_ID } from '../testing/order.fixture';
 
 describe('DeliveryPersonAvailability', () => {
   it.each([

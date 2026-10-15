@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidPreparationTimeError, PreparationTime } from '../../index.js';
+import { InvalidPreparationTimeError, PreparationTime } from '../../index';
 
 describe('PreparationTime', () => {
   it.each([1, 25, 120])('aceita %d minutos', (minutes) => {

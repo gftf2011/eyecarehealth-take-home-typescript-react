@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidDeliveryAddressError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidDeliveryAddressError } from '../errors/index';
 
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 300;

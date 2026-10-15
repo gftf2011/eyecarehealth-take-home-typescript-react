@@ -1,7 +1,7 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPersonId } from '../delivery-person-id.js';
-import type { VehicleTypeValue } from '../value-objects/vehicle-type.js';
-import { DELIVERY_PERSON_AGGREGATE_TYPE } from './delivery-person-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPersonId } from '../delivery-person-id';
+import type { VehicleTypeValue } from '../value-objects/vehicle-type';
+import { DELIVERY_PERSON_AGGREGATE_TYPE } from './delivery-person-aggregate-type';
 
 export type DeliveryPersonRegisteredPayload = {
   name: string;

@@ -1,4 +1,4 @@
-import { NotFoundError } from '../../../../shared-kernel/domain/index.js';
+import { NotFoundError } from '../../../../shared-kernel/domain/index';
 
 export class ProductNotFoundError extends NotFoundError {
   readonly code = 'PRODUCT_NOT_FOUND';

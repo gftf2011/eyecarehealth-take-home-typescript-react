@@ -6,7 +6,7 @@ import {
   PhoneNumber,
   VehicleType,
   type RegisterDeliveryPersonParams,
-} from '../../index.js';
+} from '../../index';
 
 export const REGISTERED_AT = new Date('2025-01-10T09:00:00Z');
 export const LATER = new Date('2025-01-11T12:00:00Z');

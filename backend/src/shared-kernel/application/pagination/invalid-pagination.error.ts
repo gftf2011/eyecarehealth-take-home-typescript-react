@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../domain/index.js';
+import { InvalidValueError } from '../../domain/index';
 
 export class InvalidPaginationError extends InvalidValueError {
   readonly code = 'INVALID_PAGINATION';

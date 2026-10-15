@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Repository } from './index.js';
+import type { Repository } from './index';
 import {
   SampleId,
   SampleLineId,
   type SampleAggregate,
   type SampleLine,
-} from './testing/sample-aggregate.js';
+} from './testing/sample-aggregate';
 
 /*
  * Guardas de compilação: `npm run typecheck` falha se alguma linha marcada com

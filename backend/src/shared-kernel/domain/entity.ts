@@ -1,4 +1,4 @@
-import type { UniqueId } from './unique-id.js';
+import type { UniqueId } from './unique-id';
 
 /** Objeto com identidade: duas entidades são iguais se têm o mesmo ID. */
 export abstract class Entity<TId extends UniqueId> {

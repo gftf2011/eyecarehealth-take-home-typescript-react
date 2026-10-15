@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index.js';
-import { BURGER_DTO, productDto } from '../../testing/product-dto.fixture.js';
-import { StubProductQuery } from '../../testing/stub-product.query.js';
-import { ListProductsUseCase } from './list-products.usecase.js';
+import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { BURGER_DTO, productDto } from '../../testing/product-dto.fixture';
+import { StubProductQuery } from '../../testing/stub-product.query';
+import { ListProductsUseCase } from './list-products.usecase';
 
 describe('ListProductsUseCase', () => {
   let query: StubProductQuery;

@@ -1,4 +1,4 @@
-import type { DeliveryTimeGroupRow } from './queries/delivery-time.query.js';
+import type { DeliveryTimeGroupRow } from './queries/delivery-time.query';
 
 /** Tipos de veículo na ótica do Reporting (lista própria, sem importar o Delivery). */
 export const REPORTED_VEHICLE_TYPES = ['bicycle', 'motorcycle', 'car'] as const;

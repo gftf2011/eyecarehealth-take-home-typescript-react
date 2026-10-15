@@ -13,13 +13,13 @@ import {
   PersonName,
   PhoneNumber,
   VehicleType,
-} from '../index.js';
+} from '../index';
 import {
   buildDeliveryPerson,
   buildRegisterParams,
   LATER,
   REGISTERED_AT,
-} from './testing/delivery-person.fixture.js';
+} from './testing/delivery-person.fixture';
 
 describe('DeliveryPerson', () => {
   describe('register', () => {

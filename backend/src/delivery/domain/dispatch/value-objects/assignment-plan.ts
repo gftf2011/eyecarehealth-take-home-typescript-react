@@ -1,5 +1,5 @@
-import type { DeliveryPersonId } from '../../delivery-person/delivery-person-id.js';
-import type { OrderId } from './order-id.js';
+import type { DeliveryPersonId } from '../../delivery-person/delivery-person-id';
+import type { OrderId } from './order-id';
 
 export const ASSIGNMENT_ALGORITHM = 'hungarian';
 

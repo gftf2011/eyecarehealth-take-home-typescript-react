@@ -1,5 +1,5 @@
-import type { Repository } from '../../../../shared-kernel/domain/index.js';
-import type { Order } from '../order.js';
+import type { Repository } from '../../../../shared-kernel/domain/index';
+import type { Order } from '../order';
 
 /**
  * Repositório do agregado Order. Itens e histórico de status são persistidos

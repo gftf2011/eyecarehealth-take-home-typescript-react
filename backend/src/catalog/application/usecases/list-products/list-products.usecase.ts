@@ -6,16 +6,16 @@ import {
   validateInput,
   type Page,
   type UseCase,
-} from '../../../../shared-kernel/application/index.js';
-import { ProductCategory } from '../../../domain/index.js';
-import type { ProductDto } from '../../dtos/product.dto.js';
-import { InvalidSearchError } from '../../errors/invalid-search.error.js';
+} from '../../../../shared-kernel/application/index';
+import { ProductCategory } from '../../../domain/index';
+import type { ProductDto } from '../../dtos/product.dto';
+import { InvalidSearchError } from '../../errors/invalid-search.error';
 import {
   PRODUCT_SORT_FIELDS,
   type ProductListCriteria,
   type ProductQuery,
   type ProductVisibility,
-} from '../../queries/product.query.js';
+} from '../../queries/product.query';
 
 /** Mesmo tamanho máximo do nome do produto: buscas maiores nunca casariam. */
 const MAX_SEARCH_LENGTH = 120;

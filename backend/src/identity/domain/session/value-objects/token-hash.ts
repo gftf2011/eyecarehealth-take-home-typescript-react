@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidTokenHashError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidTokenHashError } from '../errors/index';
 
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 

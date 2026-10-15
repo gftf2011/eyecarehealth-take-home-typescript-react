@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index.js';
-import { ProductNotFoundError } from '../../../domain/index.js';
-import { BURGER_DTO, productDto } from '../../testing/product-dto.fixture.js';
-import { StubProductQuery } from '../../testing/stub-product.query.js';
-import { GetProductUseCase } from './get-product.usecase.js';
+import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { ProductNotFoundError } from '../../../domain/index';
+import { BURGER_DTO, productDto } from '../../testing/product-dto.fixture';
+import { StubProductQuery } from '../../testing/stub-product.query';
+import { GetProductUseCase } from './get-product.usecase';
 
 const PUDDING = productDto({
   id: '7a1c9e2b-4d3f-4a6b-8c9d-1e2f3a4b5c6d',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { EARTH_RADIUS_KM, GeoPoint } from './geo-point.js';
-import { InvalidGeoPointError } from './errors/invalid-geo-point.error.js';
+import { EARTH_RADIUS_KM, GeoPoint } from './geo-point';
+import { InvalidGeoPointError } from './errors/invalid-geo-point.error';
 
 /** Um grau ao longo de um meridiano: 2πR / 360. */
 const KM_PER_DEGREE = (Math.PI * EARTH_RADIUS_KM) / 180;

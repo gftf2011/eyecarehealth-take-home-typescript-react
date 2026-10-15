@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain/index.js';
+import { InvalidValueError } from '../../../../shared-kernel/domain/index';
 
 export class EmptyOrderError extends InvalidValueError {
   readonly code = 'EMPTY_ORDER';

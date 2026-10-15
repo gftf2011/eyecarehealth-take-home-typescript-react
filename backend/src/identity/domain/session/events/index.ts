@@ -1,20 +1,20 @@
-import type { RefreshSessionRevoked } from './refresh-session-revoked.event.js';
-import type { RefreshSessionRotated } from './refresh-session-rotated.event.js';
-import type { RefreshSessionStarted } from './refresh-session-started.event.js';
+import type { RefreshSessionRevoked } from './refresh-session-revoked.event';
+import type { RefreshSessionRotated } from './refresh-session-rotated.event';
+import type { RefreshSessionStarted } from './refresh-session-started.event';
 
-export { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type.js';
+export { REFRESH_SESSION_AGGREGATE_TYPE } from './refresh-session-aggregate-type';
 export {
   RefreshSessionRevoked,
   type RefreshSessionRevokedPayload,
-} from './refresh-session-revoked.event.js';
+} from './refresh-session-revoked.event';
 export {
   RefreshSessionRotated,
   type RefreshSessionRotatedPayload,
-} from './refresh-session-rotated.event.js';
+} from './refresh-session-rotated.event';
 export {
   RefreshSessionStarted,
   type RefreshSessionStartedPayload,
-} from './refresh-session-started.event.js';
+} from './refresh-session-started.event';
 
 export type RefreshSessionDomainEvent =
   | RefreshSessionStarted

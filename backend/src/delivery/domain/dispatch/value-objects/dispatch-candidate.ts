@@ -1,6 +1,6 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPersonId } from '../../delivery-person/delivery-person-id.js';
-import type { GeoPoint } from '../../location/geo-point.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPersonId } from '../../delivery-person/delivery-person-id';
+import type { GeoPoint } from '../../location/geo-point';
 
 /**
  * Entregador apto a receber um pedido (ativo e sem entrega em andamento).

@@ -1,14 +1,14 @@
-import { AggregateRoot } from '../../../shared-kernel/domain/index.js';
-import type { UserId } from '../user/user-id.js';
-import { InvalidRefreshTokenError, InvalidSessionExpirationError } from './errors/index.js';
+import { AggregateRoot } from '../../../shared-kernel/domain/index';
+import type { UserId } from '../user/user-id';
+import { InvalidRefreshTokenError, InvalidSessionExpirationError } from './errors/index';
 import {
   RefreshSessionRevoked,
   RefreshSessionRotated,
   RefreshSessionStarted,
-} from './events/index.js';
-import type { RefreshSessionId } from './refresh-session-id.js';
-import type { RevocationReason } from './value-objects/revocation-reason.js';
-import type { TokenHash } from './value-objects/token-hash.js';
+} from './events/index';
+import type { RefreshSessionId } from './refresh-session-id';
+import type { RevocationReason } from './value-objects/revocation-reason';
+import type { TokenHash } from './value-objects/token-hash';
 
 export type StartRefreshSessionParams = {
   id: RefreshSessionId;

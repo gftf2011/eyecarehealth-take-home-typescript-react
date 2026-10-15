@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { InputValidationError } from '../../../../shared-kernel/application/index.js';
-import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock.js';
+import { InputValidationError } from '../../../../shared-kernel/application/index';
+import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
 import {
   ProductInUseError,
   ProductNotFoundError,
   ProductRemoved,
   type Product,
-} from '../../../domain/index.js';
-import { buildProduct } from '../../../domain/product/testing/product.fixture.js';
-import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work.js';
-import { RemoveProductUseCase } from './remove-product.usecase.js';
+} from '../../../domain/index';
+import { buildProduct } from '../../../domain/product/testing/product.fixture';
+import { InMemoryCatalogUnitOfWork } from '../../testing/in-memory-catalog-unit-of-work';
+import { RemoveProductUseCase } from './remove-product.usecase';
 
 const NOW = new Date('2025-02-01T12:00:00Z');
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000';

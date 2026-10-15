@@ -1,6 +1,6 @@
-import type { UnitOfWork } from '../../../shared-kernel/application/index.js';
-import type { ProductRepository } from '../../domain/index.js';
-import type { ActiveOrdersChecker } from './active-orders-checker.js';
+import type { UnitOfWork } from '../../../shared-kernel/application/index';
+import type { ProductRepository } from '../../domain/index';
+import type { ActiveOrdersChecker } from './active-orders-checker';
 
 /**
  * O que o Catalog acessa dentro de uma transação: repositórios e as leituras

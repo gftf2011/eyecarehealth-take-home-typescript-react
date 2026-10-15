@@ -1,5 +1,5 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index.js';
-import type { OrderStatusValue } from '../value-objects/order-status.js';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import type { OrderStatusValue } from '../value-objects/order-status';
 
 export class InvalidStatusTransitionError extends BusinessRuleViolationError {
   readonly code = 'INVALID_STATUS_TRANSITION';

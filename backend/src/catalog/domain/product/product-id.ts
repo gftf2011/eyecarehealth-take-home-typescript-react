@@ -1,4 +1,4 @@
-import { UniqueId } from '../../../shared-kernel/domain/index.js';
+import { UniqueId } from '../../../shared-kernel/domain/index';
 
 export class ProductId extends UniqueId {
   declare private readonly brand: 'ProductId';

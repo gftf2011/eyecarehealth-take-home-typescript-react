@@ -1,5 +1,5 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPersonAvailability } from '../value-objects/delivery-person-availability.js';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPersonAvailability } from '../value-objects/delivery-person-availability';
 
 export class DeliveryPersonUnavailableError extends BusinessRuleViolationError {
   readonly code = 'DELIVERY_PERSON_UNAVAILABLE';

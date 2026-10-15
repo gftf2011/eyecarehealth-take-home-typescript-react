@@ -1,5 +1,5 @@
-import type { Repository } from '../../../../shared-kernel/domain/index.js';
-import type { Product } from '../product.js';
+import type { Repository } from '../../../../shared-kernel/domain/index';
+import type { Product } from '../product';
 
 /**
  * Repositório do agregado Product. As listagens paginadas usam um query port

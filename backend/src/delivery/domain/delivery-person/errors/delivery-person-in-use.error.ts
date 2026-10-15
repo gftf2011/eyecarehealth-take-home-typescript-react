@@ -1,5 +1,5 @@
-import { ConflictError } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPersonId } from '../delivery-person-id.js';
+import { ConflictError } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPersonId } from '../delivery-person-id';
 
 export class DeliveryPersonInUseError extends ConflictError {
   readonly code = 'DELIVERY_PERSON_IN_USE';

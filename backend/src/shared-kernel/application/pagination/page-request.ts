@@ -1,5 +1,5 @@
-import { validateInput } from '../validation/validate-input.js';
-import { InvalidPaginationError } from './invalid-pagination.error.js';
+import { validateInput } from '../validation/validate-input';
+import { InvalidPaginationError } from './invalid-pagination.error';
 
 export const DEFAULT_PAGE_LIMIT = 20;
 export const MAX_PAGE_LIMIT = 100;

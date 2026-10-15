@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidProductNameError, ProductName } from '../../index.js';
+import { InvalidProductNameError, ProductName } from '../../index';
 
 describe('ProductName', () => {
   it.each(['abc', 'a'.repeat(120), '  X-Burger  '])('aceita %j', (raw) => {

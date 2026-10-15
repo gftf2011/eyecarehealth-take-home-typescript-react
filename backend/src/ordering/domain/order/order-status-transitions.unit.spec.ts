@@ -6,8 +6,8 @@ import {
   OrderStatus,
   OrderStatusChanged,
   type OrderStatusValue,
-} from '../index.js';
-import { availableCourier, buildOrderIn, LATER } from './testing/order.fixture.js';
+} from '../index';
+import { availableCourier, buildOrderIn, LATER } from './testing/order.fixture';
 
 /** Tabela do enunciado: qualquer par fora dela deve ser rejeitado. */
 const VALID_TRANSITIONS: ReadonlySet<string> = new Set([

@@ -1,2 +1,2 @@
-export { InvalidLocalDateError } from './invalid-local-date.error.js';
-export { InvalidReportPeriodError } from './invalid-report-period.error.js';
+export { InvalidLocalDateError } from './invalid-local-date.error';
+export { InvalidReportPeriodError } from './invalid-report-period.error';

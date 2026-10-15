@@ -1,8 +1,8 @@
-import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain/index.js';
-import { DispatchCandidate } from '../dispatch/value-objects/dispatch-candidate.js';
-import type { GeoPoint } from '../location/geo-point.js';
-import type { DeliveryPersonId } from './delivery-person-id.js';
-import { DeliveryPersonAlreadyRemovedError, DeliveryPersonInUseError } from './errors/index.js';
+import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain/index';
+import { DispatchCandidate } from '../dispatch/value-objects/dispatch-candidate';
+import type { GeoPoint } from '../location/geo-point';
+import type { DeliveryPersonId } from './delivery-person-id';
+import { DeliveryPersonAlreadyRemovedError, DeliveryPersonInUseError } from './errors/index';
 import {
   DeliveryPersonActivationChanged,
   DeliveryPersonRegistered,
@@ -10,10 +10,10 @@ import {
   DeliveryPersonRemoved,
   DeliveryPersonUpdated,
   type DeliveryPersonDetailField,
-} from './events/index.js';
-import type { PersonName } from './value-objects/person-name.js';
-import type { PhoneNumber } from './value-objects/phone-number.js';
-import type { VehicleType } from './value-objects/vehicle-type.js';
+} from './events/index';
+import type { PersonName } from './value-objects/person-name';
+import type { PhoneNumber } from './value-objects/phone-number';
+import type { VehicleType } from './value-objects/vehicle-type';
 
 export type DeliveryPersonDetails = {
   name: PersonName;

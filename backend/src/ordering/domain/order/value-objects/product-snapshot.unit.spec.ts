@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidMoneyError, Money } from '../../../../shared-kernel/domain/index.js';
-import { ProductId, ProductSnapshot } from '../../index.js';
-import { BURGER_ID } from '../testing/order.fixture.js';
+import { InvalidMoneyError, Money } from '../../../../shared-kernel/domain/index';
+import { ProductId, ProductSnapshot } from '../../index';
+import { BURGER_ID } from '../testing/order.fixture';
 
 describe('ProductSnapshot', () => {
   it('rejeita preço unitário zerado', () => {

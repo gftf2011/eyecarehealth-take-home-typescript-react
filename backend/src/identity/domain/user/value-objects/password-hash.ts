@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidPasswordHashError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidPasswordHashError } from '../errors/index';
 
 /** Mínimo exigido pelo enunciado. */
 export const MIN_BCRYPT_COST = 10;

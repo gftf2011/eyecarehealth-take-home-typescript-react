@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidQuantityError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidQuantityError } from '../errors/index';
 
 /** Teto imposto pela coluna INTEGER (int4) do PostgreSQL. */
 const MAX_QUANTITY = 2_147_483_647;

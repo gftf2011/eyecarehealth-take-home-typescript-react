@@ -1,7 +1,7 @@
-import { validateInput, type UseCase } from '../../../../shared-kernel/application/index.js';
-import { ProductId, ProductNotFoundError } from '../../../domain/index.js';
-import type { ProductDto } from '../../dtos/product.dto.js';
-import type { ProductQuery, ProductVisibility } from '../../queries/product.query.js';
+import { validateInput, type UseCase } from '../../../../shared-kernel/application/index';
+import { ProductId, ProductNotFoundError } from '../../../domain/index';
+import type { ProductDto } from '../../dtos/product.dto';
+import type { ProductQuery, ProductVisibility } from '../../queries/product.query';
 
 export type GetProductInput = {
   readonly id: string;

@@ -8,10 +8,10 @@ import {
   GeoPoint,
   OrderId,
   type AssignmentPlan,
-} from '../../index.js';
-import { bruteForceMinCost, seededRandom } from '../testing/brute-force.js';
-import { courierAt, orderAt, unlocatedCourier, uuid } from '../testing/dispatch.fixture.js';
-import { DispatchOptimizer } from './dispatch-optimizer.js';
+} from '../../index';
+import { bruteForceMinCost, seededRandom } from '../testing/brute-force';
+import { courierAt, orderAt, unlocatedCourier, uuid } from '../testing/dispatch.fixture';
+import { DispatchOptimizer } from './dispatch-optimizer';
 
 /** Km por grau de longitude no equador. */
 const KM_PER_DEGREE = (Math.PI * EARTH_RADIUS_KM) / 180;

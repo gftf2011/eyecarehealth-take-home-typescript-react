@@ -1,5 +1,5 @@
-import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index.js';
-import type { ProductId } from '../product-id.js';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain/index';
+import type { ProductId } from '../product-id';
 
 export class ProductAlreadyRemovedError extends BusinessRuleViolationError {
   readonly code = 'PRODUCT_REMOVED';

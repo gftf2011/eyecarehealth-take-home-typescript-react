@@ -1,4 +1,4 @@
-import { ImageUrl } from '../../domain/index.js';
+import { ImageUrl } from '../../domain/index';
 
 /**
  * Interpreta o campo `imageUrl` vindo do cliente:

@@ -1,5 +1,5 @@
-import { ValueObject } from '../../../../shared-kernel/domain/index.js';
-import { InvalidPhoneNumberError } from '../errors/index.js';
+import { ValueObject } from '../../../../shared-kernel/domain/index';
+import { InvalidPhoneNumberError } from '../errors/index';
 
 const BRAZILIAN_MOBILE_PATTERN = /^\(\d{2}\) \d{5}-\d{4}$/;
 

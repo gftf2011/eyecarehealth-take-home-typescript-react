@@ -1,4 +1,4 @@
-import type { ProductDto } from '../dtos/product.dto.js';
+import type { ProductDto } from '../dtos/product.dto';
 
 export const BURGER_DTO: ProductDto = {
   id: '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b',

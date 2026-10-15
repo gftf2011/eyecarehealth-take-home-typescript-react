@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain/index.js';
+import { InvalidValueError } from '../../../../shared-kernel/domain/index';
 
 export class InvalidPreparationTimeError extends InvalidValueError {
   readonly code = 'INVALID_PREPARATION_TIME';

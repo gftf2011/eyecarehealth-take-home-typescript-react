@@ -1,4 +1,4 @@
-import type { InstantRange } from '../../period/value-objects/report-period.js';
+import type { InstantRange } from '../../period/value-objects/report-period';
 
 /** Receita de um dia local, já agregada pelo banco. */
 export type DailyRevenueRow = {

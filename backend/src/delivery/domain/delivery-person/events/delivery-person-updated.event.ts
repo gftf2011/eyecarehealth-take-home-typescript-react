@@ -1,6 +1,6 @@
-import { DomainEvent } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPersonId } from '../delivery-person-id.js';
-import { DELIVERY_PERSON_AGGREGATE_TYPE } from './delivery-person-aggregate-type.js';
+import { DomainEvent } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPersonId } from '../delivery-person-id';
+import { DELIVERY_PERSON_AGGREGATE_TYPE } from './delivery-person-aggregate-type';
 
 export type DeliveryPersonDetailField = 'name' | 'phone' | 'vehicleType';
 

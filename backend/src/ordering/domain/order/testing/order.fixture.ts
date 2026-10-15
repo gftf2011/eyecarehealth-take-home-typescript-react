@@ -13,8 +13,8 @@ import {
   Quantity,
   type OrderStatusValue,
   type PlaceOrderParams,
-} from '../../index.js';
-import { Money } from '../../../../shared-kernel/domain/index.js';
+} from '../../index';
+import { Money } from '../../../../shared-kernel/domain/index';
 
 export const PLACED_AT = new Date('2025-01-20T14:30:00Z');
 export const LATER = new Date('2025-01-20T15:10:00Z');

@@ -1,6 +1,6 @@
-import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain/index.js';
-import type { ProductId } from './product-id.js';
-import { ProductAlreadyRemovedError, ProductInUseError } from './errors/index.js';
+import { AggregateRoot, type ValueObject } from '../../../shared-kernel/domain/index';
+import type { ProductId } from './product-id';
+import { ProductAlreadyRemovedError, ProductInUseError } from './errors/index';
 import {
   ProductAvailabilityChanged,
   ProductCreated,
@@ -8,13 +8,13 @@ import {
   ProductRemoved,
   ProductUpdated,
   type ProductDetailField,
-} from './events/index.js';
-import type { ImageUrl } from './value-objects/image-url.js';
-import type { PreparationTime } from './value-objects/preparation-time.js';
-import type { ProductCategory } from './value-objects/product-category.js';
-import type { ProductDescription } from './value-objects/product-description.js';
-import type { ProductName } from './value-objects/product-name.js';
-import type { ProductPrice } from './value-objects/product-price.js';
+} from './events/index';
+import type { ImageUrl } from './value-objects/image-url';
+import type { PreparationTime } from './value-objects/preparation-time';
+import type { ProductCategory } from './value-objects/product-category';
+import type { ProductDescription } from './value-objects/product-description';
+import type { ProductName } from './value-objects/product-name';
+import type { ProductPrice } from './value-objects/product-price';
 
 /** Atributos que descrevem o produto no cardápio. */
 export type ProductDetails = {

@@ -1,5 +1,5 @@
-import type { Repository } from '../../../../shared-kernel/domain/index.js';
-import type { DeliveryPerson } from '../delivery-person.js';
+import type { Repository } from '../../../../shared-kernel/domain/index';
+import type { DeliveryPerson } from '../delivery-person';
 
 /**
  * Repositório do agregado DeliveryPerson. `findById` retorna `null` para IDs

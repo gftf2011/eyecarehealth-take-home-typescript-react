@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { Money } from '../../../../shared-kernel/domain/index.js';
-import { InvalidProductPriceError, ProductPrice } from '../../index.js';
+import { Money } from '../../../../shared-kernel/domain/index';
+import { InvalidProductPriceError, ProductPrice } from '../../index';
 
 describe('ProductPrice', () => {
   it.each([

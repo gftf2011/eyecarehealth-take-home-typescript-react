@@ -1,5 +1,5 @@
-import { InvalidValueError, type DomainErrorDetail } from '../../domain/index.js';
-import { InputValidationError } from '../errors/input-validation.error.js';
+import { InvalidValueError, type DomainErrorDetail } from '../../domain/index';
+import { InputValidationError } from '../errors/input-validation.error';
 
 type Factories = Record<string, () => unknown>;
 

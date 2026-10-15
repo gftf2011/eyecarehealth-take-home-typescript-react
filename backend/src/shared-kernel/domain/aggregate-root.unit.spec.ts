@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidUniqueIdError } from './index.js';
-import { SampleAggregate as Sample, SampleId } from './testing/sample-aggregate.js';
+import { InvalidUniqueIdError } from './index';
+import { SampleAggregate as Sample, SampleId } from './testing/sample-aggregate';
 
 describe('UniqueId', () => {
   it('gera UUIDs válidos e normaliza para minúsculas', () => {

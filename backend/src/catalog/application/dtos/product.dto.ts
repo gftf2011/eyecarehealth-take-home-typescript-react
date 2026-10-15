@@ -1,4 +1,4 @@
-import type { Product, ProductCategoryValue } from '../../domain/index.js';
+import type { Product, ProductCategoryValue } from '../../domain/index';
 
 /** Representação de saída de um produto: só tipos primitivos, sem VOs. */
 export type ProductDto = {

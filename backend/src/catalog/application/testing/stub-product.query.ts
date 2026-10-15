@@ -1,7 +1,7 @@
-import type { PageSlice } from '../../../shared-kernel/application/index.js';
-import type { ProductId } from '../../domain/index.js';
-import type { ProductDto } from '../dtos/product.dto.js';
-import type { ProductListCriteria, ProductQuery } from '../queries/product.query.js';
+import type { PageSlice } from '../../../shared-kernel/application/index';
+import type { ProductId } from '../../domain/index';
+import type { ProductDto } from '../dtos/product.dto';
+import type { ProductListCriteria, ProductQuery } from '../queries/product.query';
 
 /**
  * Stub do port de leitura: devolve respostas pré-definidas e registra os

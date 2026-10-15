@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { JsonObject } from './json.js';
+import type { JsonObject } from './json';
 
 /**
  * Fato de negócio já ocorrido. O payload é JSON puro porque o evento é gravado
