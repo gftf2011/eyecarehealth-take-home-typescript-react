@@ -80,8 +80,12 @@ export function buildOrderIn(target: OrderStatusValue): Order {
     return order;
   }
   for (const status of HAPPY_PATH) {
-    if (status === 'delivering') order.assignDeliveryPerson(availableCourier(), LATER);
-    order.changeStatus(OrderStatus.of(status), LATER);
+    if (status === 'delivering') {
+      order.assignDeliveryPerson(availableCourier(), LATER);
+      order.dispatch(availableCourier(), LATER);
+    } else {
+      order.changeStatus(OrderStatus.of(status), LATER);
+    }
     if (status === target) break;
   }
   order.pullDomainEvents();

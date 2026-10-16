@@ -139,18 +139,64 @@ describe('Order', () => {
       expect(order.updatedAt).toEqual(LATER);
     });
 
-    it('inclui o entregador no evento de despacho', () => {
+    it('inclui o entregador no evento das transições seguintes ao despacho', () => {
+      const order = buildOrderIn('delivering');
+
+      order.changeStatus(OrderStatus.of('delivered'), LATER);
+
+      expect(order.pullDomainEvents()[0]?.payload).toEqual({
+        from: 'delivering',
+        to: 'delivered',
+        deliveryPersonId: COURIER_ID,
+      });
+    });
+  });
+
+  describe('dispatch', () => {
+    it('despacha com o entregador atribuído e disponível', () => {
       const order = buildOrderIn('ready');
       order.assignDeliveryPerson(availableCourier(), LATER);
       order.pullDomainEvents();
 
-      order.changeStatus(OrderStatus.of('delivering'), LATER);
+      order.dispatch(availableCourier(), LATER);
 
+      expect(order.status.value).toBe('delivering');
+      expect(order.statusHistory.at(-1)?.to).toBe('delivering');
       expect(order.pullDomainEvents()[0]?.payload).toEqual({
         from: 'ready',
         to: 'delivering',
         deliveryPersonId: COURIER_ID,
       });
+    });
+
+    it.each([
+      ['inativo', false, false, 'Este entregador está inativo'],
+      ['já em outra entrega', true, true, 'Este entregador já está atribuído a outro pedido em andamento'],
+    ])('rejeita entregador %s no momento do despacho', (_label, isActive, hasDeliveryInProgress, message) => {
+      const order = buildOrderIn('ready');
+      order.assignDeliveryPerson(availableCourier(), LATER);
+      order.pullDomainEvents();
+      const availability = DeliveryPersonAvailability.create({
+        deliveryPersonId: DeliveryPersonId.from(COURIER_ID),
+        isActive,
+        hasDeliveryInProgress,
+      });
+
+      expect(() => order.dispatch(availability, LATER)).toThrow(
+        expect.objectContaining({ code: 'DELIVERY_PERSON_UNAVAILABLE', message }),
+      );
+      expect(order.status.value).toBe('ready');
+      expect(order.domainEvents).toHaveLength(0);
+    });
+
+    it('recusa disponibilidade de outro entregador (erro de programação)', () => {
+      const order = buildOrderIn('ready');
+      order.assignDeliveryPerson(availableCourier(), LATER);
+
+      expect(() => order.dispatch(availableCourier(OTHER_COURIER_ID), LATER)).toThrow(
+        /usada para despachar/,
+      );
+      expect(order.status.value).toBe('ready');
     });
   });
 

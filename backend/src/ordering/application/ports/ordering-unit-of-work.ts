@@ -1,5 +1,6 @@
 import type { UnitOfWork } from '../../../shared-kernel/application';
 import type { OrderRepository } from '../../domain';
+import type { DeliveryPersonDirectory } from './delivery-person-directory';
 import type { ProductCatalog } from './product-catalog';
 
 /**
@@ -9,6 +10,7 @@ import type { ProductCatalog } from './product-catalog';
 export type OrderingRepositories = {
   readonly orders: OrderRepository;
   readonly products: ProductCatalog;
+  readonly deliveryPersons: DeliveryPersonDirectory;
 };
 
 export type OrderingUnitOfWork = UnitOfWork<OrderingRepositories>;

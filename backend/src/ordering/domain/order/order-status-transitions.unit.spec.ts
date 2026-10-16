@@ -37,9 +37,10 @@ describe('Order — máquina de estados', () => {
     if (to === 'delivering') {
       order.assignDeliveryPerson(availableCourier(), LATER);
       order.pullDomainEvents();
+      order.dispatch(availableCourier(), LATER);
+    } else {
+      order.changeStatus(OrderStatus.of(to), LATER);
     }
-
-    order.changeStatus(OrderStatus.of(to), LATER);
 
     expect(order.status.value).toBe(to);
     const [event] = order.pullDomainEvents();
@@ -60,17 +61,40 @@ describe('Order — máquina de estados', () => {
     expect(order.domainEvents).toHaveLength(0);
   });
 
-  it('rejeita ready → delivering sem entregador atribuído', () => {
-    const order = buildOrderIn('preparing');
-    order.changeStatus(OrderStatus.of('ready'), LATER);
-    order.pullDomainEvents();
+  it.each(invalidPairs.filter(([, to]) => to === 'delivering'))(
+    'dispatch também rejeita %s → delivering',
+    (from) => {
+      const order = buildOrderIn(from);
 
-    expect(() => order.changeStatus(OrderStatus.of('delivering'), LATER)).toThrow(
-      InvalidStatusTransitionError,
-    );
-    expect(() => order.changeStatus(OrderStatus.of('delivering'), LATER)).toThrow(
+      expect(() => order.dispatch(availableCourier(), LATER)).toThrow(
+        expect.objectContaining({
+          code: 'INVALID_STATUS_TRANSITION',
+          message: `Não é possível alterar o status de '${from}' para 'delivering'`,
+        }),
+      );
+      expect(order.status.value).toBe(from);
+    },
+  );
+
+  it('rejeita ready → delivering sem entregador atribuído', () => {
+    const order = buildOrderIn('ready');
+
+    expect(() => order.dispatch(availableCourier(), LATER)).toThrow(InvalidStatusTransitionError);
+    expect(() => order.dispatch(availableCourier(), LATER)).toThrow(
       /é obrigatório ter um entregador atribuído/,
     );
     expect(order.status.value).toBe('ready');
+  });
+
+  it('changeStatus não despacha: ready → delivering exige dispatch', () => {
+    const order = buildOrderIn('ready');
+    order.assignDeliveryPerson(availableCourier(), LATER);
+    order.pullDomainEvents();
+
+    expect(() => order.changeStatus(OrderStatus.of('delivering'), LATER)).toThrow(
+      /o despacho exige confirmar a disponibilidade do entregador/,
+    );
+    expect(order.status.value).toBe('ready');
+    expect(order.domainEvents).toHaveLength(0);
   });
 });

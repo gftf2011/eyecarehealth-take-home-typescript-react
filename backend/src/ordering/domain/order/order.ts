@@ -59,7 +59,7 @@ export type OrderSnapshot = {
  * - Tem ao menos um item; nenhum produto indisponível no momento do pedido.
  * - `totalAmount` é sempre derivado dos itens (unitPrice × quantity), nunca informado.
  * - Status só muda pelas transições da máquina de estados; `ready → delivering`
- *   exige entregador atribuído.
+ *   (despacho) exige entregador atribuído, ativo e sem outra entrega em andamento.
  * - Entregador só é atribuído antes do despacho e se estiver ativo e livre.
  * - Toda transição fica registrada no histórico de status.
  */
@@ -176,20 +176,71 @@ export class Order extends AggregateRoot<OrderId> {
     };
   }
 
+  /**
+   * Transições que não dependem de fatos externos. O despacho
+   * (`ready → delivering`) passa por `dispatch`, que exige a disponibilidade
+   * atual do entregador.
+   */
   changeStatus(next: OrderStatus, now: Date): void {
     const current = this.#state.status;
 
     if (!current.canTransitionTo(next)) {
       throw new InvalidStatusTransitionError(current.value, next.value);
     }
-    if (next.is('delivering') && this.#state.deliveryPersonId === null) {
+    if (next.is('delivering')) {
       throw new InvalidStatusTransitionError(
         current.value,
         next.value,
-        'é obrigatório ter um entregador atribuído',
+        'o despacho exige confirmar a disponibilidade do entregador',
       );
     }
 
+    this.transitionTo(next, now);
+  }
+
+  /**
+   * Despacha o pedido (`ready → delivering`) com o entregador atribuído. A
+   * disponibilidade vem do Delivery via camada anticorrupção, lida no momento
+   * do despacho: o entregador pode ter sido atribuído a outro pedido `ready`
+   * e despachado nele antes, e não pode ter duas entregas em andamento.
+   */
+  dispatch(availability: DeliveryPersonAvailability, now: Date): void {
+    const assigned = this.ensureDispatchable();
+    if (!assigned.equals(availability.deliveryPersonId)) {
+      // Erro de programação: a disponibilidade consultada é de outro entregador.
+      throw new Error(
+        `Disponibilidade do entregador ${availability.deliveryPersonId.value} usada para despachar com ${assigned.value}`,
+      );
+    }
+    if (!availability.canTakeOrder) throw new DeliveryPersonUnavailableError(availability);
+
+    this.transitionTo(OrderStatus.of('delivering'), now);
+  }
+
+  /**
+   * Verifica as condições do despacho que dependem só do pedido (status
+   * `ready` e entregador atribuído) e devolve o entregador cuja
+   * disponibilidade deve ser consultada antes de `dispatch`.
+   */
+  ensureDispatchable(): DeliveryPersonId {
+    const current = this.#state.status;
+    const delivering = OrderStatus.of('delivering');
+
+    if (!current.canTransitionTo(delivering)) {
+      throw new InvalidStatusTransitionError(current.value, delivering.value);
+    }
+    if (this.#state.deliveryPersonId === null) {
+      throw new InvalidStatusTransitionError(
+        current.value,
+        delivering.value,
+        'é obrigatório ter um entregador atribuído',
+      );
+    }
+    return this.#state.deliveryPersonId;
+  }
+
+  private transitionTo(next: OrderStatus, now: Date): void {
+    const current = this.#state.status;
     this.#state = {
       ...this.#state,
       status: next,

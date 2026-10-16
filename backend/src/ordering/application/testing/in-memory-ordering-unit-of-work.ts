@@ -2,11 +2,14 @@ import type { DomainEvent } from '../../../shared-kernel/domain';
 import {
   Order,
   OrderId,
+  type DeliveryPersonAvailability,
+  type DeliveryPersonId,
   type OrderRepository,
   type OrderSnapshot,
   type ProductId,
   type ProductSnapshot,
 } from '../../domain';
+import type { DeliveryPersonDirectory } from '../ports/delivery-person-directory';
 import type { ProductCatalog } from '../ports/product-catalog';
 import type { OrderingRepositories, OrderingUnitOfWork } from '../ports/ordering-unit-of-work';
 
@@ -23,6 +26,10 @@ export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
   readonly catalog = new Map<string, ProductSnapshot>();
   /** IDs pedidos ao Catalog em cada consulta, na ordem das chamadas. */
   readonly catalogLookups: string[][] = [];
+  /** Entregadores existentes no Delivery, com a disponibilidade atual. */
+  readonly deliveryPersons = new Map<string, DeliveryPersonAvailability>();
+  /** IDs consultados (e travados) no Delivery, na ordem das chamadas. */
+  readonly deliveryPersonLookups: string[] = [];
   commits = 0;
   rollbacks = 0;
   #failNextCommit: Error | null = null;
@@ -30,6 +37,21 @@ export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
   /** Simula produtos existentes no Catalog. */
   givenCatalogProducts(...products: ProductSnapshot[]): void {
     for (const product of products) this.catalog.set(product.productId.value, product);
+  }
+
+  /** Simula entregadores existentes no Delivery. */
+  givenDeliveryPersons(...availabilities: DeliveryPersonAvailability[]): void {
+    for (const availability of availabilities) {
+      this.deliveryPersons.set(availability.deliveryPersonId.value, availability);
+    }
+  }
+
+  /** Pré-carrega pedidos já confirmados (estado inicial do teste), descartando os eventos. */
+  givenOrders(...orders: Order[]): void {
+    for (const order of orders) {
+      order.pullDomainEvents();
+      this.orders.set(order.id.value, order.snapshot());
+    }
   }
 
   /** Lê o estado confirmado de um pedido, como o próximo caso de uso o veria. */
@@ -53,6 +75,10 @@ export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
       const result = await work({
         orders: new InMemoryOrderRepository(this.orders, staged, stagedEvents),
         products: new InMemoryProductCatalog(this.catalog, this.catalogLookups),
+        deliveryPersons: new InMemoryDeliveryPersonDirectory(
+          this.deliveryPersons,
+          this.deliveryPersonLookups,
+        ),
       });
 
       if (this.#failNextCommit !== null) {
@@ -102,5 +128,17 @@ class InMemoryProductCatalog implements ProductCatalog {
       const snapshot = this.catalog.get(id.value);
       return snapshot === undefined ? [] : [snapshot];
     });
+  }
+}
+
+class InMemoryDeliveryPersonDirectory implements DeliveryPersonDirectory {
+  constructor(
+    private readonly deliveryPersons: ReadonlyMap<string, DeliveryPersonAvailability>,
+    private readonly lookups: string[],
+  ) {}
+
+  async availabilityOf(id: DeliveryPersonId): Promise<DeliveryPersonAvailability | null> {
+    this.lookups.push(id.value);
+    return this.deliveryPersons.get(id.value) ?? null;
   }
 }
