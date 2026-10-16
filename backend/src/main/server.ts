@@ -1,10 +1,9 @@
-import { sql } from 'kysely';
-
 import { makeCatalogRoutes } from '../catalog/main/catalog.module';
 import type { CatalogDatabase } from '../catalog/infra/persistence/schema/catalog-database';
 import { makeIdentityModule } from '../identity/main/identity.module';
 import type { IdentityDatabase } from '../identity/infra/persistence/schema/identity-database';
-import { subscribeOrderingEventHandlers } from '../ordering/main/ordering-event-handlers';
+import { makeOrderingRoutes } from '../ordering/main/ordering.module';
+import type { OrderingDatabase } from '../ordering/infra/persistence/schema/ordering-database';
 import { RedisConnection } from '../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisRateLimitCounter } from '../shared-kernel/infra/cache/redis/redis-rate-limit.counter';
 import { SystemClock } from '../shared-kernel/infra/clock/system-clock';
@@ -17,10 +16,9 @@ async function main(): Promise<void> {
   const env = loadEnv();
   const pool = createPostgresPool(env.DATABASE_URL);
   const clock = new SystemClock();
-  // Cada contexto inscreve aqui os handlers que reagem aos próprios eventos ou
-  // aos de outros contextos, ou que avisam sistemas externos (via outbox).
+  // Mediador único da aplicação: cada módulo publica nele e inscreve os
+  // próprios handlers (reação a outros contextos ou aviso a sistemas externos).
   const events = new InMemoryEventMediator();
-  subscribeOrderingEventHandlers(events);
 
   // O logger do Fastify só existe depois do app: até lá, erros do Redis vão ao console.
   let logRedisError = (error: Error): void => console.warn('Redis indisponível', error.message);
@@ -28,6 +26,7 @@ async function main(): Promise<void> {
 
   const catalogDb = createKysely<CatalogDatabase>(pool);
   const identityDb = createKysely<IdentityDatabase>(pool);
+  const orderingDb = createKysely<OrderingDatabase>(pool);
 
   const identity = makeIdentityModule({
     db: identityDb,
@@ -45,11 +44,17 @@ async function main(): Promise<void> {
   });
 
   const app = await buildApp({
-    routes: [...identity.routes, ...makeCatalogRoutes({ db: catalogDb, clock, events })],
+    routes: [
+      ...identity.routes,
+      ...makeCatalogRoutes({ db: catalogDb, clock, events }),
+      ...makeOrderingRoutes({ db: orderingDb, clock, events }),
+    ],
     authenticator: identity.authenticator,
     healthChecks: {
+      // Um pool para todos os contextos: verificar o banco é verificar o pool,
+      // sem passar pelo Kysely de nenhum contexto em particular.
       database: async () => {
-        await sql`SELECT 1`.execute(catalogDb);
+        await pool.query('SELECT 1');
       },
       redis: () => redis.ping(),
     },

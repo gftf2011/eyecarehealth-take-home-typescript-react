@@ -7,6 +7,8 @@ import { DEFAULT_AUTH_POLICY, type AuthPolicy } from '../../../identity/applicat
 import { Email, Role, User, UserId, type RoleValue } from '../../../identity/domain';
 import { makeIdentityModule } from '../../../identity/main/identity.module';
 import type { IdentityDatabase } from '../../../identity/infra/persistence/schema/identity-database';
+import { makeOrderingRoutes } from '../../../ordering/main/ordering.module';
+import type { OrderingDatabase } from '../../../ordering/infra/persistence/schema/ordering-database';
 import { KyselyIdentityUnitOfWork } from '../../../identity/infra/persistence/unit-of-work/kysely-identity-unit-of-work';
 import type { Clock } from '../../../shared-kernel/application';
 import { FixedClock } from '../../../shared-kernel/application/testing/fixed-clock';
@@ -32,6 +34,7 @@ export type TestApp = {
   readonly app: FastifyInstance;
   readonly db: Kysely<CatalogDatabase>;
   readonly identityDb: Kysely<IdentityDatabase>;
+  readonly orderingDb: Kysely<OrderingDatabase>;
   readonly clock: FixedClock;
   /** Cadastra um usuário com senha real (bcrypt) para os testes de autenticação. */
   givenUser(email: string, password: string, role: RoleValue): Promise<User>;
@@ -58,6 +61,7 @@ export type TestAppOverrides = Partial<Pick<AppOptions, 'trustProxy'>> & {
 export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<TestApp> {
   const db = connectToTestDatabase<CatalogDatabase>();
   const identityDb = connectToTestDatabase<IdentityDatabase>();
+  const orderingDb = connectToTestDatabase<OrderingDatabase>();
   const redis = await connectToTestRedis();
   const clock = new FixedClock(TEST_APP_START);
   const events = new InMemoryEventMediator();
@@ -77,6 +81,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
     routes: [
       ...identity.routes,
       ...makeCatalogRoutes({ db, clock, events }),
+      ...makeOrderingRoutes({ db: orderingDb, clock, events }),
       ...(overrides.extraRoutes?.(clock) ?? []),
     ],
     authenticator: overrides.auth === 'jwt' ? identity.authenticator : new StaticAuthenticator(),
@@ -103,6 +108,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
     app,
     db,
     identityDb,
+    orderingDb,
     clock,
     givenUser: async (email, password, role) => {
       const user = User.register({
@@ -117,7 +123,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
     },
     close: async () => {
       await app.close();
-      await Promise.all([db.destroy(), identityDb.destroy(), redis.close()]);
+      await Promise.all([db.destroy(), identityDb.destroy(), orderingDb.destroy(), redis.close()]);
     },
   };
 }
