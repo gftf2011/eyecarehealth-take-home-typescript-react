@@ -1,28 +1,23 @@
-import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { RedisConnection } from './redis-connection';
-import { RedisRateLimitCounter } from './redis-rate-limit.counter';
+import type { RedisConnection } from './redis-connection';
+import type { RedisRateLimitCounter } from './redis-rate-limit.counter';
+import { connectToTestRedis, isolatedRedisCounter } from './testing/test-redis';
 
 describe('RedisRateLimitCounter', () => {
-  let container: StartedRedisContainer;
   let connection: RedisConnection;
   let counter: RedisRateLimitCounter;
 
   beforeAll(async () => {
-    container = await new RedisContainer('redis:7-alpine').start();
-    connection = RedisConnection.open(container.getConnectionUrl(), { onError: () => undefined });
-    await connection.ready();
+    connection = await connectToTestRedis();
     // Prefixo único: cada execução começa com contadores zerados.
-    counter = new RedisRateLimitCounter(connection, `test:${randomUUID()}:`);
+    counter = isolatedRedisCounter(connection, 'counter-spec');
   });
 
   afterAll(async () => {
     await connection.close();
-    await container.stop();
   });
 
   it('conta as requisições da mesma chave dentro da janela', async () => {
@@ -32,6 +27,17 @@ describe('RedisRateLimitCounter', () => {
     expect(hits.map((hit) => hit.count)).toEqual([1, 2, 3]);
     expect(hits[0]?.ttlMs).toBeGreaterThan(59_000);
     expect(hits[2]?.ttlMs).toBeLessThanOrEqual(hits[0]?.ttlMs ?? 0);
+  });
+
+  it('peek lê a contagem e o tempo restante sem incrementar', async () => {
+    expect(await counter.peek('ip-peek')).toEqual({ count: 0, ttlMs: 0 });
+
+    await counter.hit('ip-peek', 60_000);
+    const first = await counter.peek('ip-peek');
+    const second = await counter.peek('ip-peek');
+
+    expect([first.count, second.count]).toEqual([1, 1]);
+    expect(first.ttlMs).toBeGreaterThan(59_000);
   });
 
   it('mantém chaves independentes', async () => {

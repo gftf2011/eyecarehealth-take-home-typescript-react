@@ -8,12 +8,32 @@ export type HttpRequest = {
   readonly params: unknown;
   readonly query: unknown;
   readonly body: unknown;
+  readonly cookies: Readonly<Record<string, string | undefined>>;
+  /** IP do cliente (respeita os proxies confiáveis configurados). */
+  readonly ip: string;
   readonly user: AuthenticatedUser;
+};
+
+export type CookieOptions = {
+  readonly httpOnly: boolean;
+  readonly secure: boolean;
+  readonly sameSite: 'strict' | 'lax' | 'none';
+  readonly path: string;
+  /** Expiração absoluta do cookie (ignorada ao remover). */
+  readonly expires: Date;
+};
+
+/** Define (`value`) ou remove (`value: null`) um cookie na resposta. */
+export type ResponseCookie = {
+  readonly name: string;
+  readonly value: string | null;
+  readonly options: CookieOptions;
 };
 
 export type HttpResponse = {
   readonly status: number;
   readonly body?: unknown;
+  readonly cookies?: readonly ResponseCookie[];
 };
 
 /**

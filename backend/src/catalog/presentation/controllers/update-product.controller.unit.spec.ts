@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { InputValidationError } from '../../../shared-kernel/application';
-import { ANONYMOUS_USER } from '../../../shared-kernel/presentation';
+import { httpRequest } from '../../../shared-kernel/presentation/testing/http-request';
 import { SpyUseCase } from '../../../shared-kernel/presentation/testing/spy-use-case';
 import type { ProductDto } from '../../application/dtos/product.dto';
 import type { UpdateProductInput } from '../../application/usecases/update-product/update-product.usecase';
@@ -21,7 +21,7 @@ const PRODUCT: ProductDto = {
 };
 
 function request(body: unknown) {
-  return { params: { id: PRODUCT.id }, query: {}, body, user: ANONYMOUS_USER };
+  return httpRequest({ params: { id: PRODUCT.id }, body });
 }
 
 describe('UpdateProductController', () => {

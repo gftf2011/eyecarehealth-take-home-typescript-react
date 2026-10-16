@@ -2,6 +2,7 @@ import type { Kysely } from 'kysely';
 import { Migrator, type Migration, type MigrationProvider } from 'kysely/migration';
 
 import { catalogMigrations } from '../../catalog/infra/persistence/migrations';
+import { identityMigrations } from '../../identity/infra/persistence/migrations';
 import { sharedKernelMigrations } from '../../shared-kernel/infra/database/migrations';
 
 /**
@@ -12,6 +13,7 @@ import { sharedKernelMigrations } from '../../shared-kernel/infra/database/migra
 const MIGRATION_SETS: readonly Record<string, Migration>[] = [
   sharedKernelMigrations,
   catalogMigrations,
+  identityMigrations,
 ];
 
 export function allMigrations(): Record<string, Migration> {

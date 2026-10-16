@@ -9,6 +9,7 @@ export {
   DomainError,
   InvalidValueError,
   NotFoundError,
+  TooManyRequestsError,
   type DomainErrorDetail,
   type DomainErrorDetailValue,
 } from './errors/domain-error';

@@ -5,7 +5,7 @@ import { createKysely, createPostgresPool } from '../postgres';
 
 declare module 'vitest' {
   export interface ProvidedContext {
-    /** URL do PostgreSQL de teste, já migrado (ver postgres-global-setup). */
+    /** URL do PostgreSQL de teste, já migrado (ver containers-global-setup). */
     databaseUrl: string;
   }
 }

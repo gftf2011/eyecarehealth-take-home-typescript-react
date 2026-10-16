@@ -22,7 +22,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['src/**/*.integration.spec.ts'],
-          globalSetup: ['src/main/database/testing/postgres-global-setup.ts'],
+          globalSetup: ['src/main/database/testing/containers-global-setup.ts'],
           // Um único banco compartilhado: arquivos rodam em sequência.
           fileParallelism: false,
           testTimeout: 30_000,
@@ -34,7 +34,7 @@ export default defineConfig({
         test: {
           name: 'e2e',
           include: ['src/**/*.e2e.spec.ts'],
-          globalSetup: ['src/main/database/testing/postgres-global-setup.ts'],
+          globalSetup: ['src/main/database/testing/containers-global-setup.ts'],
           fileParallelism: false,
           testTimeout: 30_000,
           hookTimeout: 120_000,

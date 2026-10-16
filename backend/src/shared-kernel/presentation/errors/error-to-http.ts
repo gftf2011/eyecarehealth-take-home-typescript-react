@@ -7,10 +7,11 @@ import {
   DomainError,
   InvalidValueError,
   NotFoundError,
+  TooManyRequestsError,
   type DomainErrorDetail,
 } from '../../domain';
 import type { HttpResponse } from '../http/http';
-import { MalformedRequestError, RateLimitExceededError } from './http-errors';
+import { MalformedRequestError } from './http-errors';
 
 /** Formato padrão de erro da API. */
 export type ErrorBody = {
@@ -58,6 +59,6 @@ function statusOf(error: DomainError): number {
   if (error instanceof NotFoundError) return 404;
   if (error instanceof ConflictError) return 409;
   if (error instanceof BusinessRuleViolationError) return 422;
-  if (error instanceof RateLimitExceededError) return 429;
+  if (error instanceof TooManyRequestsError) return 429;
   return 500;
 }

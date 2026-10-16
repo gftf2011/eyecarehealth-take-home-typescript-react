@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { InputValidationError, type Page } from '../../../shared-kernel/application';
-import { ANONYMOUS_USER } from '../../../shared-kernel/presentation';
+import { httpRequest } from '../../../shared-kernel/presentation/testing/http-request';
 import { SpyUseCase } from '../../../shared-kernel/presentation/testing/spy-use-case';
 import type { ProductDto } from '../../application/dtos/product.dto';
 import type { ListProductsInput } from '../../application/usecases/list-products/list-products.usecase';
@@ -13,7 +13,7 @@ const EMPTY_PAGE: Page<ProductDto> = {
 };
 
 function request(query: unknown) {
-  return { params: {}, query, body: undefined, user: ANONYMOUS_USER };
+  return httpRequest({ query });
 }
 
 describe('ListProductsController', () => {

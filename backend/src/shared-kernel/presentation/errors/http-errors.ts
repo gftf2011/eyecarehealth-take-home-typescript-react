@@ -1,27 +1,12 @@
 import {
-  AuthenticationError,
   AuthorizationError,
   DomainError,
   NotFoundError,
+  TooManyRequestsError,
   type Permission,
 } from '../../domain';
 
-/** Token ausente, malformado ou com assinatura inválida. */
-export class InvalidTokenError extends AuthenticationError {
-  readonly code = 'INVALID_TOKEN';
-
-  constructor(message = 'Token de acesso ausente ou inválido') {
-    super(message);
-  }
-}
-
-export class TokenExpiredError extends AuthenticationError {
-  readonly code = 'TOKEN_EXPIRED';
-
-  constructor() {
-    super('Token de acesso expirado');
-  }
-}
+export { InvalidTokenError, TokenExpiredError } from '../../application/errors/token-errors';
 
 export class ForbiddenError extends AuthorizationError {
   readonly code = 'FORBIDDEN';
@@ -48,7 +33,7 @@ export class MalformedRequestError extends DomainError {
   }
 }
 
-export class RateLimitExceededError extends DomainError {
+export class RateLimitExceededError extends TooManyRequestsError {
   readonly code = 'RATE_LIMIT_EXCEEDED';
 
   constructor(retryAfterSeconds: number) {

@@ -1,6 +1,11 @@
 import { AuthenticationError } from '../../../../shared-kernel/domain';
 
-export type InvalidRefreshTokenReason = 'not-found' | 'expired' | 'revoked' | 'reuse-detected';
+export type InvalidRefreshTokenReason =
+  | 'invalid'
+  | 'not-found'
+  | 'expired'
+  | 'revoked'
+  | 'reuse-detected';
 
 /**
  * Refresh token recusado. O motivo fica disponível para logs/auditoria, mas a

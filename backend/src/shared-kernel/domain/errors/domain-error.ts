@@ -41,3 +41,6 @@ export abstract class AuthenticationError extends DomainError {}
 
 /** A identidade é conhecida, mas não tem permissão para a operação. */
 export abstract class AuthorizationError extends DomainError {}
+
+/** Limite de tentativas/requisições excedido; o cliente deve aguardar. */
+export abstract class TooManyRequestsError extends DomainError {}

@@ -1,3 +1,4 @@
+import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 
@@ -8,9 +9,9 @@ import {
   RateLimitExceededError,
   RouteNotFoundError,
   type Authenticator,
-  type RateLimitCounter,
   type Route,
 } from '../../shared-kernel/presentation';
+import type { RateLimitCounter } from '../../shared-kernel/application';
 import { toRateLimitStore } from '../../shared-kernel/presentation/http/fastify/rate-limit-counter.store';
 import { registerRoutes } from '../../shared-kernel/presentation/http/fastify/register-routes';
 
@@ -18,21 +19,21 @@ import { registerRoutes } from '../../shared-kernel/presentation/http/fastify/re
 export type HealthChecks = Readonly<Record<string, () => Promise<void>>>;
 
 export type RateLimitOptions = {
+  /** Enunciado: 100 requisições por minuto por IP. */
   readonly max: number;
   readonly timeWindowMs: number;
   /**
-   * Contador externo (ex.: Redis), compartilhado entre réplicas e preservado
-   * entre reinícios. Sem ele, cada processo conta sozinho em memória.
+   * Contador compartilhado entre réplicas e preservado entre reinícios
+   * (Redis em produção). Obrigatório: não há contagem em memória do processo.
    */
-  readonly counter?: RateLimitCounter;
+  readonly counter: RateLimitCounter;
 };
 
 export type AppOptions = {
   readonly routes: readonly Route[];
   readonly authenticator: Authenticator;
   readonly healthChecks: HealthChecks;
-  /** Padrão do enunciado: 100 requisições por minuto por IP. */
-  readonly rateLimit?: RateLimitOptions;
+  readonly rateLimit: RateLimitOptions;
   /**
    * Proxies confiáveis (IPs/CIDRs ou número de saltos) para usar o IP real do
    * cliente de `X-Forwarded-For` no rate limit. Padrão: não confiar.
@@ -41,7 +42,6 @@ export type AppOptions = {
   readonly logger?: boolean;
 };
 
-const DEFAULT_RATE_LIMIT: RateLimitOptions = { max: 100, timeWindowMs: 60_000 };
 const HEALTH_CHECK_TIMEOUT_MS = 1_000;
 
 /** Monta a API HTTP. Não abre porta: o servidor (ou os testes) decide. */
@@ -62,17 +62,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.status(response.status).send(response.body);
   });
 
-  const limit = options.rateLimit ?? DEFAULT_RATE_LIMIT;
+  await app.register(cookie);
+
   await app.register(rateLimit, {
-    max: limit.max,
-    timeWindow: limit.timeWindowMs,
+    max: options.rateLimit.max,
+    timeWindow: options.rateLimit.timeWindowMs,
     // A chave padrão é `request.ip`, que respeita o `trustProxy`.
-    ...(limit.counter !== undefined && {
-      store: toRateLimitStore(limit.counter),
-      // Contador externo fora do ar não derruba a API: deixa passar (fail-open).
-      // A queda é registrada pela própria conexão e aparece no health check.
-      skipOnError: true,
-    }),
+    store: toRateLimitStore(options.rateLimit.counter),
+    // Redis fora do ar não derruba a API: deixa passar (fail-open). A queda é
+    // registrada pela própria conexão e aparece no health check.
+    skipOnError: true,
     errorResponseBuilder: (_request, context) =>
       new RateLimitExceededError(Math.ceil(context.ttl / 1000)),
   });

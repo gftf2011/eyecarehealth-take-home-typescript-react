@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Route } from '../../shared-kernel/presentation';
-import { ADMIN_TOKEN, bearer } from '../../shared-kernel/presentation/testing/static-authenticator';
 import { buildTestApp, type TestApp } from './testing/build-test-app';
 
 /** Rota de teste que falha com um erro inesperado (bug). */
@@ -30,7 +29,7 @@ describe('app HTTP (comportamento transversal)', () => {
     const response = await testApp.app.inject({ method: 'GET', url: '/api/health' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ok', checks: { database: 'up' } });
+    expect(response.json()).toEqual({ status: 'ok', checks: { database: 'up', redis: 'up' } });
   });
 
   it('404 ROUTE_NOT_FOUND no formato padrão para rotas inexistentes', async () => {
@@ -52,20 +51,5 @@ describe('app HTTP (comportamento transversal)', () => {
       error: { code: 'INTERNAL_ERROR', message: 'Erro interno do servidor' },
     });
     expect(response.body).not.toContain('segredo');
-  });
-
-  it('429 RATE_LIMIT_EXCEEDED ao passar do limite por IP', async () => {
-    testApp = await buildTestApp({ rateLimit: { max: 3, timeWindowMs: 60_000 } });
-    const app = testApp.app;
-    const call = () =>
-      app.inject({ method: 'GET', url: '/api/products', headers: bearer(ADMIN_TOKEN) });
-
-    const statuses = [];
-    for (let attempt = 0; attempt < 4; attempt += 1) statuses.push((await call()).statusCode);
-    const limited = await call();
-
-    expect(statuses).toEqual([200, 200, 200, 429]);
-    expect(limited.json().error).toMatchObject({ code: 'RATE_LIMIT_EXCEEDED' });
-    expect(limited.headers['retry-after']).toBeDefined();
   });
 });

@@ -1,6 +1,6 @@
 import type { FastifyRateLimitStore, FastifyRateLimitStoreCtor } from '@fastify/rate-limit';
 
-import type { RateLimitCounter } from '../../rate-limit/rate-limit-counter';
+import type { RateLimitCounter } from '../../../application';
 
 /**
  * Adapter port → plugin: transforma um `RateLimitCounter` no "store" que o
