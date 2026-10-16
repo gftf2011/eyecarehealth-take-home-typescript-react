@@ -9,6 +9,7 @@ export {
 export { DeliveryPersonId } from './delivery-person/delivery-person-id';
 export * from './delivery-person/errors';
 export * from './delivery-person/events';
+export type { DeliveryPersonListCriteria } from './delivery-person/repositories/delivery-person-list-criteria';
 export type { DeliveryPersonRepository } from './delivery-person/repositories/delivery-person.repository';
 export { PersonName } from './delivery-person/value-objects/person-name';
 export { PhoneNumber } from './delivery-person/value-objects/phone-number';
