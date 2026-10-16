@@ -1,7 +1,7 @@
 import type { Transaction } from 'kysely';
 
+import type { DomainEventBuffer } from '../../../../shared-kernel/application';
 import type { Slice } from '../../../../shared-kernel/domain';
-import { appendToOutbox } from '../../../../shared-kernel/infra/outbox/outbox.writer';
 import type {
   Product,
   ProductId,
@@ -20,11 +20,14 @@ const SORT_COLUMNS = {
 
 /**
  * Repositório de Product em PostgreSQL. Só existe dentro de uma transação
- * aberta pela unit of work; `save` grava o agregado e os eventos no outbox
- * na mesma transação.
+ * aberta pela unit of work; `save` grava o agregado e entrega os eventos
+ * dele ao buffer da transação, que a unit of work publica no mediador.
  */
 export class KyselyProductRepository implements ProductRepository {
-  constructor(private readonly trx: Transaction<CatalogDatabase>) {}
+  constructor(
+    private readonly trx: Transaction<CatalogDatabase>,
+    private readonly events: DomainEventBuffer,
+  ) {}
 
   async findById(id: ProductId): Promise<Product | null> {
     const row = await this.trx
@@ -45,7 +48,7 @@ export class KyselyProductRepository implements ProductRepository {
       .onConflict((conflict) => conflict.column('id').doUpdateSet(changes))
       .execute();
 
-    await appendToOutbox(this.trx, product.pullDomainEvents());
+    this.events.collectFrom(product);
   }
 
   async list(criteria: ProductListCriteria): Promise<Slice<Product>> {

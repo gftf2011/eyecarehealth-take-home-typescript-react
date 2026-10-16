@@ -44,13 +44,13 @@ describe('CreateProductUseCase', () => {
     expect(unitOfWork.products.has(product.id)).toBe(true);
   });
 
-  it('grava o evento ProductCreated no outbox na mesma transação', async () => {
+  it('publica o evento ProductCreated ao confirmar a transação', async () => {
     const product = await createProduct.execute(validInput);
 
     expect(unitOfWork.commits).toBe(1);
-    expect(unitOfWork.outbox).toHaveLength(1);
-    expect(unitOfWork.outbox[0]).toBeInstanceOf(ProductCreated);
-    expect(unitOfWork.outbox[0]?.aggregateId).toBe(product.id);
+    expect(unitOfWork.publishedEvents).toHaveLength(1);
+    expect(unitOfWork.publishedEvents[0]).toBeInstanceOf(ProductCreated);
+    expect(unitOfWork.publishedEvents[0]?.aggregateId).toBe(product.id);
   });
 
   it('respeita isAvailable = false', async () => {
@@ -94,6 +94,6 @@ describe('CreateProductUseCase', () => {
 
     expect(unitOfWork.rollbacks).toBe(1);
     expect(unitOfWork.products.size).toBe(0);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 });

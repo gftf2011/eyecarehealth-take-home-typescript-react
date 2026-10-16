@@ -15,6 +15,7 @@ import {
   isolatedRedisCounter,
 } from '../../../shared-kernel/infra/cache/redis/testing/test-redis';
 import { connectToTestDatabase } from '../../../shared-kernel/infra/database/testing/test-database';
+import { InMemoryEventMediator } from '../../../shared-kernel/infra/events/in-memory-event-mediator';
 import type { Route } from '../../../shared-kernel/presentation';
 import { StaticAuthenticator } from '../../../shared-kernel/presentation/testing/static-authenticator';
 import { buildApp, type AppOptions, type HealthChecks, type RateLimitOptions } from '../app';
@@ -59,10 +60,12 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
   const identityDb = connectToTestDatabase<IdentityDatabase>();
   const redis = await connectToTestRedis();
   const clock = new FixedClock(TEST_APP_START);
+  const events = new InMemoryEventMediator();
 
   const identity = makeIdentityModule({
     db: identityDb,
     clock,
+    events,
     secrets: TEST_SECRETS,
     policy: overrides.authPolicy ?? DEFAULT_AUTH_POLICY,
     bcryptCost: 10,
@@ -73,7 +76,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
   const app = await buildApp({
     routes: [
       ...identity.routes,
-      ...makeCatalogRoutes({ db, clock }),
+      ...makeCatalogRoutes({ db, clock, events }),
       ...(overrides.extraRoutes?.(clock) ?? []),
     ],
     authenticator: overrides.auth === 'jwt' ? identity.authenticator : new StaticAuthenticator(),
@@ -94,7 +97,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
   });
   await app.ready();
 
-  const identityUnitOfWork = new KyselyIdentityUnitOfWork(identityDb);
+  const identityUnitOfWork = new KyselyIdentityUnitOfWork(identityDb, events);
 
   return {
     app,

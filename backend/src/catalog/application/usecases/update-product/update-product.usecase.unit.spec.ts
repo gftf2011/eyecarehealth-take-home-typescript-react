@@ -40,13 +40,13 @@ describe('UpdateProductUseCase', () => {
       updatedAt: NOW,
     });
     expect(unitOfWork.committedProduct(burger.id.value)?.name.value).toBe('X-Burger Duplo');
-    expect(unitOfWork.outbox.map((event) => event.constructor)).toEqual([ProductUpdated]);
+    expect(unitOfWork.publishedEvents.map((event) => event.constructor)).toEqual([ProductUpdated]);
   });
 
   it('registra ProductPriceChanged quando o preço muda', async () => {
     await updateProduct.execute({ id: burger.id.value, price: 35 });
 
-    expect(unitOfWork.outbox.map((event) => event.constructor)).toEqual([
+    expect(unitOfWork.publishedEvents.map((event) => event.constructor)).toEqual([
       ProductUpdated,
       ProductPriceChanged,
     ]);
@@ -63,7 +63,7 @@ describe('UpdateProductUseCase', () => {
     expect(product.isAvailable).toBe(false);
     expect(product.preparationTime).toBe(30);
     expect(unitOfWork.commits).toBe(1);
-    expect(unitOfWork.outbox.map((event) => event.constructor)).toEqual([
+    expect(unitOfWork.publishedEvents.map((event) => event.constructor)).toEqual([
       ProductUpdated,
       ProductAvailabilityChanged,
     ]);
@@ -82,7 +82,7 @@ describe('UpdateProductUseCase', () => {
     });
 
     expect(product.updatedAt).toEqual(CREATED_AT);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 
   it('lança PRODUCT_NOT_FOUND para ID inexistente', async () => {
@@ -116,7 +116,7 @@ describe('UpdateProductUseCase', () => {
     expect(unitOfWork.commits + unitOfWork.rollbacks).toBe(0);
   });
 
-  it('é atômico: se o commit falhar, o produto e o outbox ficam como estavam', async () => {
+  it('é atômico: se o commit falhar, o produto fica como estava e nada é publicado', async () => {
     const databaseDown = new Error('conexão perdida');
     unitOfWork.failNextCommitWith(databaseDown);
 
@@ -127,6 +127,6 @@ describe('UpdateProductUseCase', () => {
     const committed = unitOfWork.committedProduct(burger.id.value);
     expect(committed?.price.toDecimal()).toBe(32.9);
     expect(committed?.isAvailable).toBe(true);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 });

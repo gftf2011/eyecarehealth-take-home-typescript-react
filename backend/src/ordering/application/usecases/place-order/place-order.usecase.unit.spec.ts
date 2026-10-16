@@ -84,14 +84,14 @@ describe('PlaceOrderUseCase', () => {
     expect(stored?.totalAmount.toDecimal()).toBe(78.3);
   });
 
-  it('grava o evento OrderPlaced no outbox na mesma transação', async () => {
+  it('publica o evento OrderPlaced ao confirmar a transação', async () => {
     const order = await placeOrder.execute(validInput);
 
     expect(unitOfWork.commits).toBe(1);
-    expect(unitOfWork.outbox).toHaveLength(1);
-    expect(unitOfWork.outbox[0]).toBeInstanceOf(OrderPlaced);
-    expect(unitOfWork.outbox[0]?.aggregateId).toBe(order.id);
-    expect(unitOfWork.outbox[0]?.payload).toMatchObject({ totalAmountCents: 7830 });
+    expect(unitOfWork.publishedEvents).toHaveLength(1);
+    expect(unitOfWork.publishedEvents[0]).toBeInstanceOf(OrderPlaced);
+    expect(unitOfWork.publishedEvents[0]?.aggregateId).toBe(order.id);
+    expect(unitOfWork.publishedEvents[0]?.payload).toMatchObject({ totalAmountCents: 7830 });
   });
 
   it('une itens repetidos em uma linha e consulta o Catalog uma vez por produto', async () => {
@@ -126,7 +126,7 @@ describe('PlaceOrderUseCase', () => {
     });
     expect(unitOfWork.rollbacks).toBe(1);
     expect(unitOfWork.orders.size).toBe(0);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 
   it('rejeita produtos inexistentes ou removidos listando todos de uma vez', async () => {
@@ -202,6 +202,6 @@ describe('PlaceOrderUseCase', () => {
 
     expect(unitOfWork.rollbacks).toBe(1);
     expect(unitOfWork.orders.size).toBe(0);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 });

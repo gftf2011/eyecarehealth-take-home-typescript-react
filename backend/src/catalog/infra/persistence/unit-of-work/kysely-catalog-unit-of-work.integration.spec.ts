@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { toOutboxMessage } from '../../../../shared-kernel/application';
 import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
+import { RecordingEventMediator } from '../../../../shared-kernel/application/testing/recording-event-mediator';
 import {
   connectToTestDatabase,
   resetDatabase,
@@ -16,9 +18,10 @@ import type { CatalogDatabase } from '../schema/catalog-database';
 import { KyselyCatalogUnitOfWork } from './kysely-catalog-unit-of-work';
 
 const db = connectToTestDatabase<CatalogDatabase>();
-const unitOfWork = new KyselyCatalogUnitOfWork(db);
 const START = new Date('2025-02-01T12:00:00Z');
 let clock = new FixedClock(START);
+let mediator = new RecordingEventMediator();
+let unitOfWork = new KyselyCatalogUnitOfWork(db, mediator);
 
 async function count(table: 'products' | 'outbox_events'): Promise<number> {
   const row = await db
@@ -31,6 +34,8 @@ async function count(table: 'products' | 'outbox_events'): Promise<number> {
 describe('KyselyCatalogUnitOfWork', () => {
   beforeEach(async () => {
     clock = new FixedClock(START);
+    mediator = new RecordingEventMediator();
+    unitOfWork = new KyselyCatalogUnitOfWork(db, mediator);
     await resetDatabase(db);
   });
 
@@ -38,20 +43,47 @@ describe('KyselyCatalogUnitOfWork', () => {
     await db.destroy();
   });
 
-  it('confirma agregado e outbox juntos', async () => {
+  it('publica no mediador os eventos dos agregados salvos, sem gravar outbox por conta própria', async () => {
+    // buildProduct já descartou o evento de criação: um save sem eventos não publica nada.
     await unitOfWork.transaction(({ products }) => products.save(buildProduct({})));
-    // buildProduct já descartou o evento de criação; um novo save sem eventos não grava outbox.
-    expect(await count('products')).toBe(1);
+    expect(mediator.published).toHaveLength(0);
 
     const product = buildProduct();
     product.makeUnavailable(clock.now());
     await unitOfWork.transaction(({ products }) => products.save(product));
 
     expect(await count('products')).toBe(2);
+    expect(mediator.publishedNames).toEqual(['catalog.product.availability-changed']);
+    expect(await count('outbox_events')).toBe(0);
+  });
+
+  it('o que o handler grava no outbox é confirmado junto com o agregado', async () => {
+    mediator.reactWith((event, { outbox }) => outbox.append([toOutboxMessage(event)]));
+    const product = buildProduct();
+    product.makeUnavailable(clock.now());
+
+    await unitOfWork.transaction(({ products }) => products.save(product));
+
+    expect(await count('products')).toBe(1);
     expect(await count('outbox_events')).toBe(1);
   });
 
-  it('desfaz agregado e outbox juntos quando o trabalho falha', async () => {
+  it('falha de handler desfaz o caso de uso inteiro', async () => {
+    const failure = new Error('handler falhou');
+    mediator.reactWith(async (event, { outbox }) => {
+      await outbox.append([toOutboxMessage(event)]);
+      throw failure;
+    });
+    const product = buildProduct();
+    product.makeUnavailable(clock.now());
+
+    await expect(unitOfWork.transaction(({ products }) => products.save(product))).rejects.toBe(failure);
+
+    expect(await count('products')).toBe(0);
+    expect(await count('outbox_events')).toBe(0);
+  });
+
+  it('não publica nada quando o trabalho falha', async () => {
     const failure = new Error('falha depois de salvar');
     const product = buildProduct();
     product.makeUnavailable(clock.now());
@@ -64,7 +96,7 @@ describe('KyselyCatalogUnitOfWork', () => {
     ).rejects.toBe(failure);
 
     expect(await count('products')).toBe(0);
-    expect(await count('outbox_events')).toBe(0);
+    expect(mediator.published).toHaveLength(0);
   });
 
   it('as leituras dentro da transação enxergam as próprias escritas', async () => {
@@ -104,17 +136,11 @@ describe('KyselyCatalogUnitOfWork', () => {
       ProductNotFoundError,
     );
 
-    const events = await db
-      .selectFrom('outbox_events')
-      .select('event_name')
-      .orderBy('occurred_at')
-      .orderBy('event_name')
-      .execute();
-    expect(events.map((event) => event.event_name)).toEqual([
+    expect(mediator.publishedNames).toEqual([
       'catalog.product.created',
-      'catalog.product.availability-changed',
-      'catalog.product.price-changed',
       'catalog.product.updated',
+      'catalog.product.price-changed',
+      'catalog.product.availability-changed',
       'catalog.product.removed',
     ]);
   });

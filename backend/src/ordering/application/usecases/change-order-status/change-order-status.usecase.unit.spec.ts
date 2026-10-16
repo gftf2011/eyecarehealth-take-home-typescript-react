@@ -62,16 +62,16 @@ describe('ChangeOrderStatusUseCase', () => {
     expect(unitOfWork.deliveryPersonLookups).toHaveLength(0);
   });
 
-  it('grava OrderStatusChanged no outbox na mesma transação', async () => {
+  it('publica OrderStatusChanged ao confirmar a transação', async () => {
     const order = buildOrderIn('preparing');
     unitOfWork.givenOrders(order);
 
     await changeStatus.execute({ id: order.id.value, status: 'ready' });
 
     expect(unitOfWork.commits).toBe(1);
-    expect(unitOfWork.outbox).toHaveLength(1);
-    expect(unitOfWork.outbox[0]).toBeInstanceOf(OrderStatusChanged);
-    expect(unitOfWork.outbox[0]?.payload).toEqual({ from: 'preparing', to: 'ready', deliveryPersonId: null });
+    expect(unitOfWork.publishedEvents).toHaveLength(1);
+    expect(unitOfWork.publishedEvents[0]).toBeInstanceOf(OrderStatusChanged);
+    expect(unitOfWork.publishedEvents[0]?.payload).toEqual({ from: 'preparing', to: 'ready', deliveryPersonId: null });
   });
 
   it.each([
@@ -91,7 +91,7 @@ describe('ChangeOrderStatusUseCase', () => {
       message: `Não é possível alterar o status de '${from}' para '${to}'`,
     });
     expect(unitOfWork.committedOrder(order.id.value)?.status.value).toBe(from);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 
   describe('despacho (ready → delivering)', () => {
@@ -104,7 +104,7 @@ describe('ChangeOrderStatusUseCase', () => {
 
       expect(updated).toMatchObject({ status: 'delivering', deliveryPersonId: COURIER_ID });
       expect(unitOfWork.deliveryPersonLookups).toEqual([COURIER_ID]);
-      expect(unitOfWork.outbox[0]?.payload).toEqual({
+      expect(unitOfWork.publishedEvents[0]?.payload).toEqual({
         from: 'ready',
         to: 'delivering',
         deliveryPersonId: COURIER_ID,
@@ -148,7 +148,7 @@ describe('ChangeOrderStatusUseCase', () => {
 
       await expect(attempt).rejects.toBeInstanceOf(DeliveryPersonUnavailableError);
       expect(unitOfWork.committedOrder(order.id.value)?.status.value).toBe('ready');
-      expect(unitOfWork.outbox).toHaveLength(0);
+      expect(unitOfWork.publishedEvents).toHaveLength(0);
     });
 
     it('rejeita entregador removido do Delivery com DELIVERY_PERSON_NOT_FOUND', async () => {
@@ -200,6 +200,6 @@ describe('ChangeOrderStatusUseCase', () => {
 
     expect(unitOfWork.rollbacks).toBe(1);
     expect(unitOfWork.committedOrder(order.id.value)?.status.value).toBe('pending');
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 });

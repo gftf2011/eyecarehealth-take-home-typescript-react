@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely';
 
-import type { Clock, RateLimitCounter } from '../../shared-kernel/application';
+import type { Clock, EventMediator, RateLimitCounter } from '../../shared-kernel/application';
 import type { Authenticator, Route } from '../../shared-kernel/presentation';
 import type { AuthPolicy } from '../application/config/auth-policy';
 import type { PasswordHasher } from '../application/ports/password-hasher';
@@ -26,6 +26,8 @@ import { refreshSessionRoute } from '../presentation/routes/refresh-session.rout
 export type IdentityModuleDependencies = {
   readonly db: Kysely<IdentityDatabase>;
   readonly clock: Clock;
+  /** Recebe os eventos de domínio do Identity e os entrega aos handlers inscritos. */
+  readonly events: EventMediator;
   readonly secrets: { readonly accessToken: string; readonly refreshToken: string };
   readonly policy: AuthPolicy;
   readonly bcryptCost: number;
@@ -44,7 +46,7 @@ export type IdentityModule = {
 
 /** Composition root do Identity. */
 export function makeIdentityModule(deps: IdentityModuleDependencies): IdentityModule {
-  const unitOfWork = new KyselyIdentityUnitOfWork(deps.db);
+  const unitOfWork = new KyselyIdentityUnitOfWork(deps.db, deps.events);
   const passwordHasher = new BcryptPasswordHasher(deps.bcryptCost);
   const accessTokens = new JoseAccessTokenService(deps.secrets.accessToken, deps.clock);
   const refreshTokens = new JoseRefreshTokenService(deps.secrets.refreshToken, deps.clock);

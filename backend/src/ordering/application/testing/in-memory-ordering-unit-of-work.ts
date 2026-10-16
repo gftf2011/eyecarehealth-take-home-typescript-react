@@ -15,13 +15,14 @@ import type { OrderingRepositories, OrderingUnitOfWork } from '../ports/ordering
 
 /**
  * Unidade de trabalho em memória com semântica transacional real: as escritas
- * ficam em uma área temporária e só são aplicadas (junto com os eventos no
- * outbox) se a transação terminar sem erro. Guarda snapshots, não instâncias,
+ * ficam em uma área temporária e só são aplicadas (e os eventos, registrados em
+ * `publishedEvents` como entregues ao mediador) se a transação terminar sem
+ * erro. Guarda snapshots, não instâncias,
  * para que nada vaze entre transações.
  */
 export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
   readonly orders = new Map<string, OrderSnapshot>();
-  readonly outbox: DomainEvent[] = [];
+  readonly publishedEvents: DomainEvent[] = [];
   /** Produtos visíveis no Catalog (existentes e não removidos). */
   readonly catalog = new Map<string, ProductSnapshot>();
   /** IDs pedidos ao Catalog em cada consulta, na ordem das chamadas. */
@@ -88,7 +89,7 @@ export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
       }
 
       for (const [id, snapshot] of staged) this.orders.set(id, snapshot);
-      this.outbox.push(...stagedEvents);
+      this.publishedEvents.push(...stagedEvents);
       this.commits += 1;
       return result;
     } catch (error) {

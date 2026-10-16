@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely';
 
-import type { Clock } from '../../shared-kernel/application';
+import type { Clock, EventMediator } from '../../shared-kernel/application';
 import type { Route } from '../../shared-kernel/presentation';
 import { CreateProductUseCase } from '../application/usecases/create-product/create-product.usecase';
 import { GetProductUseCase } from '../application/usecases/get-product/get-product.usecase';
@@ -23,14 +23,16 @@ import { updateProductRoute } from '../presentation/routes/update-product.route'
 export type CatalogModuleDependencies = {
   readonly db: Kysely<CatalogDatabase>;
   readonly clock: Clock;
+  /** Recebe os eventos de domínio do Catalog e os entrega aos handlers inscritos. */
+  readonly events: EventMediator;
 };
 
 /**
  * Composition root do Catalog: o único lugar onde as camadas do contexto se
  * encontram. Liga infra → casos de uso → controllers → rotas.
  */
-export function makeCatalogRoutes({ db, clock }: CatalogModuleDependencies): Route[] {
-  const unitOfWork = new KyselyCatalogUnitOfWork(db);
+export function makeCatalogRoutes({ db, clock, events }: CatalogModuleDependencies): Route[] {
+  const unitOfWork = new KyselyCatalogUnitOfWork(db, events);
 
   return [
     listProductsRoute(new ListProductsController(new ListProductsUseCase(unitOfWork))),

@@ -1,5 +1,7 @@
 import type { Kysely } from 'kysely';
 
+import { DomainEventBuffer, type EventMediator } from '../../../../shared-kernel/application';
+import { publishCollectedEvents } from '../../../../shared-kernel/infra/events/publish-collected-events';
 import type {
   CatalogRepositories,
   CatalogUnitOfWork,
@@ -10,18 +12,25 @@ import { KyselyProductRepository } from '../repositories/kysely-product.reposito
 
 /**
  * Unit of work do Catalog sobre uma transação do PostgreSQL. Os repositórios
- * são criados já ligados à transação: commit se `work` resolver, rollback se
- * rejeitar (o Kysely relança o erro original).
+ * são criados já ligados à transação; ao fim do trabalho, os eventos coletados
+ * são publicados no mediador ainda dentro dela. Commit se tudo resolver,
+ * rollback se algo rejeitar (o Kysely relança o erro original).
  */
 export class KyselyCatalogUnitOfWork implements CatalogUnitOfWork {
-  constructor(private readonly db: Kysely<CatalogDatabase>) {}
+  constructor(
+    private readonly db: Kysely<CatalogDatabase>,
+    private readonly mediator: EventMediator,
+  ) {}
 
   transaction<TResult>(work: (repositories: CatalogRepositories) => Promise<TResult>): Promise<TResult> {
-    return this.db.transaction().execute((trx) =>
-      work({
-        products: new KyselyProductRepository(trx),
+    return this.db.transaction().execute(async (trx) => {
+      const events = new DomainEventBuffer();
+      const result = await work({
+        products: new KyselyProductRepository(trx, events),
         activeOrders: new KyselyActiveOrdersChecker(trx),
-      }),
-    );
+      });
+      await publishCollectedEvents(this.mediator, events, trx);
+      return result;
+    });
   }
 }

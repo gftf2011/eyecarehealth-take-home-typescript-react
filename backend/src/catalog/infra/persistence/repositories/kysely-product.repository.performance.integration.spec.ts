@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { createPostgresPool } from '../../../../shared-kernel/infra/database/postgres';
 import { resetDatabase } from '../../../../shared-kernel/infra/database/testing/test-database';
+import { InMemoryEventMediator } from '../../../../shared-kernel/infra/events/in-memory-event-mediator';
 import type { ProductListCriteria } from '../../../domain';
 import type { CatalogDatabase } from '../schema/catalog-database';
 import { KyselyCatalogUnitOfWork } from '../unit-of-work/kysely-catalog-unit-of-work';
@@ -24,7 +25,7 @@ const db = new Kysely<CatalogDatabase>({
     if (event.level === 'query') executedQueries.push(event.query);
   },
 });
-const unitOfWork = new KyselyCatalogUnitOfWork(db);
+const unitOfWork = new KyselyCatalogUnitOfWork(db, new InMemoryEventMediator());
 
 const baseCriteria: ProductListCriteria = {
   offset: 0,

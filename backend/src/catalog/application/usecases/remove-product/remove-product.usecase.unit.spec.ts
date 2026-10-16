@@ -27,13 +27,13 @@ describe('RemoveProductUseCase', () => {
     unitOfWork.givenProducts(burger);
   });
 
-  it('faz soft delete e grava ProductRemoved no outbox', async () => {
+  it('faz soft delete e publica ProductRemoved', async () => {
     await removeProduct.execute({ id: burger.id.value });
 
     const committed = unitOfWork.committedProduct(burger.id.value);
     expect(committed?.isRemoved).toBe(true);
     expect(committed?.removedAt).toEqual(NOW);
-    expect(unitOfWork.outbox.map((event) => event.constructor)).toEqual([ProductRemoved]);
+    expect(unitOfWork.publishedEvents.map((event) => event.constructor)).toEqual([ProductRemoved]);
   });
 
   it('não remove produto presente em pedidos pending/preparing (409 PRODUCT_IN_USE)', async () => {
@@ -45,7 +45,7 @@ describe('RemoveProductUseCase', () => {
     await expect(attempt).rejects.toMatchObject({ code: 'PRODUCT_IN_USE' });
     expect(unitOfWork.committedProduct(burger.id.value)?.isRemoved).toBe(false);
     expect(unitOfWork.rollbacks).toBe(1);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 
   it('só consulta pedidos do produto informado', async () => {
@@ -70,7 +70,7 @@ describe('RemoveProductUseCase', () => {
     await expect(removeProduct.execute({ id: burger.id.value })).rejects.toBeInstanceOf(
       ProductNotFoundError,
     );
-    expect(unitOfWork.outbox).toHaveLength(1);
+    expect(unitOfWork.publishedEvents).toHaveLength(1);
   });
 
   it('rejeita ID malformado sem abrir transação', async () => {
@@ -80,13 +80,13 @@ describe('RemoveProductUseCase', () => {
     expect(unitOfWork.commits + unitOfWork.rollbacks).toBe(0);
   });
 
-  it('é atômico: se o commit falhar, o produto continua ativo e o outbox vazio', async () => {
+  it('é atômico: se o commit falhar, o produto continua ativo e nada é publicado', async () => {
     const databaseDown = new Error('conexão perdida');
     unitOfWork.failNextCommitWith(databaseDown);
 
     await expect(removeProduct.execute({ id: burger.id.value })).rejects.toBe(databaseDown);
 
     expect(unitOfWork.committedProduct(burger.id.value)?.isRemoved).toBe(false);
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 });

@@ -10,13 +10,14 @@ import type { CatalogRepositories, CatalogUnitOfWork } from '../ports/catalog-un
 
 /**
  * Unidade de trabalho em memória com semântica transacional real: as escritas
- * ficam em uma área temporária e só são aplicadas (junto com os eventos no
- * outbox) se a transação terminar sem erro. Guarda snapshots, não instâncias,
+ * ficam em uma área temporária e só são aplicadas (e os eventos, registrados em
+ * `publishedEvents` como entregues ao mediador) se a transação terminar sem
+ * erro. Guarda snapshots, não instâncias,
  * para que nada vaze entre transações.
  */
 export class InMemoryCatalogUnitOfWork implements CatalogUnitOfWork {
   readonly products = new Map<string, ProductSnapshot>();
-  readonly outbox: DomainEvent[] = [];
+  readonly publishedEvents: DomainEvent[] = [];
   /** IDs de produtos presentes em pedidos `pending`/`preparing` (fato do Ordering). */
   readonly productsInActiveOrders = new Set<string>();
   commits = 0;
@@ -68,7 +69,7 @@ export class InMemoryCatalogUnitOfWork implements CatalogUnitOfWork {
       }
 
       for (const [id, snapshot] of staged) this.products.set(id, snapshot);
-      this.outbox.push(...stagedEvents);
+      this.publishedEvents.push(...stagedEvents);
       this.commits += 1;
       return result;
     } catch (error) {

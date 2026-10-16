@@ -19,7 +19,7 @@ import type { IdentityRepositories, IdentityUnitOfWork } from '../ports/identity
 export class InMemoryIdentityUnitOfWork implements IdentityUnitOfWork {
   readonly users = new Map<string, UserSnapshot>();
   readonly sessions = new Map<string, RefreshSessionSnapshot>();
-  readonly outbox: DomainEvent[] = [];
+  readonly publishedEvents: DomainEvent[] = [];
   commits = 0;
   rollbacks = 0;
 
@@ -58,7 +58,7 @@ export class InMemoryIdentityUnitOfWork implements IdentityUnitOfWork {
       });
       for (const [id, snapshot] of stagedUsers) this.users.set(id, snapshot);
       for (const [id, snapshot] of stagedSessions) this.sessions.set(id, snapshot);
-      this.outbox.push(...stagedEvents);
+      this.publishedEvents.push(...stagedEvents);
       this.commits += 1;
       return result;
     } catch (error) {

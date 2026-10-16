@@ -74,6 +74,6 @@ describe('GetProductUseCase', () => {
 
   it('não grava nada', async () => {
     await getProduct.execute({ id: burger.id.value });
-    expect(unitOfWork.outbox).toHaveLength(0);
+    expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 });

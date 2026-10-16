@@ -1,5 +1,9 @@
 export type { Clock } from './clock';
 export { InputValidationError } from './errors/input-validation.error';
+export { DomainEventBuffer } from './events/domain-event-buffer';
+export type { DomainEventHandler, EventHandlingScope } from './events/domain-event-handler';
+export type { EventMediator } from './events/event-mediator';
+export { toOutboxMessage, type OutboxMessage, type OutboxWriter } from './ports/outbox-writer';
 export { InvalidTokenError, TokenExpiredError } from './errors/token-errors';
 export { InvalidPaginationError } from './pagination/invalid-pagination.error';
 export { toPage, type Page, type Pagination } from './pagination/page';

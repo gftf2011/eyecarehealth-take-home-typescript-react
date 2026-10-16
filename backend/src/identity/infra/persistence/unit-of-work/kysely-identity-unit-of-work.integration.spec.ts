@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { RecordingEventMediator } from '../../../../shared-kernel/application/testing/recording-event-mediator';
 import {
   connectToTestDatabase,
   resetDatabase,
@@ -12,7 +13,8 @@ import type { IdentityDatabase } from '../schema/identity-database';
 import { KyselyIdentityUnitOfWork } from './kysely-identity-unit-of-work';
 
 const db = connectToTestDatabase<IdentityDatabase>();
-const unitOfWork = new KyselyIdentityUnitOfWork(db);
+let mediator = new RecordingEventMediator();
+let unitOfWork = new KyselyIdentityUnitOfWork(db, mediator);
 
 async function saveUser(user: User): Promise<void> {
   await unitOfWork.transaction(({ users }) => users.save(user));
@@ -24,6 +26,8 @@ async function saveSession(session: RefreshSession): Promise<void> {
 
 describe('KyselyIdentityUnitOfWork (users e refresh_sessions)', () => {
   beforeEach(async () => {
+    mediator = new RecordingEventMediator();
+    unitOfWork = new KyselyIdentityUnitOfWork(db, mediator);
     await resetDatabase(db);
   });
 
@@ -86,8 +90,7 @@ describe('KyselyIdentityUnitOfWork (users e refresh_sessions)', () => {
       expect(found?.snapshot()).toEqual(session.snapshot());
       expect(found?.revocationReason).toBe('logout');
 
-      const events = await db.selectFrom('outbox_events').select('event_name').execute();
-      expect(events.map((event) => event.event_name)).toEqual(['identity.refresh-session.revoked']);
+      expect(mediator.publishedNames).toEqual(['identity.refresh-session.revoked']);
     });
 
     it('apagar o usuário apaga as sessões dele (FK em cascata)', async () => {

@@ -69,7 +69,7 @@ describe('RefreshSessionUseCase', () => {
 
     const [sessionId] = [...kit.unitOfWork.sessions.keys()];
     expect(kit.unitOfWork.committedSession(sessionId ?? '')?.revocationReason).toBe('reuse-detected');
-    expect(kit.unitOfWork.outbox.some((event) => event instanceof RefreshSessionRevoked)).toBe(true);
+    expect(kit.unitOfWork.publishedEvents.some((event) => event instanceof RefreshSessionRevoked)).toBe(true);
 
     // Nem o token legítimo mais recente vale depois disso.
     expect(await rejectionReason(kit.refresh.execute({ refreshToken: renewed.refreshToken }))).toBe(

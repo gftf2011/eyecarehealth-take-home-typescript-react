@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { RecordingEventMediator } from '../../../../shared-kernel/application/testing/recording-event-mediator';
 import {
   connectToTestDatabase,
   resetDatabase,
@@ -17,7 +18,8 @@ import type { CatalogDatabase } from '../schema/catalog-database';
 import { KyselyCatalogUnitOfWork } from '../unit-of-work/kysely-catalog-unit-of-work';
 
 const db = connectToTestDatabase<CatalogDatabase>();
-const unitOfWork = new KyselyCatalogUnitOfWork(db);
+const mediator = new RecordingEventMediator();
+const unitOfWork = new KyselyCatalogUnitOfWork(db, mediator);
 
 function product(
   name: string,
@@ -111,26 +113,23 @@ describe('KyselyProductRepository', () => {
       expect(rows[0]?.total).toBe('1');
     });
 
-    it('grava os eventos do agregado no outbox, em JSON', async () => {
+    it('entrega os eventos do agregado à unit of work, que os publica no mediador', async () => {
       const burger = buildProduct();
       burger.updateDetails({ price: ProductPrice.fromDecimal(35) }, LATER);
+      const before = mediator.published.length;
+
       await save(burger);
 
-      const events = await db
-        .selectFrom('outbox_events')
-        .select(['event_name', 'aggregate_id', 'payload', 'published_at'])
-        .orderBy('event_name')
-        .execute();
-
-      expect(events.map((event) => event.event_name)).toEqual([
-        'catalog.product.price-changed',
+      const published = mediator.published.slice(before);
+      expect(published.map((event) => event.eventName)).toEqual([
         'catalog.product.updated',
+        'catalog.product.price-changed',
       ]);
-      expect(events[0]).toMatchObject({
-        aggregate_id: burger.id.value,
+      expect(published[1]).toMatchObject({
+        aggregateId: burger.id.value,
         payload: { previousPriceCents: 3290, newPriceCents: 3500 },
-        published_at: null,
       });
+      expect(burger.domainEvents).toHaveLength(0);
     });
   });
 

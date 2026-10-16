@@ -1,12 +1,15 @@
 import type { Transaction } from 'kysely';
 
-import { appendToOutbox } from '../../../../shared-kernel/infra/outbox/outbox.writer';
+import type { DomainEventBuffer } from '../../../../shared-kernel/application';
 import type { RefreshSession, RefreshSessionId, RefreshSessionRepository } from '../../../domain';
 import { toRefreshSession, toRefreshSessionRow } from '../mappers/refresh-session.mapper';
 import type { IdentityDatabase } from '../schema/identity-database';
 
 export class KyselyRefreshSessionRepository implements RefreshSessionRepository {
-  constructor(private readonly trx: Transaction<IdentityDatabase>) {}
+  constructor(
+    private readonly trx: Transaction<IdentityDatabase>,
+    private readonly events: DomainEventBuffer,
+  ) {}
 
   /**
    * Trava a linha (`FOR UPDATE`): duas renovações simultâneas do mesmo token
@@ -31,6 +34,6 @@ export class KyselyRefreshSessionRepository implements RefreshSessionRepository 
       .values(row)
       .onConflict((conflict) => conflict.column('id').doUpdateSet(changes))
       .execute();
-    await appendToOutbox(this.trx, session.pullDomainEvents());
+    this.events.collectFrom(session);
   }
 }

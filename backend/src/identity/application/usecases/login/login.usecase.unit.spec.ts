@@ -34,7 +34,7 @@ describe('LoginUseCase', () => {
 
     const [session] = [...kit.unitOfWork.sessions.values()];
     expect(session?.tokenHash.equals(kit.tokenHasher.hash(result.refreshToken))).toBe(true);
-    expect(kit.unitOfWork.outbox.map((event) => event.constructor)).toEqual([RefreshSessionStarted]);
+    expect(kit.unitOfWork.publishedEvents.map((event) => event.constructor)).toEqual([RefreshSessionStarted]);
   });
 
   it('aceita o email com outra caixa e espaços', async () => {

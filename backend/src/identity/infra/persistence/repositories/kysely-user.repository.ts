@@ -1,12 +1,15 @@
 import type { Transaction } from 'kysely';
 
-import { appendToOutbox } from '../../../../shared-kernel/infra/outbox/outbox.writer';
+import type { DomainEventBuffer } from '../../../../shared-kernel/application';
 import type { Email, User, UserId, UserRepository } from '../../../domain';
 import { toUser, toUserRow } from '../mappers/user.mapper';
 import type { IdentityDatabase } from '../schema/identity-database';
 
 export class KyselyUserRepository implements UserRepository {
-  constructor(private readonly trx: Transaction<IdentityDatabase>) {}
+  constructor(
+    private readonly trx: Transaction<IdentityDatabase>,
+    private readonly events: DomainEventBuffer,
+  ) {}
 
   async findById(id: UserId): Promise<User | null> {
     const row = await this.trx.selectFrom('users').selectAll().where('id', '=', id.value).executeTakeFirst();
@@ -29,6 +32,6 @@ export class KyselyUserRepository implements UserRepository {
       .values({ id, created_at: user.createdAt, ...changes })
       .onConflict((conflict) => conflict.column('id').doUpdateSet(changes))
       .execute();
-    await appendToOutbox(this.trx, user.pullDomainEvents());
+    this.events.collectFrom(user);
   }
 }
