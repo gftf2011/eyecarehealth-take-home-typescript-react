@@ -42,8 +42,19 @@ describe('AssignDeliveryPersonUseCase', () => {
 
   beforeEach(() => {
     unitOfWork = new InMemoryOrderingUnitOfWork();
+    unitOfWork.nameDeliveryPerson(COURIER_ID, 'Carlos Santos');
+    unitOfWork.nameDeliveryPerson(OTHER_COURIER_ID, 'Ana Lima');
     unitOfWork.givenDeliveryPersons(courier(COURIER_ID), courier(OTHER_COURIER_ID));
     assign = new AssignDeliveryPersonUseCase(unitOfWork, new FixedClock(NOW));
+  });
+
+  it('trava o pedido antes de alterá-lo', async () => {
+    const order = buildOrderIn('ready');
+    unitOfWork.givenOrders(order);
+
+    await assign.execute({ id: order.id.value, deliveryPersonId: COURIER_ID });
+
+    expect(unitOfWork.lockedOrderIds).toEqual([order.id.value]);
   });
 
   it.each(['pending', 'preparing', 'ready'] satisfies OrderStatusValue[])(
@@ -54,7 +65,11 @@ describe('AssignDeliveryPersonUseCase', () => {
 
       const updated = await assign.execute({ id: order.id.value, deliveryPersonId: COURIER_ID });
 
-      expect(updated).toMatchObject({ status, deliveryPersonId: COURIER_ID, updatedAt: NOW });
+      expect(updated).toMatchObject({
+        status,
+        deliveryPerson: { id: COURIER_ID, name: 'Carlos Santos' },
+        updatedAt: NOW,
+      });
       expect(unitOfWork.committedOrder(order.id.value)?.deliveryPersonId?.value).toBe(COURIER_ID);
       expect(unitOfWork.deliveryPersonLookups).toEqual([COURIER_ID]);
     },
@@ -82,7 +97,7 @@ describe('AssignDeliveryPersonUseCase', () => {
 
     const updated = await assign.execute({ id: order.id.value, deliveryPersonId: OTHER_COURIER_ID });
 
-    expect(updated.deliveryPersonId).toBe(OTHER_COURIER_ID);
+    expect(updated.deliveryPerson).toEqual({ id: OTHER_COURIER_ID, name: 'Ana Lima' });
     expect(unitOfWork.publishedEvents[0]?.payload).toEqual({
       deliveryPersonId: OTHER_COURIER_ID,
       previousDeliveryPersonId: COURIER_ID,
@@ -96,7 +111,7 @@ describe('AssignDeliveryPersonUseCase', () => {
 
     const updated = await assign.execute({ id: order.id.value, deliveryPersonId: COURIER_ID });
 
-    expect(updated).toMatchObject({ deliveryPersonId: COURIER_ID, updatedAt: LATER });
+    expect(updated).toMatchObject({ deliveryPerson: { id: COURIER_ID }, updatedAt: LATER });
     expect(unitOfWork.publishedEvents).toHaveLength(0);
   });
 

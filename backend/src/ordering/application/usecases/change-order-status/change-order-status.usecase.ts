@@ -4,7 +4,7 @@ import {
   type UseCase,
 } from '../../../../shared-kernel/application';
 import { OrderId, OrderNotFoundError, OrderStatus, type Order } from '../../../domain';
-import { toOrderDto, type OrderDto } from '../../dtos/order.dto';
+import { loadDeliveryPersonSummaries, toOrderDto, type OrderDto } from '../../dtos/order.dto';
 import { AssignedDeliveryPersonUnavailableError } from '../../errors/assigned-delivery-person-unavailable.error';
 import type { OrderingRepositories, OrderingUnitOfWork } from '../../ports/ordering-unit-of-work';
 
@@ -31,7 +31,7 @@ export class ChangeOrderStatusUseCase implements UseCase<ChangeOrderStatusInput,
     });
 
     return this.unitOfWork.transaction(async (repositories) => {
-      const order = await repositories.orders.findById(orderId);
+      const order = await repositories.orders.findByIdForUpdate(orderId);
       if (order === null) throw new OrderNotFoundError(input.id);
 
       const now = this.clock.now();
@@ -39,7 +39,7 @@ export class ChangeOrderStatusUseCase implements UseCase<ChangeOrderStatusInput,
       else order.changeStatus(status, now);
 
       await repositories.orders.save(order);
-      return toOrderDto(order);
+      return toOrderDto(order, await loadDeliveryPersonSummaries([order], repositories.deliveryPersons));
     });
   }
 }

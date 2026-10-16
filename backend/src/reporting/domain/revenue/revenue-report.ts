@@ -1,6 +1,4 @@
-import { Money } from '../../../shared-kernel/domain';
-import { LocalDate } from '../period/value-objects/local-date';
-import { ReportPeriod, type BoundedReportPeriod } from '../period/value-objects/report-period';
+import { DatePeriod, LocalDate, Money, type BoundedDatePeriod } from '../../../shared-kernel/domain';
 import type { DailyRevenueRow } from './queries/revenue.query';
 
 export type DailyRevenue = {
@@ -17,19 +15,19 @@ export type DailyRevenue = {
  * - Ticket médio = receita / pedidos, arredondado ao centavo; zero sem pedidos.
  */
 export class RevenueReport {
-  readonly period: BoundedReportPeriod;
+  readonly period: BoundedDatePeriod;
   readonly dailyRevenue: readonly DailyRevenue[];
   readonly totalRevenue: Money;
   readonly totalOrders: number;
 
-  private constructor(period: BoundedReportPeriod, dailyRevenue: readonly DailyRevenue[]) {
+  private constructor(period: BoundedDatePeriod, dailyRevenue: readonly DailyRevenue[]) {
     this.period = period;
     this.dailyRevenue = Object.freeze([...dailyRevenue]);
     this.totalRevenue = dailyRevenue.reduce((total, day) => total.add(day.revenue), Money.zero());
     this.totalOrders = dailyRevenue.reduce((total, day) => total + day.orders, 0);
   }
 
-  static build(period: BoundedReportPeriod, rows: readonly DailyRevenueRow[]): RevenueReport {
+  static build(period: BoundedDatePeriod, rows: readonly DailyRevenueRow[]): RevenueReport {
     const byDate = new Map<string, { revenueCents: number; orders: number }>();
 
     for (const row of rows) {
@@ -47,7 +45,7 @@ export class RevenueReport {
       });
     }
 
-    const daily = ReportPeriod.days(period).map((date) => {
+    const daily = DatePeriod.days(period).map((date) => {
       const totals = byDate.get(date.toString()) ?? { revenueCents: 0, orders: 0 };
       return { date, revenue: Money.fromCents(totals.revenueCents), orders: totals.orders };
     });

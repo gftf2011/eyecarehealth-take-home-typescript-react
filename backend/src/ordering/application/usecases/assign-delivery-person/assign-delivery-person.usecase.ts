@@ -4,7 +4,7 @@ import {
   type UseCase,
 } from '../../../../shared-kernel/application';
 import { DeliveryPersonId, OrderId, OrderNotFoundError } from '../../../domain';
-import { toOrderDto, type OrderDto } from '../../dtos/order.dto';
+import { loadDeliveryPersonSummaries, toOrderDto, type OrderDto } from '../../dtos/order.dto';
 import { DeliveryPersonNotFoundError } from '../../errors/delivery-person-not-found.error';
 import type { OrderingUnitOfWork } from '../../ports/ordering-unit-of-work';
 
@@ -32,7 +32,7 @@ export class AssignDeliveryPersonUseCase implements UseCase<AssignDeliveryPerson
     });
 
     return this.unitOfWork.transaction(async ({ orders, deliveryPersons }) => {
-      const order = await orders.findById(orderId);
+      const order = await orders.findByIdForUpdate(orderId);
       if (order === null) throw new OrderNotFoundError(input.id);
 
       const availability = await deliveryPersons.availabilityOf(deliveryPersonId);
@@ -41,7 +41,7 @@ export class AssignDeliveryPersonUseCase implements UseCase<AssignDeliveryPerson
       order.assignDeliveryPerson(availability, this.clock.now());
 
       await orders.save(order);
-      return toOrderDto(order);
+      return toOrderDto(order, await loadDeliveryPersonSummaries([order], deliveryPersons));
     });
   }
 }

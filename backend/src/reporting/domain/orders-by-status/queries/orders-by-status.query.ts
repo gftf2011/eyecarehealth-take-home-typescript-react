@@ -1,4 +1,4 @@
-import type { InstantRange } from '../../period/value-objects/report-period';
+import type { InstantRange } from '../../../../shared-kernel/domain';
 
 export type OrderStatusCountRow = {
   readonly status: string;

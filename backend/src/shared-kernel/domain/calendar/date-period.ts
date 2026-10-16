@@ -1,6 +1,6 @@
-import { ValueObject } from '../../../../shared-kernel/domain';
-import { InvalidReportPeriodError } from '../errors';
-import { BUSINESS_TIME_ZONE } from '../time-zone';
+import { ValueObject } from '../value-object';
+import { InvalidDatePeriodError } from '../errors/invalid-date-period.error';
+import { BUSINESS_TIME_ZONE } from './time-zone';
 import type { LocalDate } from './local-date';
 
 /** Intervalo de instantes `[from, to)`; `null` significa sem limite naquele lado. */
@@ -10,34 +10,36 @@ export type InstantRange = {
 };
 
 /** Período com início e fim obrigatórios (ex.: relatório de receita). */
-export type BoundedReportPeriod = ReportPeriod & {
+export type BoundedDatePeriod = DatePeriod & {
   readonly start: LocalDate;
   readonly end: LocalDate;
 };
 
 /**
- * Período de um relatório em dias locais, com as duas pontas inclusivas:
- * 2025-01-01 a 2025-01-31 cobre o mês inteiro de janeiro em São Paulo.
+ * Período em dias locais, com as duas pontas inclusivas: 2025-01-01 a
+ * 2025-01-31 cobre o mês inteiro de janeiro em São Paulo. Fica no shared
+ * kernel porque relatórios e listagem de pedidos filtram pelos mesmos dias
+ * locais do negócio.
  */
-export class ReportPeriod extends ValueObject<{ start: LocalDate | null; end: LocalDate | null }> {
+export class DatePeriod extends ValueObject<{ start: LocalDate | null; end: LocalDate | null }> {
   private constructor(start: LocalDate | null, end: LocalDate | null) {
     super({ start, end });
   }
 
-  static between(start: LocalDate, end: LocalDate): BoundedReportPeriod {
-    return ReportPeriod.of({ start, end }) as BoundedReportPeriod;
+  static between(start: LocalDate, end: LocalDate): BoundedDatePeriod {
+    return DatePeriod.of({ start, end }) as BoundedDatePeriod;
   }
 
   /** Pontas opcionais: sem início ou sem fim, o período fica aberto naquele lado. */
-  static of(params: { start?: LocalDate | null; end?: LocalDate | null }): ReportPeriod {
+  static of(params: { start?: LocalDate | null; end?: LocalDate | null }): DatePeriod {
     const start = params.start ?? null;
     const end = params.end ?? null;
-    if (start !== null && end !== null && start.isAfter(end)) throw new InvalidReportPeriodError();
-    return new ReportPeriod(start, end);
+    if (start !== null && end !== null && start.isAfter(end)) throw new InvalidDatePeriodError();
+    return new DatePeriod(start, end);
   }
 
-  static allTime(): ReportPeriod {
-    return new ReportPeriod(null, null);
+  static allTime(): DatePeriod {
+    return new DatePeriod(null, null);
   }
 
   get start(): LocalDate | null {
@@ -48,7 +50,7 @@ export class ReportPeriod extends ValueObject<{ start: LocalDate | null; end: Lo
     return this.props.end;
   }
 
-  isBounded(): this is BoundedReportPeriod {
+  isBounded(): this is BoundedDatePeriod {
     return this.props.start !== null && this.props.end !== null;
   }
 
@@ -67,7 +69,7 @@ export class ReportPeriod extends ValueObject<{ start: LocalDate | null; end: Lo
   }
 
   /** Todos os dias do período, em ordem. */
-  static days(period: BoundedReportPeriod): LocalDate[] {
+  static days(period: BoundedDatePeriod): LocalDate[] {
     const days: LocalDate[] = [];
     for (let day = period.start; !day.isAfter(period.end); day = day.addDays(1)) days.push(day);
     return days;

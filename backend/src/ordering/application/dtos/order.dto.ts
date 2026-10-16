@@ -1,4 +1,5 @@
-import type { Order, OrderStatusValue } from '../../domain';
+import type { DeliveryPersonId, Order, OrderStatusValue } from '../../domain';
+import type { DeliveryPersonDirectory, DeliveryPersonSummary } from '../ports/delivery-person-directory';
 
 export type OrderItemDto = {
   readonly id: string;
@@ -19,13 +20,42 @@ export type OrderDto = {
   readonly status: OrderStatusValue;
   /** Soma de `unitPrice × quantity`, em reais. */
   readonly totalAmount: number;
-  readonly deliveryPersonId: string | null;
+  readonly deliveryPerson: DeliveryPersonSummary | null;
   readonly items: readonly OrderItemDto[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
 
-export function toOrderDto(order: Order): OrderDto {
+/** Resumos de entregadores indexados pelo ID, para montar os DTOs. */
+export type DeliveryPersonSummaries = ReadonlyMap<string, DeliveryPersonSummary>;
+
+/**
+ * Busca, em uma única consulta, os entregadores atribuídos aos pedidos. Todo
+ * entregador atribuído existe no Delivery (removidos inclusive); a falta de
+ * um indica inconsistência entre os contextos e é tratada como erro.
+ */
+export async function loadDeliveryPersonSummaries(
+  orders: readonly Order[],
+  directory: DeliveryPersonDirectory,
+): Promise<DeliveryPersonSummaries> {
+  const ids = new Map<string, DeliveryPersonId>();
+  for (const order of orders) {
+    if (order.deliveryPersonId !== null) ids.set(order.deliveryPersonId.value, order.deliveryPersonId);
+  }
+  if (ids.size === 0) return new Map();
+
+  const summaries = new Map(
+    (await directory.summariesOf([...ids.values()])).map((summary) => [summary.id, summary]),
+  );
+  const missing = [...ids.keys()].filter((id) => !summaries.has(id));
+  if (missing.length > 0) {
+    throw new Error(`Entregadores atribuídos não encontrados no Delivery: ${missing.join(', ')}`);
+  }
+  return summaries;
+}
+
+export function toOrderDto(order: Order, deliveryPersons: DeliveryPersonSummaries): OrderDto {
+  const assigned = order.deliveryPersonId;
   return {
     id: order.id.value,
     customerName: order.customerName.value,
@@ -35,7 +65,7 @@ export function toOrderDto(order: Order): OrderDto {
     longitude: order.location.longitude,
     status: order.status.value,
     totalAmount: order.totalAmount.toDecimal(),
-    deliveryPersonId: order.deliveryPersonId?.value ?? null,
+    deliveryPerson: assigned === null ? null : (deliveryPersons.get(assigned.value) ?? null),
     items: order.items.map((item) => ({
       id: item.id.value,
       product: { id: item.productId.value, name: item.productName },

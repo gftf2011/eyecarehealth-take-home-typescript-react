@@ -18,14 +18,6 @@ export type {
   OrdersByStatusQuery,
   OrderStatusCountRow,
 } from './orders-by-status/queries/orders-by-status.query';
-export * from './period/errors';
-export { BUSINESS_TIME_ZONE } from './period/time-zone';
-export { LocalDate } from './period/value-objects/local-date';
-export {
-  ReportPeriod,
-  type BoundedReportPeriod,
-  type InstantRange,
-} from './period/value-objects/report-period';
 export type { DailyRevenueRow, RevenueQuery } from './revenue/queries/revenue.query';
 export { RevenueReport, type DailyRevenue } from './revenue/revenue-report';
 export { InvalidTopProductsLimitError } from './top-products/errors/invalid-top-products-limit.error';

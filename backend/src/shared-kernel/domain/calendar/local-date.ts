@@ -1,6 +1,6 @@
-import { ValueObject } from '../../../../shared-kernel/domain';
-import { InvalidLocalDateError } from '../errors';
-import { startOfDayInstant } from '../time-zone';
+import { ValueObject } from '../value-object';
+import { InvalidLocalDateError } from '../errors/invalid-local-date.error';
+import { startOfDayInstant } from './time-zone';
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MIN_YEAR = 1900;

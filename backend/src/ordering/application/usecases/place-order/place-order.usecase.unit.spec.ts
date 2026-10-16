@@ -54,7 +54,7 @@ describe('PlaceOrderUseCase', () => {
       longitude: -43.1729,
       status: 'pending',
       totalAmount: 78.3,
-      deliveryPersonId: null,
+      deliveryPerson: null,
       items: [
         {
           id: expect.stringMatching(/^[0-9a-f-]{36}$/),

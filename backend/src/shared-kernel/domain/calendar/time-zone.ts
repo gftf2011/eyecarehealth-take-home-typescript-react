@@ -1,6 +1,7 @@
 /**
- * Fuso do negócio: os dias dos relatórios são dias locais de São Paulo. Um
- * pedido entregue às 22h de 31/12 (local) conta em 31/12, não em 01/01 (UTC).
+ * Fuso do negócio: filtros e agrupamentos por dia usam dias locais de São
+ * Paulo. Um pedido entregue às 22h de 31/12 (local) conta em 31/12, não em
+ * 01/01 (UTC).
  */
 export const BUSINESS_TIME_ZONE = 'America/Sao_Paulo';
 

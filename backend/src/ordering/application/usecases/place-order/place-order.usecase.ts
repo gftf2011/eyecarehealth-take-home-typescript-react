@@ -70,7 +70,7 @@ export class PlaceOrderUseCase implements UseCase<PlaceOrderInput, OrderDto> {
       });
 
       await orders.save(order);
-      return toOrderDto(order);
+      return toOrderDto(order, new Map());
     });
   }
 }

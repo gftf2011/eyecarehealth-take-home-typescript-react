@@ -1,4 +1,4 @@
-import { InvalidValueError } from '../../../../shared-kernel/domain';
+import { InvalidValueError } from './domain-error';
 
 export class InvalidLocalDateError extends InvalidValueError {
   readonly code = 'INVALID_DATE';

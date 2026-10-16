@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { LocalDate, ReportPeriod, RevenueReport } from '../index';
+import { DatePeriod, LocalDate } from '../../../shared-kernel/domain';
+import { RevenueReport } from '../index';
 
-const january = ReportPeriod.between(LocalDate.parse('2025-01-01'), LocalDate.parse('2025-01-05'));
+const january = DatePeriod.between(LocalDate.parse('2025-01-01'), LocalDate.parse('2025-01-05'));
 
 describe('RevenueReport', () => {
   it('soma receita e pedidos e calcula o ticket médio', () => {

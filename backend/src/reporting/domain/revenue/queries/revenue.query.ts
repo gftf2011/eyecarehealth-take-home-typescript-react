@@ -1,4 +1,4 @@
-import type { InstantRange } from '../../period/value-objects/report-period';
+import type { InstantRange } from '../../../../shared-kernel/domain';
 
 /** Receita de um dia local, já agregada pelo banco. */
 export type DailyRevenueRow = {

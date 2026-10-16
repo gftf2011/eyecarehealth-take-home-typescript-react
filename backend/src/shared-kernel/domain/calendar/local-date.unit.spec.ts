@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidLocalDateError, LocalDate } from '../../index';
+import { InvalidLocalDateError, LocalDate } from '../index';
 
 describe('LocalDate', () => {
   it.each(['2025-01-31', '2024-02-29', '1900-01-01'])('aceita %s', (raw) => {

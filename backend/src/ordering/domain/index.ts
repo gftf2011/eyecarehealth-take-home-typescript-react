@@ -9,6 +9,11 @@ export {
   type PlaceOrderParams,
 } from './order/order';
 export { OrderId } from './order/order-id';
+export {
+  ORDER_SORT_FIELDS,
+  type OrderListCriteria,
+  type OrderSortField,
+} from './order/repositories/order-list-criteria';
 export type { OrderRepository } from './order/repositories/order.repository';
 export { CustomerName } from './order/value-objects/customer-name';
 export { DeliveryAddress } from './order/value-objects/delivery-address';

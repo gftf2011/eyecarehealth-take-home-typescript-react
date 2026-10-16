@@ -47,7 +47,17 @@ describe('ChangeOrderStatusUseCase', () => {
 
   beforeEach(() => {
     unitOfWork = new InMemoryOrderingUnitOfWork();
+    unitOfWork.nameDeliveryPerson(COURIER_ID, 'Carlos Santos');
     changeStatus = new ChangeOrderStatusUseCase(unitOfWork, new FixedClock(NOW));
+  });
+
+  it('trava o pedido antes de alterá-lo', async () => {
+    const order = buildOrderIn('pending');
+    unitOfWork.givenOrders(order);
+
+    await changeStatus.execute({ id: order.id.value, status: 'preparing' });
+
+    expect(unitOfWork.lockedOrderIds).toEqual([order.id.value]);
   });
 
   it('aplica transição válida, registra o histórico e devolve o pedido atualizado', async () => {
@@ -103,7 +113,10 @@ describe('ChangeOrderStatusUseCase', () => {
 
       const updated = await changeStatus.execute({ id: order.id.value, status: 'delivering' });
 
-      expect(updated).toMatchObject({ status: 'delivering', deliveryPersonId: COURIER_ID });
+      expect(updated).toMatchObject({
+        status: 'delivering',
+        deliveryPerson: { id: COURIER_ID, name: 'Carlos Santos' },
+      });
       expect(unitOfWork.deliveryPersonLookups).toEqual([COURIER_ID]);
       expect(unitOfWork.publishedEvents[0]?.payload).toEqual({
         from: 'ready',
