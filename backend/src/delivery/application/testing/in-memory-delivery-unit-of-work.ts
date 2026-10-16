@@ -2,13 +2,16 @@ import type { DomainEvent } from '../../../shared-kernel/domain';
 import {
   DeliveryPerson,
   DeliveryPersonId,
+  OrderId,
   type DeliveryPersonListCriteria,
   type DeliveryPersonRepository,
   type DeliveryPersonSnapshot,
   type DispatchableOrder,
 } from '../../domain';
-import type { DispatchBoard } from '../ports/dispatch-board';
+import type { DeliveryInProgress, DispatchBoard } from '../ports/dispatch-board';
 import type { DeliveryRepositories, DeliveryUnitOfWork } from '../ports/delivery-unit-of-work';
+
+const DEFAULT_ORDER_ID = 'd0d0d0d0-0000-4000-8000-000000000001';
 
 /**
  * Unidade de trabalho em memória com semântica transacional real (mesma dos
@@ -20,8 +23,10 @@ export class InMemoryDeliveryUnitOfWork implements DeliveryUnitOfWork {
   readonly publishedEvents: DomainEvent[] = [];
   /** Pedidos `ready` vistos pelo Delivery (fato do Ordering). */
   readyOrders: DispatchableOrder[] = [];
-  /** Entregadores com pedido `delivering` (fato do Ordering). */
-  readonly deliveryPersonsInProgress = new Set<string>();
+  /** Entregador → pedido `delivering` dele (fato do Ordering). */
+  readonly deliveriesInProgress = new Map<string, string>();
+  /** IDs lidos com `findByIdForUpdate` (travados), na ordem. */
+  readonly lockedDeliveryPersonIds: string[] = [];
   commits = 0;
   rollbacks = 0;
   #failNextCommit: Error | null = null;
@@ -38,8 +43,9 @@ export class InMemoryDeliveryUnitOfWork implements DeliveryUnitOfWork {
     this.readyOrders.push(...orders);
   }
 
-  givenDeliveryInProgress(...people: DeliveryPerson[]): void {
-    for (const person of people) this.deliveryPersonsInProgress.add(person.id.value);
+  /** Simula um pedido `delivering` com o entregador (ID do pedido opcional). */
+  givenDeliveryInProgress(person: DeliveryPerson, orderId = DEFAULT_ORDER_ID): void {
+    this.deliveriesInProgress.set(person.id.value, orderId);
   }
 
   committedDeliveryPerson(id: string): DeliveryPerson | undefined {
@@ -61,7 +67,12 @@ export class InMemoryDeliveryUnitOfWork implements DeliveryUnitOfWork {
 
     try {
       const result = await work({
-        deliveryPersons: new InMemoryDeliveryPersonRepository(this.deliveryPersons, staged, stagedEvents),
+        deliveryPersons: new InMemoryDeliveryPersonRepository(
+          this.deliveryPersons,
+          staged,
+          stagedEvents,
+          this.lockedDeliveryPersonIds,
+        ),
         dispatchBoard: new InMemoryDispatchBoard(this),
       });
 
@@ -87,12 +98,18 @@ class InMemoryDeliveryPersonRepository implements DeliveryPersonRepository {
     private readonly committed: ReadonlyMap<string, DeliveryPersonSnapshot>,
     private readonly staged: Map<string, DeliveryPersonSnapshot>,
     private readonly stagedEvents: DomainEvent[],
+    private readonly lockedIds: string[],
   ) {}
 
   async findById(id: DeliveryPersonId): Promise<DeliveryPerson | null> {
     const snapshot = this.staged.get(id.value) ?? this.committed.get(id.value);
     if (snapshot === undefined || snapshot.removedAt !== null) return null;
     return DeliveryPerson.reconstitute(id, snapshot);
+  }
+
+  async findByIdForUpdate(id: DeliveryPersonId): Promise<DeliveryPerson | null> {
+    this.lockedIds.push(id.value);
+    return this.findById(id);
   }
 
   async save(person: DeliveryPerson): Promise<void> {
@@ -120,7 +137,14 @@ class InMemoryDispatchBoard implements DispatchBoard {
     return [...this.state.readyOrders];
   }
 
-  async deliveryPersonsWithDeliveryInProgress(): Promise<readonly DeliveryPersonId[]> {
-    return [...this.state.deliveryPersonsInProgress].map((id) => DeliveryPersonId.from(id));
+  async deliveriesInProgress(): Promise<readonly DeliveryInProgress[]> {
+    return [...this.state.deliveriesInProgress].map(([deliveryPersonId, orderId]) => ({
+      deliveryPersonId: DeliveryPersonId.from(deliveryPersonId),
+      orderId: OrderId.from(orderId),
+    }));
+  }
+
+  async hasDeliveryInProgress(id: DeliveryPersonId): Promise<boolean> {
+    return this.state.deliveriesInProgress.has(id.value);
   }
 }

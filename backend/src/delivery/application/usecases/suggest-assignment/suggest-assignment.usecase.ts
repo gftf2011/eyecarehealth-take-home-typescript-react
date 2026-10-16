@@ -28,10 +28,10 @@ export class SuggestAssignmentUseCase implements UseCase<void, AssignmentSuggest
       async ({ deliveryPersons: repository, dispatchBoard }) => {
         const [ready, busy, active] = await Promise.all([
           dispatchBoard.readyOrders(),
-          dispatchBoard.deliveryPersonsWithDeliveryInProgress(),
+          dispatchBoard.deliveriesInProgress(),
           repository.list({ isActive: true }),
         ]);
-        const busyIds = new Set(busy.map((id) => id.value));
+        const busyIds = new Set(busy.map((delivery) => delivery.deliveryPersonId.value));
         return {
           orders: ready,
           deliveryPersons: active.filter((person) => !busyIds.has(person.id.value)),
