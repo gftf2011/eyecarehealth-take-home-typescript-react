@@ -31,7 +31,14 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: 'e2e', include: ['src/**/*.e2e.spec.ts'] },
+        test: {
+          name: 'e2e',
+          include: ['src/**/*.e2e.spec.ts'],
+          globalSetup: ['src/main/database/testing/postgres-global-setup.ts'],
+          fileParallelism: false,
+          testTimeout: 30_000,
+          hookTimeout: 120_000,
+        },
       },
     ],
   },

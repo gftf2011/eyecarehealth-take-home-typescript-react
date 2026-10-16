@@ -17,5 +17,5 @@ export { User, type RegisterUserParams, type UserSnapshot } from './user/user';
 export { UserId } from './user/user-id';
 export { Email } from './user/value-objects/email';
 export { MIN_BCRYPT_COST, PasswordHash } from './user/value-objects/password-hash';
-export { PERMISSIONS, type Permission } from './user/value-objects/permission';
+export { PERMISSIONS, type Permission } from '../../shared-kernel/domain';
 export { ROLES, Role, type RoleValue } from './user/value-objects/role';

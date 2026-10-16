@@ -3,7 +3,7 @@ import { UserPasswordChanged, UserRegistered, UserRoleChanged } from './events';
 import type { UserId } from './user-id';
 import type { Email } from './value-objects/email';
 import type { PasswordHash } from './value-objects/password-hash';
-import type { Permission } from './value-objects/permission';
+import type { Permission } from '../../../shared-kernel/domain';
 import type { Role } from './value-objects/role';
 
 export type RegisterUserParams = {

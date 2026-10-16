@@ -1,5 +1,5 @@
 import { AuthorizationError } from '../../../../shared-kernel/domain';
-import type { Permission } from '../value-objects/permission';
+import type { Permission } from '../../../../shared-kernel/domain';
 import type { RoleValue } from '../value-objects/role';
 
 export class PermissionDeniedError extends AuthorizationError {

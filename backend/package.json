@@ -7,6 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/main/server.ts",
+    "build": "tsup",
+    "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc --noEmit",
     "migrate:latest": "tsx --env-file-if-exists=.env src/main/database/migrate.ts latest",
     "migrate:down": "tsx --env-file-if-exists=.env src/main/database/migrate.ts down",
@@ -20,12 +23,16 @@
     "@testcontainers/postgresql": "^12.2.1",
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
+    "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.1",
+    "fastify": "^5.12.7",
     "kysely": "^0.29.6",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   }
 }
