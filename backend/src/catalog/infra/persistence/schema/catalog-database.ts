@@ -1,5 +1,4 @@
-import type { ColumnType } from 'kysely';
-
+import type { NumericColumn } from '../../../../shared-kernel/infra/database/numeric';
 import type { OutboxDatabase } from '../../../../shared-kernel/infra/outbox/outbox-events.table';
 import type { ProductCategoryValue } from '../../../domain';
 
@@ -8,8 +7,7 @@ export interface ProductsTable {
   id: string;
   name: string;
   description: string;
-  /** `numeric(10,2)`: o driver `pg` devolve como string para não perder precisão. */
-  price: ColumnType<string, string, string>;
+  price: NumericColumn;
   category: ProductCategoryValue;
   image_url: string | null;
   is_available: boolean;
@@ -19,7 +17,23 @@ export interface ProductsTable {
   deleted_at: Date | null;
 }
 
-/** Tabelas visíveis para o Catalog: as próprias e o outbox. */
+/**
+ * Visões somente leitura das tabelas do Ordering, usadas apenas pela camada
+ * anticorrupção. Declaram só as colunas que o Catalog consulta.
+ */
+export interface OrderingOrdersView {
+  id: string;
+  status: string;
+}
+
+export interface OrderingOrderItemsView {
+  order_id: string;
+  product_id: string;
+}
+
+/** Tabelas visíveis para o Catalog: as próprias, o outbox e as visões da ACL. */
 export type CatalogDatabase = OutboxDatabase & {
   products: ProductsTable;
+  orders: OrderingOrdersView;
+  order_items: OrderingOrderItemsView;
 };

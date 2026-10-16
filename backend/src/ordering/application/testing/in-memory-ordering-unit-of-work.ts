@@ -171,8 +171,8 @@ function compareBy(sort: OrderListCriteria['sort']): (a: Order, b: Order) => num
         return a.totalAmount.cents - b.totalAmount.cents;
     }
   };
-  // Desempate pelo ID para a paginação ser estável.
-  return (a, b) => direction * byField(a, b) || a.id.value.localeCompare(b.id.value);
+  // Desempate pelo ID, na mesma direção, para a paginação ser estável.
+  return (a, b) => direction * (byField(a, b) || a.id.value.localeCompare(b.id.value));
 }
 
 class InMemoryProductCatalog implements ProductCatalog {

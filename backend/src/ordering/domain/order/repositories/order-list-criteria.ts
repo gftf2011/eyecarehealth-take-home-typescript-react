@@ -11,6 +11,6 @@ export type OrderListCriteria = {
   readonly status: OrderStatusValue | null;
   /** Instantes `[from, to)` da criação do pedido; `null` em uma ponta = sem limite. */
   readonly createdAt: InstantRange;
-  /** Desempate sempre pelo ID, para a paginação ser estável. */
+  /** Desempate pelo ID na mesma direção, para a paginação ser estável. */
   readonly sort: Sort<OrderSortField>;
 };

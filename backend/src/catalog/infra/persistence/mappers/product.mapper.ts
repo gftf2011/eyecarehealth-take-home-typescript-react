@@ -1,6 +1,7 @@
 import type { Insertable, Selectable } from 'kysely';
 
 import { Money } from '../../../../shared-kernel/domain';
+import { centsToDecimal, decimalToCents } from '../../../../shared-kernel/infra/database/numeric';
 import {
   ImageUrl,
   PreparationTime,
@@ -44,16 +45,4 @@ export function toProductRow(product: Product): Insertable<ProductsTable> {
     updated_at: product.updatedAt,
     deleted_at: product.removedAt,
   };
-}
-
-/** "32.90" → 3290, sem passar por ponto flutuante. */
-function decimalToCents(decimal: string): number {
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(decimal);
-  if (match === null) throw new RangeError(`Valor monetário inválido vindo do banco: ${decimal}`);
-  return Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
-}
-
-/** 3290 → "32.90". */
-function centsToDecimal(cents: number): string {
-  return `${Math.trunc(cents / 100)}.${(cents % 100).toString().padStart(2, '0')}`;
 }

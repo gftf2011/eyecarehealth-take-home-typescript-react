@@ -30,7 +30,17 @@ describe('migrations', () => {
 
   it('criam as tabelas da aplicação', async () => {
     expect(await publicTables(db)).toEqual(
-      expect.arrayContaining(['outbox_events', 'products', 'kysely_migration']),
+      expect.arrayContaining([
+        'outbox_events',
+        'products',
+        'users',
+        'refresh_sessions',
+        'delivery_persons',
+        'orders',
+        'order_items',
+        'order_status_history',
+        'kysely_migration',
+      ]),
     );
   });
 
