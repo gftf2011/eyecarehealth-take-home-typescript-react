@@ -8,25 +8,48 @@ import {
   RateLimitExceededError,
   RouteNotFoundError,
   type Authenticator,
+  type RateLimitCounter,
   type Route,
 } from '../../shared-kernel/presentation';
+import { toRateLimitStore } from '../../shared-kernel/presentation/http/fastify/rate-limit-counter.store';
 import { registerRoutes } from '../../shared-kernel/presentation/http/fastify/register-routes';
+
+/** Verificações do health check por dependência (ex.: `database`, `redis`). */
+export type HealthChecks = Readonly<Record<string, () => Promise<void>>>;
+
+export type RateLimitOptions = {
+  readonly max: number;
+  readonly timeWindowMs: number;
+  /**
+   * Contador externo (ex.: Redis), compartilhado entre réplicas e preservado
+   * entre reinícios. Sem ele, cada processo conta sozinho em memória.
+   */
+  readonly counter?: RateLimitCounter;
+};
 
 export type AppOptions = {
   readonly routes: readonly Route[];
   readonly authenticator: Authenticator;
-  /** Verifica dependências externas (ex.: banco) para o health check. */
-  readonly healthCheck: () => Promise<void>;
+  readonly healthChecks: HealthChecks;
   /** Padrão do enunciado: 100 requisições por minuto por IP. */
-  readonly rateLimit?: { readonly max: number; readonly timeWindowMs: number };
+  readonly rateLimit?: RateLimitOptions;
+  /**
+   * Proxies confiáveis (IPs/CIDRs ou número de saltos) para usar o IP real do
+   * cliente de `X-Forwarded-For` no rate limit. Padrão: não confiar.
+   */
+  readonly trustProxy?: false | number | readonly string[];
   readonly logger?: boolean;
 };
 
-const DEFAULT_RATE_LIMIT = { max: 100, timeWindowMs: 60_000 };
+const DEFAULT_RATE_LIMIT: RateLimitOptions = { max: 100, timeWindowMs: 60_000 };
+const HEALTH_CHECK_TIMEOUT_MS = 1_000;
 
 /** Monta a API HTTP. Não abre porta: o servidor (ou os testes) decide. */
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: options.logger ?? false });
+  const app = Fastify({
+    logger: options.logger ?? false,
+    trustProxy: toFastifyTrustProxy(options.trustProxy ?? false),
+  });
 
   app.setErrorHandler((error, request, reply) => {
     const response = errorToHttp(toDomainError(error));
@@ -43,17 +66,32 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   await app.register(rateLimit, {
     max: limit.max,
     timeWindow: limit.timeWindowMs,
+    // A chave padrão é `request.ip`, que respeita o `trustProxy`.
+    ...(limit.counter !== undefined && {
+      store: toRateLimitStore(limit.counter),
+      // Contador externo fora do ar não derruba a API: deixa passar (fail-open).
+      // A queda é registrada pela própria conexão e aparece no health check.
+      skipOnError: true,
+    }),
     errorResponseBuilder: (_request, context) =>
       new RateLimitExceededError(Math.ceil(context.ttl / 1000)),
   });
 
   app.get('/api/health', async (_request, reply) => {
-    try {
-      await options.healthCheck();
-      return reply.send({ status: 'ok', database: 'up' });
-    } catch {
-      return reply.status(503).send({ status: 'degraded', database: 'down' });
-    }
+    const results = await Promise.all(
+      Object.entries(options.healthChecks).map(async ([name, check]) => {
+        try {
+          await withTimeout(check(), HEALTH_CHECK_TIMEOUT_MS);
+          return [name, 'up'] as const;
+        } catch {
+          return [name, 'down'] as const;
+        }
+      }),
+    );
+    const healthy = results.every(([, state]) => state === 'up');
+    return reply
+      .status(healthy ? 200 : 503)
+      .send({ status: healthy ? 'ok' : 'degraded', checks: Object.fromEntries(results) });
   });
 
   registerRoutes(app, options.routes, options.authenticator);
@@ -69,6 +107,27 @@ function toDomainError(error: unknown): unknown {
   if (error instanceof DomainError) return error;
   if (isClientFastifyError(error)) return new MalformedRequestError(error.message);
   return error;
+}
+
+type FastifyTrustProxy = boolean | string[] | ((address: string, hop: number) => boolean);
+
+/** Número de saltos vira "confiar nos `n` proxies mais próximos". */
+function toFastifyTrustProxy(trustProxy: false | number | readonly string[]): FastifyTrustProxy {
+  if (trustProxy === false) return false;
+  if (typeof trustProxy === 'number') return (_address, hop) => hop < trustProxy;
+  return [...trustProxy];
+}
+
+async function withTimeout(promise: Promise<void>, timeoutMs: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+  try {
+    await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function isClientFastifyError(error: unknown): error is FastifyError {

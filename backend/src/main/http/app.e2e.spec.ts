@@ -30,7 +30,7 @@ describe('app HTTP (comportamento transversal)', () => {
     const response = await testApp.app.inject({ method: 'GET', url: '/api/health' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ok', database: 'up' });
+    expect(response.json()).toEqual({ status: 'ok', checks: { database: 'up' } });
   });
 
   it('404 ROUTE_NOT_FOUND no formato padrão para rotas inexistentes', async () => {

@@ -22,6 +22,7 @@ export {
   type HttpResponse,
 } from './http/http';
 export type { HttpMethod, Route } from './http/route';
+export type { RateLimitCounter, RateLimitHit } from './rate-limit/rate-limit-counter';
 export {
   idParams,
   optionalBooleanQuery,

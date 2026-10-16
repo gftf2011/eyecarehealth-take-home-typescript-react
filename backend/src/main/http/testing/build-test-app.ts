@@ -8,7 +8,7 @@ import { FixedClock } from '../../../shared-kernel/application/testing/fixed-clo
 import { connectToTestDatabase } from '../../../shared-kernel/infra/database/testing/test-database';
 import type { Route } from '../../../shared-kernel/presentation';
 import { StaticAuthenticator } from '../../../shared-kernel/presentation/testing/static-authenticator';
-import { buildApp, type AppOptions } from '../app';
+import { buildApp, type AppOptions, type HealthChecks } from '../app';
 
 export type TestApp = {
   readonly app: FastifyInstance;
@@ -17,23 +17,30 @@ export type TestApp = {
   close(): Promise<void>;
 };
 
+export type TestAppOverrides = Partial<Pick<AppOptions, 'rateLimit' | 'trustProxy'>> & {
+  readonly extraRoutes?: (clock: Clock) => Route[];
+  readonly extraHealthChecks?: HealthChecks;
+};
+
 /**
  * App completo para testes e2e: rotas reais, banco real (Testcontainers) e
  * autenticador de teste. Requisições via `app.inject`, sem abrir porta.
  */
-export async function buildTestApp(
-  overrides: Partial<Pick<AppOptions, 'rateLimit'>> & { extraRoutes?: (clock: Clock) => Route[] } = {},
-): Promise<TestApp> {
+export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<TestApp> {
   const db = connectToTestDatabase<CatalogDatabase>();
   const clock = new FixedClock(new Date('2025-02-01T12:00:00Z'));
 
   const app = await buildApp({
     routes: [...makeCatalogRoutes({ db, clock }), ...(overrides.extraRoutes?.(clock) ?? [])],
     authenticator: new StaticAuthenticator(),
-    healthCheck: async () => {
-      await sql`SELECT 1`.execute(db);
+    healthChecks: {
+      database: async () => {
+        await sql`SELECT 1`.execute(db);
+      },
+      ...overrides.extraHealthChecks,
     },
     rateLimit: overrides.rateLimit ?? { max: 10_000, timeWindowMs: 60_000 },
+    ...(overrides.trustProxy !== undefined && { trustProxy: overrides.trustProxy }),
   });
   await app.ready();
 
