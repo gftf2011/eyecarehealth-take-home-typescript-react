@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { InputValidationError } from '../../../../shared-kernel/application';
 import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
+import { BusinessRuleViolationError } from '../../../../shared-kernel/domain';
 import {
   DeliveryPersonAvailability,
   DeliveryPersonId,
@@ -17,7 +18,7 @@ import {
   COURIER_ID,
   LATER,
 } from '../../../domain/order/testing/order.fixture';
-import { DeliveryPersonNotFoundError } from '../../errors/delivery-person-not-found.error';
+import { AssignedDeliveryPersonUnavailableError } from '../../errors/assigned-delivery-person-unavailable.error';
 import { InMemoryOrderingUnitOfWork } from '../../testing/in-memory-ordering-unit-of-work';
 import { ChangeOrderStatusUseCase } from './change-order-status.usecase';
 
@@ -151,17 +152,20 @@ describe('ChangeOrderStatusUseCase', () => {
       expect(unitOfWork.publishedEvents).toHaveLength(0);
     });
 
-    it('rejeita entregador removido do Delivery com DELIVERY_PERSON_NOT_FOUND', async () => {
+    it('rejeita entregador atribuído que foi removido com 422 DELIVERY_PERSON_UNAVAILABLE', async () => {
       const order = readyOrderWithCourier();
       unitOfWork.givenOrders(order);
 
       const attempt = changeStatus.execute({ id: order.id.value, status: 'delivering' });
 
-      await expect(attempt).rejects.toBeInstanceOf(DeliveryPersonNotFoundError);
+      await expect(attempt).rejects.toBeInstanceOf(AssignedDeliveryPersonUnavailableError);
+      await expect(attempt).rejects.toBeInstanceOf(BusinessRuleViolationError);
       await expect(attempt).rejects.toMatchObject({
-        code: 'DELIVERY_PERSON_NOT_FOUND',
+        code: 'DELIVERY_PERSON_UNAVAILABLE',
+        message: 'O entregador atribuído não está mais disponível',
         details: [{ deliveryPersonId: COURIER_ID }],
       });
+      expect(unitOfWork.committedOrder(order.id.value)?.status.value).toBe('ready');
     });
   });
 

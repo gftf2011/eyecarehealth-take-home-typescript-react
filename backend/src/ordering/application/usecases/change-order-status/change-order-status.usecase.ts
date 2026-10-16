@@ -5,7 +5,7 @@ import {
 } from '../../../../shared-kernel/application';
 import { OrderId, OrderNotFoundError, OrderStatus, type Order } from '../../../domain';
 import { toOrderDto, type OrderDto } from '../../dtos/order.dto';
-import { DeliveryPersonNotFoundError } from '../../errors/delivery-person-not-found.error';
+import { AssignedDeliveryPersonUnavailableError } from '../../errors/assigned-delivery-person-unavailable.error';
 import type { OrderingRepositories, OrderingUnitOfWork } from '../../ports/ordering-unit-of-work';
 
 export type ChangeOrderStatusInput = {
@@ -52,6 +52,6 @@ async function dispatch(
   // Falha cedo (sem consultar nem travar o entregador) se o pedido não pode ser despachado.
   const assigned = order.ensureDispatchable();
   const availability = await deliveryPersons.availabilityOf(assigned);
-  if (availability === null) throw new DeliveryPersonNotFoundError(assigned);
+  if (availability === null) throw new AssignedDeliveryPersonUnavailableError(assigned);
   order.dispatch(availability, now);
 }
