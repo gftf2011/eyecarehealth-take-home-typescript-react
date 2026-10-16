@@ -4,6 +4,7 @@ import { makeCatalogRoutes } from '../catalog/main/catalog.module';
 import type { CatalogDatabase } from '../catalog/infra/persistence/schema/catalog-database';
 import { makeIdentityModule } from '../identity/main/identity.module';
 import type { IdentityDatabase } from '../identity/infra/persistence/schema/identity-database';
+import { subscribeOrderingEventHandlers } from '../ordering/main/ordering-event-handlers';
 import { RedisConnection } from '../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisRateLimitCounter } from '../shared-kernel/infra/cache/redis/redis-rate-limit.counter';
 import { SystemClock } from '../shared-kernel/infra/clock/system-clock';
@@ -16,10 +17,10 @@ async function main(): Promise<void> {
   const env = loadEnv();
   const pool = createPostgresPool(env.DATABASE_URL);
   const clock = new SystemClock();
-  // Handlers de eventos de domínio são inscritos aqui (`events.subscribe(...)`)
-  // à medida que algum contexto precisar reagir a fatos de outro ou avisar
-  // sistemas externos (via outbox).
+  // Cada contexto inscreve aqui os handlers que reagem aos próprios eventos ou
+  // aos de outros contextos, ou que avisam sistemas externos (via outbox).
   const events = new InMemoryEventMediator();
+  subscribeOrderingEventHandlers(events);
 
   // O logger do Fastify só existe depois do app: até lá, erros do Redis vão ao console.
   let logRedisError = (error: Error): void => console.warn('Redis indisponível', error.message);
