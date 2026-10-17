@@ -26,6 +26,7 @@
     "start:migrate": "node --env-file-if-exists=.env dist/migrate.js latest",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
+    "test:architecture": "vitest run --project architecture",
     "test:integration": "vitest run --project integration",
     "test:e2e": "vitest run --project e2e",
     "test:watch": "vitest"
@@ -36,6 +37,7 @@
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2",
+    "archunit": "^2.5.4",
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
@@ -53,5 +55,10 @@
     "pg": "^8.23.1",
     "ws": "^8.22.0",
     "zod": "^4.6.7"
+  },
+  "overrides": {
+    "plantuml-parser": {
+      "fast-glob": "npm:tinyglobby@^0.2.17"
+    }
   }
 }

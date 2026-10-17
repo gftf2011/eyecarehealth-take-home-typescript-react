@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config';
  * - `*.integration.spec.ts`: adapters contra dependências reais (PostgreSQL via
  *   Testcontainers — exige Docker em execução).
  * - `*.e2e.spec.ts`: API HTTP de ponta a ponta.
+ * - `*.architecture.spec.ts`: regras de arquitetura (ArchUnitTS) sobre o
+ *   código-fonte; sem I/O além de ler os arquivos.
  */
 export default defineConfig({
   test: {
@@ -16,6 +18,19 @@ export default defineConfig({
       {
         extends: true,
         test: { name: 'unit', include: ['src/**/*.unit.spec.ts'] },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'architecture',
+          include: ['src/**/*.architecture.spec.ts'],
+          // O ArchUnitTS registra `toPassAsync` no `expect` global: `globals`
+          // fica ligado só neste projeto; os demais seguem importando de 'vitest'.
+          globals: true,
+          setupFiles: ['src/architecture/testing/register-archunit-matchers.ts'],
+          // Monta o grafo de dependências do projeto inteiro (TypeScript compiler).
+          testTimeout: 60_000,
+        },
       },
       {
         extends: true,

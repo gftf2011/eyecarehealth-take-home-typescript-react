@@ -4,7 +4,7 @@ API REST, worker de outbox e gateway WebSocket do painel administrativo da **Fas
 
 - **Node.js 22+**, **TypeScript** estrito (sem `any`), **Fastify 5**, **PostgreSQL 17** com **Kysely**, **Redis 7**, **Zod**, **Vitest** + **Testcontainers**
 - Clean Architecture + DDD: um módulo por bounded context, domínio sem dependências de framework
-- 895 testes (unitários, integração com PostgreSQL/Redis reais, e2e HTTP/WebSocket e performance)
+- Testes unitários, de integração (PostgreSQL/Redis reais), e2e (HTTP/WebSocket), de performance e de arquitetura (ArchUnitTS)
 
 ## Início rápido
 
@@ -183,6 +183,7 @@ curl -s "localhost:3001/api/reports/revenue?startDate=2025-01-01&endDate=2025-12
 ```bash
 npm test                   # todas as suítes
 npm run test:unit          # só unitários (rápidos, sem Docker)
+npm run test:architecture  # regras de arquitetura (ArchUnitTS), sem Docker
 npm run test:integration   # adapters contra PostgreSQL e Redis reais
 npm run test:e2e           # API HTTP e WebSocket de ponta a ponta
 npm run typecheck          # tsc --noEmit (strict)
@@ -199,6 +200,21 @@ O tipo está no nome do arquivo, ao lado do código testado:
 | `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 80 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, seed, migrations — contra bancos reais | 15 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 9 |
+| `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
+
+### Testes de arquitetura
+
+Em [`src/architecture/`](src/architecture), as convenções do projeto viram testes que falham no CI quando alguém as quebra (cada regra também falha se o padrão não selecionar nenhum arquivo, então uma regra nunca passa "por vazio"):
+
+| Arquivo | Regras |
+|---|---|
+| `layers.architecture.spec.ts` | Dependências só para dentro: `domain` não depende de `application`/`infra`/`presentation`/`main`; `application` não depende de `infra`/`presentation`/`main`; `infra` e `presentation` não dependem uma da outra nem de `main`; nenhuma camada depende de `src/main`; sem dependências circulares |
+| `bounded-contexts.architecture.spec.ts` | Nenhum contexto importa código de outro (fatos externos entram por ACL); o shared kernel não depende de nenhum contexto; domínio sem bibliotecas externas; aplicação, controllers e rotas sem banco, cache, HTTP ou criptografia |
+| `conventions.architecture.spec.ts` | Imports sem `.js` e sem `/index`; tipo do teste no nome do arquivo; arquivos de produção com até 400 linhas; casos de uso em `usecases/<nome>/<nome>.usecase.ts` implementando `UseCase`; erros, eventos e repositórios do domínio nas pastas e nomes certos; repositórios só para raízes de agregado; `infra/persistence` organizada por papel; controllers e rotas em um arquivo cada |
+
+As regras valem para o código de produção: testes e pastas `testing/` podem atravessar camadas e contextos para montar cenários.
+
+> **Dependências sem vulnerabilidades (`npm audit` zerado).** O ArchUnitTS depende de `plantuml-parser`, que traz `fast-glob` → `micromatch` → `braces`, com uma vulnerabilidade alta ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)) que ainda não tem versão corrigida. O ArchUnitTS só usa o `parse(texto)` do `plantuml-parser`; o `fast-glob` só é chamado ao ler diagramas do disco, o que o projeto não faz. Por isso o `package.json` tem um `overrides` limitado ao `plantuml-parser` que troca o `fast-glob` pelo [`tinyglobby`](https://github.com/SuperchupuDev/tinyglobby), que não depende de `braces`. As dependências de produção não são afetadas: o ArchUnitTS é `devDependency` e não entra na imagem Docker.
 
 ### Onde estão os testes exigidos pelo desafio
 
@@ -407,7 +423,7 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `npm run migrate:latest` / `npm run migrate:down` | Aplica as migrations pendentes / desfaz a última |
 | `npm run build` | Bundles de produção em `dist/` (`server`, `outbox-relay`, `realtime-gateway`, `migrate`, `seed`) |
 | `npm start`, `start:relay`, `start:realtime`, `start:migrate`, `start:seed` | Rodam os bundles de `dist/` |
-| `npm test`, `test:unit`, `test:integration`, `test:e2e`, `test:watch` | Testes |
+| `npm test`, `test:unit`, `test:architecture`, `test:integration`, `test:e2e`, `test:watch` | Testes |
 | `npm run typecheck` | Verificação de tipos |
 
 ---
