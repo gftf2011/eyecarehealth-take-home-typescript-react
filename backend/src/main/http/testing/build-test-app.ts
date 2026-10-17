@@ -3,6 +3,8 @@ import { sql, type Kysely } from 'kysely';
 
 import { makeCatalogRoutes } from '../../../catalog/main/catalog.module';
 import type { CatalogDatabase } from '../../../catalog/infra/persistence/schema/catalog-database';
+import { makeDeliveryRoutes } from '../../../delivery/main/delivery.module';
+import type { DeliveryDatabase } from '../../../delivery/infra/persistence/schema/delivery-database';
 import { DEFAULT_AUTH_POLICY, type AuthPolicy } from '../../../identity/application/config/auth-policy';
 import { Email, Role, User, UserId, type RoleValue } from '../../../identity/domain';
 import { makeIdentityModule } from '../../../identity/main/identity.module';
@@ -18,6 +20,7 @@ import {
 } from '../../../shared-kernel/infra/cache/redis/testing/test-redis';
 import { connectToTestDatabase } from '../../../shared-kernel/infra/database/testing/test-database';
 import { InMemoryEventMediator } from '../../../shared-kernel/infra/events/in-memory-event-mediator';
+import { PerformanceStopwatch } from '../../../shared-kernel/infra/clock/performance-stopwatch';
 import type { Route } from '../../../shared-kernel/presentation';
 import { StaticAuthenticator } from '../../../shared-kernel/presentation/testing/static-authenticator';
 import { buildApp, type AppOptions, type HealthChecks, type RateLimitOptions } from '../app';
@@ -35,6 +38,7 @@ export type TestApp = {
   readonly db: Kysely<CatalogDatabase>;
   readonly identityDb: Kysely<IdentityDatabase>;
   readonly orderingDb: Kysely<OrderingDatabase>;
+  readonly deliveryDb: Kysely<DeliveryDatabase>;
   readonly clock: FixedClock;
   /** Cadastra um usuário com senha real (bcrypt) para os testes de autenticação. */
   givenUser(email: string, password: string, role: RoleValue): Promise<User>;
@@ -62,6 +66,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
   const db = connectToTestDatabase<CatalogDatabase>();
   const identityDb = connectToTestDatabase<IdentityDatabase>();
   const orderingDb = connectToTestDatabase<OrderingDatabase>();
+  const deliveryDb = connectToTestDatabase<DeliveryDatabase>();
   const redis = await connectToTestRedis();
   const clock = new FixedClock(TEST_APP_START);
   const events = new InMemoryEventMediator();
@@ -82,6 +87,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
       ...identity.routes,
       ...makeCatalogRoutes({ db, clock, events }),
       ...makeOrderingRoutes({ db: orderingDb, clock, events }),
+      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, stopwatch: new PerformanceStopwatch() }),
       ...(overrides.extraRoutes?.(clock) ?? []),
     ],
     authenticator: overrides.auth === 'jwt' ? identity.authenticator : new StaticAuthenticator(),
@@ -109,6 +115,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
     db,
     identityDb,
     orderingDb,
+    deliveryDb,
     clock,
     givenUser: async (email, password, role) => {
       const user = User.register({
@@ -123,7 +130,13 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
     },
     close: async () => {
       await app.close();
-      await Promise.all([db.destroy(), identityDb.destroy(), orderingDb.destroy(), redis.close()]);
+      await Promise.all([
+        db.destroy(),
+        identityDb.destroy(),
+        orderingDb.destroy(),
+        deliveryDb.destroy(),
+        redis.close(),
+      ]);
     },
   };
 }

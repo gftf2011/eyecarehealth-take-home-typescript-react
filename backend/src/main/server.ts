@@ -1,11 +1,14 @@
 import { makeCatalogRoutes } from '../catalog/main/catalog.module';
 import type { CatalogDatabase } from '../catalog/infra/persistence/schema/catalog-database';
+import { makeDeliveryRoutes } from '../delivery/main/delivery.module';
+import type { DeliveryDatabase } from '../delivery/infra/persistence/schema/delivery-database';
 import { makeIdentityModule } from '../identity/main/identity.module';
 import type { IdentityDatabase } from '../identity/infra/persistence/schema/identity-database';
 import { makeOrderingRoutes } from '../ordering/main/ordering.module';
 import type { OrderingDatabase } from '../ordering/infra/persistence/schema/ordering-database';
 import { RedisConnection } from '../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisRateLimitCounter } from '../shared-kernel/infra/cache/redis/redis-rate-limit.counter';
+import { PerformanceStopwatch } from '../shared-kernel/infra/clock/performance-stopwatch';
 import { SystemClock } from '../shared-kernel/infra/clock/system-clock';
 import { createKysely, createPostgresPool } from '../shared-kernel/infra/database/postgres';
 import { InMemoryEventMediator } from '../shared-kernel/infra/events/in-memory-event-mediator';
@@ -27,6 +30,7 @@ async function main(): Promise<void> {
   const catalogDb = createKysely<CatalogDatabase>(pool);
   const identityDb = createKysely<IdentityDatabase>(pool);
   const orderingDb = createKysely<OrderingDatabase>(pool);
+  const deliveryDb = createKysely<DeliveryDatabase>(pool);
 
   const identity = makeIdentityModule({
     db: identityDb,
@@ -48,6 +52,7 @@ async function main(): Promise<void> {
       ...identity.routes,
       ...makeCatalogRoutes({ db: catalogDb, clock, events }),
       ...makeOrderingRoutes({ db: orderingDb, clock, events }),
+      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, stopwatch: new PerformanceStopwatch() }),
     ],
     authenticator: identity.authenticator,
     healthChecks: {
