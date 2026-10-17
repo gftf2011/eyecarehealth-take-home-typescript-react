@@ -4,7 +4,7 @@ import type { WebSocket } from 'ws';
 
 import type { Clock } from '../../shared-kernel/application';
 import type { Permission } from '../../shared-kernel/domain';
-import type { TokenAuthenticator } from '../../shared-kernel/presentation';
+import type { RealtimeAuthenticator } from '../application/ports/realtime-authenticator';
 import { RealtimeHub } from '../application/realtime-hub';
 import { CLOSE_CODES } from '../application/realtime-protocol';
 import { RealtimeSession } from '../application/realtime-session';
@@ -14,7 +14,7 @@ export const REALTIME_PATH = '/realtime';
 
 export type RealtimeAppOptions = {
   readonly hub: RealtimeHub;
-  readonly authenticator: TokenAuthenticator;
+  readonly authenticator: RealtimeAuthenticator;
   readonly clock: Clock;
   /** Permissão exigida para assinar os eventos (painel de pedidos). */
   readonly requiredPermission: Permission;

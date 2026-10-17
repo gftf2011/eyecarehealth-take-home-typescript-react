@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InvalidTokenError, TokenExpiredError, type Clock } from '../../shared-kernel/application';
 import { PERMISSIONS } from '../../shared-kernel/domain';
-import type { TokenAuthenticator, TokenPrincipal } from '../../shared-kernel/presentation';
+import type { RealtimeAuthenticator, RealtimePrincipal } from './ports/realtime-authenticator';
 import { RealtimeHub } from './realtime-hub';
 import type { RealtimeConnection, RealtimeEvent, ServerMessage } from './realtime-protocol';
 import { RealtimeSession } from './realtime-session';
@@ -25,14 +25,14 @@ class FakeConnection implements RealtimeConnection {
 }
 
 /** Tokens de teste: `viewer`, `no-permission`, `boom`; o resto é inválido. */
-class FakeAuthenticator implements TokenAuthenticator {
+class FakeAuthenticator implements RealtimeAuthenticator {
   expiresInMs = 15 * MINUTE;
 
-  async authenticateToken(token: string): Promise<TokenPrincipal> {
+  async authenticateToken(token: string): Promise<RealtimePrincipal> {
     const expiresAt = new Date(Date.now() + this.expiresInMs);
-    if (token === 'viewer') return { id: 'u1', role: 'viewer', permissions: ['orders:read'], expiresAt };
-    if (token === 'admin') return { id: 'u2', role: 'admin', permissions: PERMISSIONS, expiresAt };
-    if (token === 'no-permission') return { id: 'u3', role: 'other', permissions: [], expiresAt };
+    if (token === 'viewer') return { id: 'u1', permissions: ['orders:read'], expiresAt };
+    if (token === 'admin') return { id: 'u2', permissions: PERMISSIONS, expiresAt };
+    if (token === 'no-permission') return { id: 'u3', permissions: [], expiresAt };
     if (token === 'expired') throw new TokenExpiredError();
     if (token === 'boom') throw new Error('falha inesperada');
     throw new InvalidTokenError();

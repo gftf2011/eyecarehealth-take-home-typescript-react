@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import type { Clock } from '../../shared-kernel/application';
 import { AuthenticationError, type Permission } from '../../shared-kernel/domain';
-import type { TokenAuthenticator, TokenPrincipal } from '../../shared-kernel/presentation';
+import type { RealtimeAuthenticator, RealtimePrincipal } from './ports/realtime-authenticator';
 import { CLOSE_CODES, type RealtimeConnection, type RealtimeEvent } from './realtime-protocol';
 
 export type RealtimeSessionOptions = {
@@ -18,7 +18,7 @@ const clientMessageSchema = z.object({ type: z.literal('auth'), accessToken: z.s
 
 type State =
   | { readonly kind: 'awaiting-auth' }
-  | { readonly kind: 'authenticated'; readonly principal: TokenPrincipal }
+  | { readonly kind: 'authenticated'; readonly principal: RealtimePrincipal }
   | { readonly kind: 'closed' };
 
 /**
@@ -37,7 +37,7 @@ export class RealtimeSession {
 
   constructor(
     private readonly connection: RealtimeConnection,
-    private readonly authenticator: TokenAuthenticator,
+    private readonly authenticator: RealtimeAuthenticator,
     private readonly options: RealtimeSessionOptions,
   ) {}
 
@@ -45,7 +45,7 @@ export class RealtimeSession {
     return this.#state.kind === 'authenticated';
   }
 
-  get principal(): TokenPrincipal | null {
+  get principal(): RealtimePrincipal | null {
     return this.#state.kind === 'authenticated' ? this.#state.principal : null;
   }
 
@@ -86,7 +86,7 @@ export class RealtimeSession {
   }
 
   async #authenticate(accessToken: string): Promise<void> {
-    let principal: TokenPrincipal;
+    let principal: RealtimePrincipal;
     try {
       principal = await this.authenticator.authenticateToken(accessToken);
     } catch (error) {
