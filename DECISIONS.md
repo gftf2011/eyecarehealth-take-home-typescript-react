@@ -204,10 +204,10 @@ sequenceDiagram
     API->>DB: pedidos ready, entregadores disponíveis (sem lock)
     API-->>G: sugestão (Húngaro)
     G->>API: POST /orders/:id/dispatch {deliveryPersonId}
-    API->>DB: BEGIN; lock do pedido; lock do entregador
+    API->>DB: BEGIN, lock do pedido, lock do entregador
     API->>DB: revalida status e disponibilidade
     alt ainda válida
-        API->>DB: atribui, passa para delivering, grava outbox; COMMIT
+        API->>DB: atribui, passa para delivering, grava outbox, COMMIT
         API-->>G: 200
     else sugestão desatualizada
         API->>DB: ROLLBACK
