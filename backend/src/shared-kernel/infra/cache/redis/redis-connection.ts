@@ -48,6 +48,11 @@ export class RedisConnection {
     return this.#client.eval(script, keys.length, ...keys, ...args);
   }
 
+  /** Publica em um canal pub/sub; devolve quantos assinantes receberam. */
+  async publish(channel: string, message: string): Promise<number> {
+    return this.#client.publish(channel, message);
+  }
+
   /** Encerra a conexão: graciosamente se conectado, imediatamente se não. */
   async close(): Promise<void> {
     if (this.#client.status === 'ready') await this.#client.quit();

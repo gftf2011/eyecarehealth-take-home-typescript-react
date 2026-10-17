@@ -7,6 +7,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     server: 'src/main/server.ts',
+    'outbox-relay': 'src/main/outbox-relay.ts',
     migrate: 'src/main/database/migrate.ts',
   },
   format: ['esm'],
