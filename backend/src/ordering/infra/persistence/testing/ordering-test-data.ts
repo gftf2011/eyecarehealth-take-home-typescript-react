@@ -26,13 +26,20 @@ export async function insertDeliveryPerson(
   {
     id,
     name = 'Carlos Santos',
+    vehicleType = 'motorcycle',
     isActive = true,
     removed = false,
-  }: { id: string; name?: string; isActive?: boolean; removed?: boolean },
+  }: {
+    id: string;
+    name?: string;
+    vehicleType?: 'bicycle' | 'motorcycle' | 'car';
+    isActive?: boolean;
+    removed?: boolean;
+  },
 ): Promise<void> {
   await sql`
     INSERT INTO delivery_persons (id, name, phone, vehicle_type, is_active, current_latitude, current_longitude, deleted_at)
-    VALUES (${id}, ${name}, '(11) 91234-5678', 'motorcycle', ${isActive}, -23.5489, -46.6388,
+    VALUES (${id}, ${name}, '(11) 91234-5678', ${vehicleType}, ${isActive}, -23.5489, -46.6388,
             ${removed ? sql`now()` : null})
   `.execute(db);
 }
