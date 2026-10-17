@@ -10,6 +10,7 @@ import {
   connectToTestDatabase,
   resetDatabase,
 } from '../../../../shared-kernel/infra/database/testing/test-database';
+import { startBlocked } from '../../../../shared-kernel/infra/database/testing/start-blocked';
 import { InMemoryEventMediator } from '../../../../shared-kernel/infra/events/in-memory-event-mediator';
 import { ChangeOrderStatusUseCase } from '../../../application/usecases/change-order-status/change-order-status.usecase';
 import { ListOrdersUseCase } from '../../../application/usecases/list-orders/list-orders.usecase';
@@ -45,8 +46,6 @@ subscribeOrderingEventHandlers(mediator);
 const unitOfWork = new KyselyOrderingUnitOfWork(db, mediator);
 const NOW = new Date('2025-01-20T16:00:00Z');
 const OTHER_COURIER_ID = '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
-/** Tempo para a segunda transação chegar ao lock e ficar esperando. */
-const LOCK_WAIT_MS = 300;
 
 async function save(...orders: Order[]): Promise<void> {
   await unitOfWork.transaction(async ({ orders: repository }) => {
@@ -64,25 +63,6 @@ function readyOrderAssignedTo(courierId: string): Order {
   order.assignDeliveryPerson(availableCourier(courierId), LATER);
   order.pullDomainEvents();
   return order;
-}
-
-/**
- * Inicia `operation` e confirma que ela ficou bloqueada (ainda não terminou).
- * Devolve o resultado embrulhado em um objeto: devolver a promise direto de
- * uma função async faria quem chama esperar por ela — e a operação espera
- * justamente o lock de quem chama.
- */
-async function startBlocked<T>(
-  operation: () => Promise<T>,
-): Promise<{ readonly outcome: Promise<PromiseSettledResult<T>> }> {
-  let settled = false;
-  const outcome = Promise.allSettled([operation()]).then(([result]) => {
-    settled = true;
-    return result as PromiseSettledResult<T>;
-  });
-  await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS));
-  expect(settled).toBe(false);
-  return { outcome };
 }
 
 describe('KyselyOrderingUnitOfWork', () => {
