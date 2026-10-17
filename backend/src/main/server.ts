@@ -6,6 +6,8 @@ import { makeIdentityModule } from '../identity/main/identity.module';
 import type { IdentityDatabase } from '../identity/infra/persistence/schema/identity-database';
 import { makeOrderingRoutes } from '../ordering/main/ordering.module';
 import type { OrderingDatabase } from '../ordering/infra/persistence/schema/ordering-database';
+import { makeReportingRoutes } from '../reporting/main/reporting.module';
+import type { ReportingDatabase } from '../reporting/infra/persistence/schema/reporting-database';
 import { RedisConnection } from '../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisRateLimitCounter } from '../shared-kernel/infra/cache/redis/redis-rate-limit.counter';
 import { PerformanceStopwatch } from '../shared-kernel/infra/clock/performance-stopwatch';
@@ -31,6 +33,7 @@ async function main(): Promise<void> {
   const identityDb = createKysely<IdentityDatabase>(pool);
   const orderingDb = createKysely<OrderingDatabase>(pool);
   const deliveryDb = createKysely<DeliveryDatabase>(pool);
+  const reportingDb = createKysely<ReportingDatabase>(pool);
 
   const identity = makeIdentityModule({
     db: identityDb,
@@ -53,6 +56,7 @@ async function main(): Promise<void> {
       ...makeCatalogRoutes({ db: catalogDb, clock, events }),
       ...makeOrderingRoutes({ db: orderingDb, clock, events }),
       ...makeDeliveryRoutes({ db: deliveryDb, clock, events, stopwatch: new PerformanceStopwatch() }),
+      ...makeReportingRoutes({ db: reportingDb }),
     ],
     authenticator: identity.authenticator,
     healthChecks: {

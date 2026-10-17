@@ -11,6 +11,8 @@ import { makeIdentityModule } from '../../../identity/main/identity.module';
 import type { IdentityDatabase } from '../../../identity/infra/persistence/schema/identity-database';
 import { makeOrderingRoutes } from '../../../ordering/main/ordering.module';
 import type { OrderingDatabase } from '../../../ordering/infra/persistence/schema/ordering-database';
+import { makeReportingRoutes } from '../../../reporting/main/reporting.module';
+import type { ReportingDatabase } from '../../../reporting/infra/persistence/schema/reporting-database';
 import { KyselyIdentityUnitOfWork } from '../../../identity/infra/persistence/unit-of-work/kysely-identity-unit-of-work';
 import type { Clock } from '../../../shared-kernel/application';
 import { FixedClock } from '../../../shared-kernel/application/testing/fixed-clock';
@@ -67,6 +69,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
   const identityDb = connectToTestDatabase<IdentityDatabase>();
   const orderingDb = connectToTestDatabase<OrderingDatabase>();
   const deliveryDb = connectToTestDatabase<DeliveryDatabase>();
+  const reportingDb = connectToTestDatabase<ReportingDatabase>();
   const redis = await connectToTestRedis();
   const clock = new FixedClock(TEST_APP_START);
   const events = new InMemoryEventMediator();
@@ -88,6 +91,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
       ...makeCatalogRoutes({ db, clock, events }),
       ...makeOrderingRoutes({ db: orderingDb, clock, events }),
       ...makeDeliveryRoutes({ db: deliveryDb, clock, events, stopwatch: new PerformanceStopwatch() }),
+      ...makeReportingRoutes({ db: reportingDb }),
       ...(overrides.extraRoutes?.(clock) ?? []),
     ],
     authenticator: overrides.auth === 'jwt' ? identity.authenticator : new StaticAuthenticator(),
@@ -135,6 +139,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
         identityDb.destroy(),
         orderingDb.destroy(),
         deliveryDb.destroy(),
+        reportingDb.destroy(),
         redis.close(),
       ]);
     },
