@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "migrate:latest": "tsx --env-file-if-exists=.env src/main/database/migrate.ts latest",
     "migrate:down": "tsx --env-file-if-exists=.env src/main/database/migrate.ts down",
+    "seed": "tsx --env-file-if-exists=.env src/main/seed/seed.ts",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

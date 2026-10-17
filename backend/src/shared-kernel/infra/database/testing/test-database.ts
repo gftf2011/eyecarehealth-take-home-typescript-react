@@ -1,7 +1,8 @@
-import { sql, type Kysely } from 'kysely';
+import type { Kysely } from 'kysely';
 import { inject } from 'vitest';
 
 import { createKysely, createPostgresPool } from '../postgres';
+import { truncateApplicationTables } from '../truncate-application-tables';
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -15,18 +16,7 @@ export function connectToTestDatabase<TDatabase>(): Kysely<TDatabase> {
   return createKysely<TDatabase>(createPostgresPool(inject('databaseUrl')));
 }
 
-const MIGRATION_TABLES = new Set(['kysely_migration', 'kysely_migration_lock']);
-
 /** Esvazia todas as tabelas da aplicação (mantém o controle de migrations). */
 export async function resetDatabase<TDatabase>(db: Kysely<TDatabase>): Promise<void> {
-  const { rows } = await sql<{ tablename: string }>`
-    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
-  `.execute(db);
-
-  const tables = rows.map((row) => row.tablename).filter((name) => !MIGRATION_TABLES.has(name));
-  if (tables.length === 0) return;
-
-  await sql`TRUNCATE TABLE ${sql.join(tables.map((name) => sql.table(name)))} RESTART IDENTITY CASCADE`.execute(
-    db,
-  );
+  await truncateApplicationTables(db);
 }
