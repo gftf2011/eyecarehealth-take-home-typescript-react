@@ -1,4 +1,4 @@
-import { AggregateRoot, DomainEvent, Entity, UniqueId } from '../index';
+import { AggregateRoot, DomainEvent, Entity, UniqueId } from '..';
 
 /**
  * Agregado mínimo para exercitar as bases do shared kernel sem depender de

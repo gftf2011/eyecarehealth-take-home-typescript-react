@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidTokenHashError, TokenHash } from '../../index';
+import { InvalidTokenHashError, TokenHash } from '../..';
 
 describe('TokenHash', () => {
   it('aceita SHA-256 hex e normaliza para minúsculas', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidProductDescriptionError, ProductDescription } from '../../index';
+import { InvalidProductDescriptionError, ProductDescription } from '../..';
 
 describe('ProductDescription', () => {
   it.each(['a'.repeat(10), 'a'.repeat(500)])('aceita descrição no limite (%#)', (raw) => {

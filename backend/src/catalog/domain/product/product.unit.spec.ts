@@ -12,7 +12,7 @@ import {
   ProductPriceChanged,
   ProductRemoved,
   ProductUpdated,
-} from '../index';
+} from '..';
 import { buildCreateProductParams, buildProduct, CREATED_AT, LATER } from './testing/product.fixture';
 
 describe('Product', () => {

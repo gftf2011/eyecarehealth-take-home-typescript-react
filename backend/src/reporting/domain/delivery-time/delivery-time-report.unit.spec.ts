@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DeliveryTimeReport, type DeliveryTimeGroupRow } from '../index';
+import { DeliveryTimeReport, type DeliveryTimeGroupRow } from '..';
 
 const group = (
   vehicleType: string,

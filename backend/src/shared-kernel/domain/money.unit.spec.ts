@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidMoneyError, Money } from './index';
+import { InvalidMoneyError, Money } from '.';
 
 describe('Money', () => {
   it.each([

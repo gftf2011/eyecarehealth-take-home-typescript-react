@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { OrdersByStatusReport } from '../index';
+import { OrdersByStatusReport } from '..';
 
 describe('OrdersByStatusReport', () => {
   it('traz os 6 status na ordem do fluxo, com zero para os ausentes', () => {

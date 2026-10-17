@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DatePeriod, InvalidDatePeriodError, LocalDate } from '../index';
+import { DatePeriod, InvalidDatePeriodError, LocalDate } from '..';
 
 const date = (raw: string): LocalDate => LocalDate.parse(raw);
 

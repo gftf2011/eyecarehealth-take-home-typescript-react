@@ -13,7 +13,7 @@ import {
   PersonName,
   PhoneNumber,
   VehicleType,
-} from '../index';
+} from '..';
 import {
   buildDeliveryPerson,
   buildRegisterParams,

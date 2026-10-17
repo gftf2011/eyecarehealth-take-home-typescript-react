@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DeliveryPersonAvailability, DeliveryPersonId } from '../../index';
+import { DeliveryPersonAvailability, DeliveryPersonId } from '../..';
 import { COURIER_ID } from '../testing/order.fixture';
 
 describe('DeliveryPersonAvailability', () => {

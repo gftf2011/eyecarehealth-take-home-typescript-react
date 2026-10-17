@@ -8,7 +8,7 @@ import {
   GeoPoint,
   OrderId,
   type AssignmentPlan,
-} from '../../index';
+} from '../..';
 import { bruteForceMinCost, seededRandom } from '../testing/brute-force';
 import { courierAt, orderAt, unlocatedCourier, uuid } from '../testing/dispatch.fixture';
 import { DispatchOptimizer } from './dispatch-optimizer';

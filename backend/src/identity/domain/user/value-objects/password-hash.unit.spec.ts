@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidPasswordHashError, PasswordHash } from '../../index';
+import { InvalidPasswordHashError, PasswordHash } from '../..';
 import { BCRYPT_COST_10, BCRYPT_COST_12 } from '../testing/user.fixture';
 
 const SALT_AND_HASH = BCRYPT_COST_10.slice(7);

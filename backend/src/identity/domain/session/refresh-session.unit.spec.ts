@@ -8,7 +8,7 @@ import {
   RefreshSessionRotated,
   RefreshSessionStarted,
   type InvalidRefreshTokenReason,
-} from '../index';
+} from '..';
 import {
   buildSession,
   buildStartParams,

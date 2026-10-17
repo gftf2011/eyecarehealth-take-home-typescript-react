@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidPersonNameError, PersonName } from '../../index';
+import { InvalidPersonNameError, PersonName } from '../..';
 
 describe('PersonName', () => {
   it.each(['Ana', 'a'.repeat(100), '  Carlos Santos '])('aceita %j', (raw) => {

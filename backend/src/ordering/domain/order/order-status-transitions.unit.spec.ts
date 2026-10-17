@@ -6,7 +6,7 @@ import {
   OrderStatus,
   OrderStatusChanged,
   type OrderStatusValue,
-} from '../index';
+} from '..';
 import { availableCourier, buildOrderIn, LATER } from './testing/order.fixture';
 
 /** Tabela do enunciado: qualquer par fora dela deve ser rejeitado. */

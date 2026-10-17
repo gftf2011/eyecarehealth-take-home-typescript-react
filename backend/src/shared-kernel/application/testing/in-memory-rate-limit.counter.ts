@@ -1,4 +1,4 @@
-import type { RateLimitCounter, RateLimitHit } from '../index';
+import type { RateLimitCounter, RateLimitHit } from '..';
 
 type Window = { count: number; expiresAt: number };
 

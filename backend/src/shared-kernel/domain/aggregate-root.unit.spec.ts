@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidUniqueIdError } from './index';
+import { InvalidUniqueIdError } from '.';
 import { SampleAggregate as Sample, SampleId } from './testing/sample-aggregate';
 
 describe('UniqueId', () => {

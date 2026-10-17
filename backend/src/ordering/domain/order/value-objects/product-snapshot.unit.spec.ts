@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { InvalidMoneyError, Money } from '../../../../shared-kernel/domain';
-import { ProductId, ProductSnapshot } from '../../index';
+import { ProductId, ProductSnapshot } from '../..';
 import { BURGER_ID } from '../testing/order.fixture';
 
 describe('ProductSnapshot', () => {

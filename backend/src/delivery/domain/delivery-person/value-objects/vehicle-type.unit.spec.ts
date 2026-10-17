@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidVehicleTypeError, VehicleType } from '../../index';
+import { InvalidVehicleTypeError, VehicleType } from '../..';
 
 describe('VehicleType', () => {
   it.each(['bicycle', 'motorcycle', 'car'])('aceita %s', (raw) => {

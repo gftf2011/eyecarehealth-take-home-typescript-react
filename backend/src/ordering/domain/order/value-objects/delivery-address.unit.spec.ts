@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DeliveryAddress, InvalidDeliveryAddressError } from '../../index';
+import { DeliveryAddress, InvalidDeliveryAddressError } from '../..';
 
 describe('DeliveryAddress', () => {
   it.each(['a'.repeat(10), 'a'.repeat(300)])('aceita endereço no limite (%#)', (raw) => {

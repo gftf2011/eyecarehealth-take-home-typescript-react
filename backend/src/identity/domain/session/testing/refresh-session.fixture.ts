@@ -4,7 +4,7 @@ import {
   TokenHash,
   UserId,
   type StartRefreshSessionParams,
-} from '../../index';
+} from '../..';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

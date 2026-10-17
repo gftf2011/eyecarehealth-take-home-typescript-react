@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DatePeriod, LocalDate } from '../../../shared-kernel/domain';
-import { RevenueReport } from '../index';
+import { RevenueReport } from '..';
 
 const january = DatePeriod.between(LocalDate.parse('2025-01-01'), LocalDate.parse('2025-01-05'));
 

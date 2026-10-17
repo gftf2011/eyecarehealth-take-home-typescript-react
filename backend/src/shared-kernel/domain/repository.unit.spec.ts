@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Repository } from './index';
+import type { Repository } from '.';
 import {
   SampleId,
   SampleLineId,

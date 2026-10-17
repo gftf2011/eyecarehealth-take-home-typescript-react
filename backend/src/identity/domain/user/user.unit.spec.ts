@@ -7,7 +7,7 @@ import {
   UserPasswordChanged,
   UserRegistered,
   UserRoleChanged,
-} from '../index';
+} from '..';
 import {
   BCRYPT_COST_12,
   buildRegisterUserParams,

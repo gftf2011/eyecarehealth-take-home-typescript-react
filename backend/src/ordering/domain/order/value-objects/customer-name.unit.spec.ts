@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CustomerName, InvalidCustomerNameError } from '../../index';
+import { CustomerName, InvalidCustomerNameError } from '../..';
 
 describe('CustomerName', () => {
   it.each(['Ana', 'a'.repeat(100), '  Maria Oliveira '])('aceita %j', (raw) => {

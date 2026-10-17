@@ -13,7 +13,7 @@ import {
   Quantity,
   UnavailableProductError,
   type OrderStatusValue,
-} from '../index';
+} from '..';
 import {
   availableCourier,
   BURGER_ID,

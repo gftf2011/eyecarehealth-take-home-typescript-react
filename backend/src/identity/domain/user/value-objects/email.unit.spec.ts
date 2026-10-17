@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Email, InvalidEmailError } from '../../index';
+import { Email, InvalidEmailError } from '../..';
 
 describe('Email', () => {
   it('normaliza com trim e minúsculas', () => {
