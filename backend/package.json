@@ -10,6 +10,10 @@
     "dev": "tsx watch --env-file-if-exists=.env src/main/server.ts",
     "dev:relay": "tsx watch --env-file-if-exists=.env src/main/outbox-relay.ts",
     "dev:realtime": "tsx watch --env-file-if-exists=.env src/main/realtime-gateway.ts",
+    "docker:up": "docker compose up --build --detach --wait && docker compose ps",
+    "docker:logs": "docker compose logs --follow api outbox-relay realtime",
+    "docker:down": "docker compose down",
+    "docker:reset": "docker compose down --volumes && npm run docker:up",
     "build": "tsup",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "start:relay": "node --env-file-if-exists=.env dist/outbox-relay.js",
@@ -18,6 +22,8 @@
     "migrate:latest": "tsx --env-file-if-exists=.env src/main/database/migrate.ts latest",
     "migrate:down": "tsx --env-file-if-exists=.env src/main/database/migrate.ts down",
     "seed": "tsx --env-file-if-exists=.env src/main/seed/seed.ts",
+    "start:seed": "node --env-file-if-exists=.env dist/seed.js",
+    "start:migrate": "node --env-file-if-exists=.env dist/migrate.js latest",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
@@ -45,6 +51,7 @@
     "jose": "^6.2.12",
     "kysely": "^0.29.6",
     "pg": "^8.23.1",
+    "ws": "^8.22.0",
     "zod": "^4.6.7"
   }
 }

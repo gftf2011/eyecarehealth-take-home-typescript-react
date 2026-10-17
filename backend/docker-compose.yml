@@ -1,0 +1,134 @@
+# FastMeals — backend completo com um comando (dentro de backend/):
+#   docker compose up --build
+#
+# Os valores padrão abaixo são de DESENVOLVIMENTO LOCAL (segredos de exemplo,
+# cookie sem Secure por ser HTTP). Para qualquer outro ambiente, defina as
+# variáveis em backend/.env (ver ../.env.example).
+
+# Nome fixo: contêineres, rede e volume não dependem do nome da pasta.
+name: fastmeals
+
+x-backend: &backend
+  build:
+    # Contexto na raiz do repositório: a imagem também leva seed/data.json.
+    # O que entra no contexto é filtrado por backend/Dockerfile.dockerignore.
+    context: ..
+    dockerfile: backend/Dockerfile
+  image: fastmeals-backend:local
+  restart: unless-stopped
+  environment: &backend-env
+    NODE_ENV: production
+    DATABASE_URL: postgresql://${POSTGRES_USER:-fastmeals}:${POSTGRES_PASSWORD:-fastmeals123}@postgres:5432/${POSTGRES_DB:-fastmeals}
+    REDIS_URL: redis://redis:6379
+    JWT_SECRET: ${JWT_SECRET:-dev-only-access-secret-change-me-32-chars}
+    JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret-change-me-32-chars}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fastmeals}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fastmeals123}
+      POSTGRES_DB: ${POSTGRES_DB:-fastmeals}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Job de pré-deploy: aplica as migrations uma vez e sai (nunca no boot da API,
+  # para réplicas não migrarem ao mesmo tempo).
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["node", "dist/migrate.js", "latest"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Popula com seed/data.json. Idempotente: com dados presentes, não faz nada.
+  seed:
+    <<: *backend
+    restart: "no"
+    command: ["node", "dist/seed.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *backend
+    command: ["node", "dist/server.js"]
+    environment:
+      <<: *backend-env
+      PORT: "3001"
+      # HTTP em localhost: em produção (HTTPS) deixe o padrão (Secure).
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  outbox-relay:
+    <<: *backend
+    command: ["node", "dist/outbox-relay.js"]
+    environment:
+      <<: *backend-env
+      RELAY_HEALTH_PORT: "3003"
+      OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-500}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  realtime:
+    <<: *backend
+    command: ["node", "dist/realtime-gateway.js"]
+    environment:
+      <<: *backend-env
+      REALTIME_PORT: "3002"
+      REALTIME_ALLOWED_ORIGINS: ${REALTIME_ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${REALTIME_PORT:-3002}:3002"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

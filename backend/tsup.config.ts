@@ -10,6 +10,8 @@ export default defineConfig({
     'outbox-relay': 'src/main/outbox-relay.ts',
     'realtime-gateway': 'src/main/realtime-gateway.ts',
     migrate: 'src/main/database/migrate.ts',
+    // Em contêiner, o arquivo vem de SEED_FILE (o caminho padrão é relativo a src/).
+    seed: 'src/main/seed/seed.ts',
   },
   format: ['esm'],
   platform: 'node',

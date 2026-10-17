@@ -1,0 +1,14 @@
+# Ignore específico de backend/Dockerfile (o BuildKit usa este arquivo no
+# lugar do .dockerignore da raiz). O contexto é a raiz do repositório, então
+# a regra é de lista permitida: só backend/ e seed/ entram na imagem.
+*
+!backend/
+!seed/
+
+backend/node_modules
+backend/dist
+backend/coverage
+backend/.env
+backend/.env.*
+backend/**/*.log
+**/.DS_Store
