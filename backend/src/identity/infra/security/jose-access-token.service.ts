@@ -5,6 +5,7 @@ import type {
   AccessTokenClaims,
   AccessTokenIssuer,
   AccessTokenVerifier,
+  VerifiedAccessToken,
 } from '../../application/ports/access-token.service';
 import { Role } from '../../domain';
 
@@ -37,7 +38,7 @@ export class JoseAccessTokenService implements AccessTokenIssuer, AccessTokenVer
       .sign(this.#secret);
   }
 
-  async verify(token: string): Promise<AccessTokenClaims> {
+  async verify(token: string): Promise<VerifiedAccessToken> {
     try {
       const { payload } = await jwtVerify(token, this.#secret, {
         issuer: ISSUER,
@@ -46,8 +47,11 @@ export class JoseAccessTokenService implements AccessTokenIssuer, AccessTokenVer
         currentDate: this.clock.now(),
       });
       const role = typeof payload['role'] === 'string' ? payload['role'] : '';
-      if (payload.sub === undefined || !Role.isValid(role)) throw new InvalidTokenError();
-      return { userId: payload.sub, role };
+      // `exp` é obrigatório nos tokens emitidos aqui; sem ele, o token não é deste emissor.
+      if (payload.sub === undefined || !Role.isValid(role) || payload.exp === undefined) {
+        throw new InvalidTokenError();
+      }
+      return { userId: payload.sub, role, expiresAt: new Date(payload.exp * 1000) };
     } catch (error) {
       if (error instanceof errors.JWTExpired) throw new TokenExpiredError();
       if (error instanceof InvalidTokenError) throw error;

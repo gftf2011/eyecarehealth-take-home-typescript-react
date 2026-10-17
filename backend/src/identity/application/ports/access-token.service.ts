@@ -16,10 +16,15 @@ export interface AccessTokenIssuer {
   issue(claims: AccessTokenClaims, issuedAt: Date, expiresAt: Date): Promise<string>;
 }
 
+/** Claims de um token já verificado, com o instante em que ele expira. */
+export type VerifiedAccessToken = AccessTokenClaims & {
+  readonly expiresAt: Date;
+};
+
 /**
  * Verifica assinatura e validade do access token. Lança `TokenExpiredError`
  * (vencido) ou `InvalidTokenError` (ausente, malformado, assinatura inválida).
  */
 export interface AccessTokenVerifier {
-  verify(token: string): Promise<AccessTokenClaims>;
+  verify(token: string): Promise<VerifiedAccessToken>;
 }

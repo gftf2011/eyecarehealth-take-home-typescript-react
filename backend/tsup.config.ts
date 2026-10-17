@@ -8,6 +8,7 @@ export default defineConfig({
   entry: {
     server: 'src/main/server.ts',
     'outbox-relay': 'src/main/outbox-relay.ts',
+    'realtime-gateway': 'src/main/realtime-gateway.ts',
     migrate: 'src/main/database/migrate.ts',
   },
   format: ['esm'],

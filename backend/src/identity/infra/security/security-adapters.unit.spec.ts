@@ -44,7 +44,11 @@ describe('JoseAccessTokenService', () => {
   it('emite e verifica o access token com papel e expiração', async () => {
     const token = await service.issue({ userId: USER_ID, role: 'viewer' }, NOW, IN_15_MIN);
 
-    await expect(service.verify(token)).resolves.toEqual({ userId: USER_ID, role: 'viewer' });
+    await expect(service.verify(token)).resolves.toEqual({
+      userId: USER_ID,
+      role: 'viewer',
+      expiresAt: IN_15_MIN,
+    });
     expect(decodeJwt(token)).toMatchObject({ sub: USER_ID, role: 'viewer', exp: IN_15_MIN.getTime() / 1000 });
   });
 

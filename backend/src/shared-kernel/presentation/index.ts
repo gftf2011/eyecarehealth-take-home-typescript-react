@@ -4,6 +4,7 @@ export {
 } from './auth/authenticated-user';
 export type { Authenticator } from './auth/authenticator';
 export { authorize } from './auth/authorize';
+export type { TokenAuthenticator, TokenPrincipal } from './auth/token-authenticator';
 export { errorToHttp, type ErrorBody } from './errors/error-to-http';
 export {
   ForbiddenError,
