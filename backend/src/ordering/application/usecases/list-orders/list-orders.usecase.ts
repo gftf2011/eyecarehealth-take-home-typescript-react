@@ -1,5 +1,6 @@
 import {
   PageRequest,
+  parseDatePeriodInput,
   parseSortDirection,
   parseSortField,
   toPage,
@@ -7,7 +8,6 @@ import {
   type Page,
   type UseCase,
 } from '../../../../shared-kernel/application';
-import { DatePeriod, LocalDate } from '../../../../shared-kernel/domain';
 import { ORDER_SORT_FIELDS, OrderStatus, type OrderListCriteria } from '../../../domain';
 import { loadDeliveryPersonSummaries, toOrderDto, type OrderDto } from '../../dtos/order.dto';
 import type { OrderingUnitOfWork } from '../../ports/ordering-unit-of-work';
@@ -38,7 +38,7 @@ export class ListOrdersUseCase implements UseCase<ListOrdersInput, Page<OrderDto
     const validated = validateInput({
       page: () => PageRequest.create(input.page, input.limit),
       status: () => (input.status === undefined ? null : OrderStatus.create(input.status).value),
-      period: () => parseCreationPeriod(input.startDate, input.endDate),
+      period: () => parseDatePeriodInput(input.startDate, input.endDate),
       sortField: () => parseSortField(input.sortBy, ORDER_SORT_FIELDS, 'createdAt'),
       sortDirection: () => parseSortDirection(input.sortOrder, 'desc'),
     });
@@ -57,13 +57,4 @@ export class ListOrdersUseCase implements UseCase<ListOrdersInput, Page<OrderDto
       return toPage(slice, validated.page, (order) => toOrderDto(order, summaries));
     });
   }
-}
-
-/** Datas inválidas são reportadas juntas; depois, fim antes do início. */
-function parseCreationPeriod(startDate: string | undefined, endDate: string | undefined): DatePeriod {
-  const { start, end } = validateInput({
-    start: () => (startDate === undefined ? null : LocalDate.parse(startDate, 'startDate')),
-    end: () => (endDate === undefined ? null : LocalDate.parse(endDate, 'endDate')),
-  });
-  return DatePeriod.of({ start, end });
 }

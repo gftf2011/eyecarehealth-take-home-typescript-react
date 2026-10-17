@@ -1,5 +1,7 @@
 export type { Clock } from './clock';
 export { InputValidationError } from './errors/input-validation.error';
+export { RequiredFieldError } from './errors/required-field.error';
+export { parseBoundedDatePeriodInput, parseDatePeriodInput } from './inputs/date-period.input';
 export { DomainEventBuffer } from './events/domain-event-buffer';
 export type { DomainEventHandler, EventHandlingScope } from './events/domain-event-handler';
 export type { EventMediator } from './events/event-mediator';
