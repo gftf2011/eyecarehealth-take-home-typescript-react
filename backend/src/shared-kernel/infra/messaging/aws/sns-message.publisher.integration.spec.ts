@@ -1,7 +1,7 @@
 import { ReceiveMessageCommand } from '@aws-sdk/client-sqs';
 import { describe, expect, it } from 'vitest';
 
-import { BrokerUnavailableError, type PublishedMessage } from '../../../application';
+import type { PublishedMessage } from '../../../application';
 import { createSnsClient } from './aws-clients';
 import { SnsMessagePublisher } from './sns-message.publisher';
 import { createTestMessaging, testAwsConfig, type TestMessaging } from './testing/test-aws';
@@ -18,24 +18,28 @@ function message(topic: string, payload: PublishedMessage['payload'] = { type: '
   };
 }
 
-async function receiveAll(messaging: TestMessaging): Promise<string[]> {
-  const { Messages = [] } = await messaging.sqs.send(
-    new ReceiveMessageCommand({ QueueUrl: messaging.queue.url, MaxNumberOfMessages: 10, WaitTimeSeconds: 2 }),
-  );
-  return Messages.map((received) => received.Body ?? '');
+/** Lê a fila até ela parar de devolver mensagens. */
+async function drain(messaging: TestMessaging): Promise<string[]> {
+  const bodies: string[] = [];
+  for (;;) {
+    const { Messages = [] } = await messaging.sqs.send(
+      new ReceiveMessageCommand({ QueueUrl: messaging.queue.url, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 }),
+    );
+    if (Messages.length === 0) return bodies;
+    bodies.push(...Messages.map((received) => received.Body ?? ''));
+  }
 }
 
 describe('SnsMessagePublisher (Floci)', () => {
   it('a fila assinante recebe o envelope cru, só dos tópicos do filtro', async () => {
-    const messaging = await createTestMessaging({ topics: ['ordering.order-updates'] });
+    const messaging = await createTestMessaging({ topics: ['ordering.order-updates'], visibilityTimeoutSeconds: 30 });
     const publisher = new SnsMessagePublisher(messaging.sns, messaging.topicArn);
     const order = message('ordering.order-updates');
 
-    await publisher.publish(order);
-    await publisher.publish(message('outro.contexto'));
+    const outcomes = await publisher.publishBatch([order, message('outro.contexto')]);
 
-    const bodies = await receiveAll(messaging);
-    expect(bodies.map((body) => JSON.parse(body) as { id: string })).toEqual([
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['published', 'published']);
+    expect((await drain(messaging)).map((body) => JSON.parse(body) as { id: string })).toEqual([
       {
         id: order.id,
         topic: 'ordering.order-updates',
@@ -47,21 +51,33 @@ describe('SnsMessagePublisher (Floci)', () => {
     ]);
   });
 
-  it('mensagem recusada pelo SNS é erro da mensagem (permanente)', async () => {
-    const messaging = await createTestMessaging();
-    const publisher = new SnsMessagePublisher(messaging.sns, messaging.topicArn);
+  it('lote de 25 mensagens (3 chamadas PublishBatch) chega inteiro à fila', async () => {
+    const messaging = await createTestMessaging({ visibilityTimeoutSeconds: 30 });
+    const messages = Array.from({ length: 25 }, () => message('ordering.order-updates'));
 
-    const tooLarge = publisher.publish(message('ordering.order-updates', { blob: 'x'.repeat(300_000) }));
+    const outcomes = await new SnsMessagePublisher(messaging.sns, messaging.topicArn).publishBatch(messages);
 
-    await expect(tooLarge).rejects.toMatchObject({ name: 'InvalidParameterException' });
-    await expect(tooLarge).rejects.not.toBeInstanceOf(BrokerUnavailableError);
+    expect(outcomes.every((outcome) => outcome.status === 'published')).toBe(true);
+    const received = (await drain(messaging)).map((body) => (JSON.parse(body) as { id: string }).id);
+    expect(new Set(received)).toEqual(new Set(messages.map((m) => m.id)));
   });
 
-  it('SNS inalcançável é queda do broker (transitória)', async () => {
+  it('mensagens grandes são divididas pelo limite de bytes e todas saem', async () => {
+    const messaging = await createTestMessaging({ visibilityTimeoutSeconds: 30 });
+    const big = Array.from({ length: 3 }, () => message('ordering.order-updates', { blob: 'x'.repeat(100 * 1024) }));
+
+    const outcomes = await new SnsMessagePublisher(messaging.sns, messaging.topicArn).publishBatch(big);
+
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['published', 'published', 'published']);
+  });
+
+  it('SNS inalcançável: todas ficam como falha transitória', async () => {
     const sns = createSnsClient({ ...testAwsConfig(), endpoint: 'http://127.0.0.1:1' });
     const publisher = new SnsMessagePublisher(sns, 'arn:aws:sns:us-east-1:000000000000:qualquer');
 
-    await expect(publisher.publish(message('ordering.order-updates'))).rejects.toBeInstanceOf(BrokerUnavailableError);
+    const outcomes = await publisher.publishBatch([message('ordering.order-updates'), message('ordering.order-updates')]);
+
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['broker-unavailable', 'broker-unavailable']);
     sns.destroy();
   });
 

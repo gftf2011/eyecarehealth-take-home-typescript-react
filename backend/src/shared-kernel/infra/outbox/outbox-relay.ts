@@ -1,11 +1,11 @@
 import type { Kysely } from 'kysely';
 
-import { BrokerUnavailableError, type Clock, type MessagePublisher } from '../../application';
+import type { Clock, MessagePublisher } from '../../application';
 import type { OutboxDatabase } from './outbox-events.table';
 
 export type RelayBatchResult = {
   readonly published: number;
-  /** 0 ou 1: o lote para na primeira falha (ver `relayBatch`). */
+  /** Mensagens que falharam e continuam pendentes (o loop espera com backoff). */
   readonly failed: number;
 };
 
@@ -60,13 +60,16 @@ export class OutboxRelay implements OutboxRelayCycle {
    *
    * - `FOR UPDATE SKIP LOCKED`: réplicas do relay pegam lotes disjuntos, sem
    *   esperar umas pelas outras nem publicar a mesma mensagem duas vezes.
-   * - Broker fora (`BrokerUnavailableError`): para o lote sem contar
-   *   tentativa; as demais falhariam também, e seguir adiante publicaria
-   *   atualizações de um pedido fora de ordem.
-   * - Falha da mensagem (qualquer outro erro): soma uma tentativa e para o
-   *   lote, para tentar de novo com backoff. Na `maxAttempts`-ésima, a
-   *   mensagem vai para a **fila morta** (`dead_lettered_at`) e o lote segue:
-   *   uma mensagem defeituosa não trava as outras para sempre.
+   * - O lote inteiro vai ao publisher de uma vez (no SNS, `PublishBatch` de
+   *   10 em 10, em paralelo), e cada mensagem tem o próprio resultado: as
+   *   entregues saem da fila, as que falharam ficam.
+   * - Broker fora (`broker-unavailable`): fica pendente sem contar tentativa.
+   * - Recusa da mensagem (`rejected`): soma uma tentativa. Na
+   *   `maxAttempts`-ésima, vai para a **fila morta** (`dead_lettered_at`):
+   *   uma mensagem defeituosa não trava as outras.
+   *
+   * Uma falha não segura as demais, então a ordem entre mensagens do mesmo
+   * agregado não é garantida — o painel só invalida e recarrega pela API.
    */
   async relayBatch(limit: number): Promise<RelayBatchResult> {
     const { result, deadLettered } = await this.db.transaction().execute(async (trx) => {
@@ -82,40 +85,42 @@ export class OutboxRelay implements OutboxRelayCycle {
         .skipLocked()
         .execute();
 
+      const outcomes = await this.publisher.publishBatch(
+        pending.map((row) => ({
+          id: row.id,
+          topic: row.event_name,
+          version: row.event_version,
+          aggregateType: row.aggregate_type,
+          aggregateId: row.aggregate_id,
+          payload: row.payload,
+          occurredAt: row.occurred_at,
+        })),
+      );
+      const outcomeOf = new Map(outcomes.map((outcome) => [outcome.id, outcome]));
+
       const publishedIds: string[] = [];
       const deadLettered: DeadLetteredMessage[] = [];
-      let failed = false;
+      let failed = 0;
       for (const row of pending) {
-        try {
-          await this.publisher.publish({
-            id: row.id,
-            topic: row.event_name,
-            version: row.event_version,
-            aggregateType: row.aggregate_type,
-            aggregateId: row.aggregate_id,
-            payload: row.payload,
-            occurredAt: row.occurred_at,
-          });
+        const outcome = outcomeOf.get(row.id);
+        if (outcome?.status === 'published') {
           publishedIds.push(row.id);
-        } catch (error) {
-          if (error instanceof BrokerUnavailableError) {
-            failed = true;
-            break;
-          }
-          const attempts = row.attempts + 1;
-          const message = describe(error);
-          const dead = attempts >= this.#maxAttempts;
-          await trx
-            .updateTable('outbox_events')
-            .set({ attempts, last_error: message, dead_lettered_at: dead ? this.clock.now() : null })
-            .where('id', '=', row.id)
-            .execute();
-          if (!dead) {
-            failed = true;
-            break;
-          }
-          deadLettered.push({ id: row.id, topic: row.event_name, aggregateId: row.aggregate_id, attempts, error: message });
+          continue;
         }
+        if (outcome?.status !== 'rejected') {
+          failed += 1;
+          continue;
+        }
+        const attempts = row.attempts + 1;
+        const error = outcome.reason.slice(0, MAX_ERROR_LENGTH);
+        const dead = attempts >= this.#maxAttempts;
+        await trx
+          .updateTable('outbox_events')
+          .set({ attempts, last_error: error, dead_lettered_at: dead ? this.clock.now() : null })
+          .where('id', '=', row.id)
+          .execute();
+        if (dead) deadLettered.push({ id: row.id, topic: row.event_name, aggregateId: row.aggregate_id, attempts, error });
+        else failed += 1;
       }
 
       if (publishedIds.length > 0) {
@@ -125,7 +130,7 @@ export class OutboxRelay implements OutboxRelayCycle {
           .where('id', 'in', publishedIds)
           .execute();
       }
-      return { result: { published: publishedIds.length, failed: failed ? 1 : 0 }, deadLettered };
+      return { result: { published: publishedIds.length, failed }, deadLettered };
     });
     // Só depois do commit: o aviso corresponde ao que de fato ficou gravado.
     for (const message of deadLettered) this.#onDeadLettered(message);
@@ -143,7 +148,3 @@ export class OutboxRelay implements OutboxRelayCycle {
   }
 }
 
-function describe(error: unknown): string {
-  const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  return text.slice(0, MAX_ERROR_LENGTH);
-}

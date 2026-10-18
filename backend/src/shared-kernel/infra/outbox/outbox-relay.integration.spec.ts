@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { ReceiveMessageCommand } from '@aws-sdk/client-sqs';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { BrokerUnavailableError, type MessagePublisher, type OutboxMessage, type PublishedMessage } from '../../application';
+import type { MessagePublisher, OutboxMessage, PublishedMessage, PublishOutcome } from '../../application';
 import { FixedClock } from '../../application/testing/fixed-clock';
 import { connectToTestDatabase, resetDatabase } from '../database/testing/test-database';
 import { KyselyOutboxWriter } from './kysely-outbox.writer';
@@ -41,13 +41,18 @@ async function givenPending(count: number): Promise<OutboxMessage[]> {
 /** Publisher em memória: registra o que publicou e pode falhar sob demanda. */
 class RecordingPublisher implements MessagePublisher {
   readonly published: PublishedMessage[] = [];
+  readonly batches: number[] = [];
   failWhen: (message: PublishedMessage) => boolean = () => false;
-  /** Erro lançado quando `failWhen` casa: por padrão, defeito da mensagem (permanente). */
-  failWith: () => Error = () => new Error('payload recusado');
+  /** Como falha quando `failWhen` casa: por padrão, recusa da mensagem (permanente). */
+  failAs: 'rejected' | 'broker-unavailable' = 'rejected';
 
-  async publish(published: PublishedMessage): Promise<void> {
-    if (this.failWhen(published)) throw this.failWith();
-    this.published.push(published);
+  async publishBatch(messages: readonly PublishedMessage[]): Promise<readonly PublishOutcome[]> {
+    this.batches.push(messages.length);
+    return messages.map((message): PublishOutcome => {
+      if (this.failWhen(message)) return { id: message.id, status: this.failAs, reason: 'payload recusado' };
+      this.published.push(message);
+      return { id: message.id, status: 'published' };
+    });
   }
 }
 
@@ -108,13 +113,14 @@ describe('OutboxRelay', () => {
     expect(publisher.published.map((m) => m.payload['n'])).toEqual([0, 1, 2, 3, 4]);
   });
 
-  it('para na primeira falha, soma a tentativa e entrega tudo em ordem quando o broker volta', async () => {
+  it('manda o lote inteiro de uma vez; a recusada soma tentativa sem segurar as outras', async () => {
     await givenPending(4);
     const publisher = new RecordingPublisher();
     publisher.failWhen = (m) => m.payload['n'] === 1;
     const relay = new OutboxRelay(db, publisher, new FixedClock(NOW));
 
-    expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 1 });
+    expect(await relay.relayBatch(10)).toEqual({ published: 3, failed: 1 });
+    expect(publisher.batches).toEqual([4]);
     const attempts = await db.selectFrom('outbox_events').select(['payload', 'attempts']).execute();
     expect(attempts.map((row) => [row.payload['n'], row.attempts]).sort()).toEqual([
       [0, 0],
@@ -122,11 +128,11 @@ describe('OutboxRelay', () => {
       [2, 0],
       [3, 0],
     ]);
-    expect(await pendingCount()).toBe(3);
+    expect(await pendingCount()).toBe(1);
 
     publisher.failWhen = () => false;
-    expect(await relay.relayBatch(10)).toEqual({ published: 3, failed: 0 });
-    expect(publisher.published.map((m) => m.payload['n'])).toEqual([0, 1, 2, 3]);
+    expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 0 });
+    expect(publisher.published.map((m) => m.payload['n'])).toEqual([0, 2, 3, 1]);
   });
 
   it('duas réplicas em paralelo pegam lotes disjuntos: cada mensagem sai uma vez só', async () => {
@@ -165,7 +171,7 @@ describe('OutboxRelay', () => {
     );
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
-      expect(await offline.relayBatch(10)).toEqual({ published: 0, failed: 1 });
+      expect(await offline.relayBatch(10)).toEqual({ published: 0, failed: 2 });
     }
     unreachable.destroy();
 
@@ -195,10 +201,10 @@ describe('OutboxRelay', () => {
       const deadLettered: DeadLetteredMessage[] = [];
       const { publisher, relay } = await poisonedRelay(deadLettered);
 
-      expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 1 });
+      expect(await relay.relayBatch(10)).toEqual({ published: 2, failed: 1 });
       expect(await relay.relayBatch(10)).toEqual({ published: 0, failed: 1 });
       expect(deadLettered).toEqual([]);
-      expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 0 });
+      expect(await relay.relayBatch(10)).toEqual({ published: 0, failed: 0 });
 
       expect(publisher.published.map((m) => m.payload['n'])).toEqual([0, 2]);
       expect(await pendingCount()).toBe(1);
@@ -208,7 +214,7 @@ describe('OutboxRelay', () => {
         .where('dead_lettered_at', 'is not', null)
         .execute();
       expect(dead).toEqual([
-        { id: messages[1]?.id, attempts: MAX_ATTEMPTS, last_error: 'Error: payload recusado', dead_lettered_at: NOW },
+        { id: messages[1]?.id, attempts: MAX_ATTEMPTS, last_error: 'payload recusado', dead_lettered_at: NOW },
       ]);
       expect(deadLettered).toEqual([
         {
@@ -216,7 +222,7 @@ describe('OutboxRelay', () => {
           topic: TOPIC,
           aggregateId: '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b',
           attempts: MAX_ATTEMPTS,
-          error: 'Error: payload recusado',
+          error: 'payload recusado',
         },
       ]);
 
@@ -226,7 +232,7 @@ describe('OutboxRelay', () => {
     it('queda do broker no meio não adianta a morte de uma mensagem', async () => {
       await givenPending(2);
       const { publisher, relay } = await poisonedRelay();
-      publisher.failWith = () => new BrokerUnavailableError();
+      publisher.failAs = 'broker-unavailable';
 
       for (let cycle = 0; cycle < MAX_ATTEMPTS + 2; cycle += 1) await relay.relayBatch(10);
 

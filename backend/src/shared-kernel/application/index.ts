@@ -5,7 +5,7 @@ export { parseBoundedDatePeriodInput, parseDatePeriodInput } from './inputs/date
 export { DomainEventBuffer } from './events/domain-event-buffer';
 export type { DomainEventHandler, EventHandlingScope } from './events/domain-event-handler';
 export type { EventMediator } from './events/event-mediator';
-export { BrokerUnavailableError, type MessagePublisher, type PublishedMessage } from './ports/message-publisher';
+export type { MessagePublisher, PublishedMessage, PublishOutcome } from './ports/message-publisher';
 export { toOutboxMessage, type OutboxMessage, type OutboxWriter } from './ports/outbox-writer';
 export { InvalidTokenError, TokenExpiredError } from './errors/token-errors';
 export { InvalidPaginationError } from './pagination/invalid-pagination.error';

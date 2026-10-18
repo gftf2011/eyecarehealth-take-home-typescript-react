@@ -14,24 +14,24 @@ export type PublishedMessage = {
 };
 
 /**
- * O broker está fora do alcance (conexão caiu, recusou etc.): falha
- * **transitória**, de todas as mensagens e não de uma. O relay espera e tenta
- * de novo sem contar tentativa, então uma queda longa não manda nada para a
- * fila morta.
+ * O que aconteceu com cada mensagem de um lote:
+ * - `published`: entregue ao broker;
+ * - `broker-unavailable`: o broker estava fora do alcance (rede, throttling,
+ *   5xx) — falha **transitória**, de todas e não desta: tentar de novo sem
+ *   contar tentativa, para uma queda longa não mandar nada à fila morta;
+ * - `rejected`: o broker recusou **esta** mensagem (grande demais, inválida)
+ *   — falha **permanente**, que conta para a fila morta.
  */
-export class BrokerUnavailableError extends Error {
-  constructor(options?: ErrorOptions) {
-    super('Broker de mensagens indisponível', options);
-    this.name = 'BrokerUnavailableError';
-  }
-}
+export type PublishOutcome =
+  | { readonly id: string; readonly status: 'published' }
+  | { readonly id: string; readonly status: 'broker-unavailable'; readonly reason: string }
+  | { readonly id: string; readonly status: 'rejected'; readonly reason: string };
 
 /**
- * Port de saída para o broker de mensagens (Redis pub/sub em produção). Lança
- * se não conseguir publicar: o relay mantém a mensagem pendente e tenta de
- * novo. `BrokerUnavailableError` é queda do broker (transitória); qualquer
- * outro erro é da mensagem (permanente) e conta para a fila morta.
+ * Port de saída para o broker de mensagens (SNS em produção). Publica um lote
+ * e devolve um resultado por mensagem, na mesma ordem: uma falha não impede
+ * as outras de sair. Não lança por falha de publicação.
  */
 export interface MessagePublisher {
-  publish(message: PublishedMessage): Promise<void>;
+  publishBatch(messages: readonly PublishedMessage[]): Promise<readonly PublishOutcome[]>;
 }

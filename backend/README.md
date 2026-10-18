@@ -217,7 +217,7 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 81 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 82 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 19 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 9 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
@@ -412,7 +412,7 @@ A entrega é **pelo menos uma vez**: o cliente descarta repetidos pelo `id` e, a
 
 ## Mensageria (SNS + SQS)
 
-O relay publica cada mensagem do outbox **uma vez**, no tópico SNS `fastmeals-events`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`) no atributo `topic`. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
+O relay publica cada mensagem do outbox **uma vez**, no tópico SNS `fastmeals-events`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`) no atributo `topic`. Publica **em lote**: o lote do outbox (até 100 mensagens) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, com resultado por mensagem; uma que falha fica pendente sem segurar as outras. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
 
 | Recurso | Nome | Papel |
 |---|---|---|
