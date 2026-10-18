@@ -162,6 +162,9 @@ services:
         condition: service_healthy
       realtime:
         condition: service_healthy
+      # Sem o relay, as mudanças ficam no outbox e o painel não recebe nada em tempo real.
+      outbox-relay:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 10s
