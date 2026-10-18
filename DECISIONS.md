@@ -350,14 +350,16 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Alternativa.** Mocks do banco: não pegariam constraints, locks, fusos ou um índice ignorado pelo planejador.
 - **Consequências.** ➕ Confiança no que só o banco real mostra. ➖ Integração e e2e exigem Docker e são mais lentos (os unitários continuam rodando sem Docker).
 
-### ADR-13 — Docker: uma imagem e o Compose dentro de `backend/`
+### ADR-13 — Docker: uma imagem por aplicação e um Compose único na raiz
 
 - **Decisão.**
-  - **Imagem:** multi-stage (`node:22-alpine`, usuário não root, só dependências de produção). Cada serviço escolhe o processo pelo comando.
-  - **Compose:** sobe, nesta ordem, `postgres` e `redis` → `migrate` → `seed` → `api`, `outbox-relay` e `realtime`, todos com health check. `npm run docker:up` só termina quando tudo está saudável.
-  - **Contexto de build:** a raiz do repositório, para levar o `seed/data.json`, filtrada por uma allowlist em `Dockerfile.dockerignore`.
-  - **Local do Compose:** dentro de `backend/`, junto com as instruções, para o backend ser autossuficiente.
-- **Consequências.** ➕ Um comando, ambiente reproduzível, seed idempotente. ➖ O enunciado pede um Compose único com frontend; ele será montado quando o frontend existir ([próximos passos](#7-limitações-conhecidas-e-próximos-passos)).
+  - **Imagem do backend:** multi-stage (`node:22-alpine`, usuário não root, só dependências de produção). Cada serviço escolhe o processo pelo comando. Só o `migrate` constrói a imagem; os outros a reaproveitam (vários serviços com `build` da mesma imagem fazem o BuildKit exportá-la em paralelo, e os exports colidem).
+  - **Imagem do frontend:** build do Vite servido por nginx sem root, que faz o proxy de `/api` e `/realtime` para o backend na mesma origem (o cookie `httpOnly` funciona sem CORS), com SPA fallback, cache imutável dos assets e cabeçalhos de segurança (CSP).
+  - **Compose único na raiz:** `docker compose up --build` sobe, nesta ordem, `postgres` e `redis` → `migrate` → `seed` → `api`, `outbox-relay` e `realtime` → `frontend`, todos com health check. Os scripts `npm run docker:*` do backend usam o mesmo arquivo para subir só o backend.
+  - **Proxy confiável:** a rede do projeto tem sub-rede fixa e o nginx um IP fixo; a API confia só nele (`TRUST_PROXY`), então o rate limit por IP vê o cliente real e ninguém forja `X-Forwarded-For` chamando a porta 3001 direto.
+  - **Contexto de build do backend:** a raiz do repositório, para levar o `seed/data.json`, filtrada por uma allowlist em `Dockerfile.dockerignore`.
+- **Alternativa.** Um compose por aplicação (o do backend chegou a existir em `backend/`), unidos na raiz com `include`: duplica a configuração ou exige override, e o comando do enunciado fica na raiz de qualquer jeito.
+- **Consequências.** ➕ Um comando, um arquivo, ambiente reproduzível, seed idempotente. ➖ A sub-rede fixa (`172.30.240.0/24`) pode conflitar com outra rede da máquina; nesse caso basta trocá-la (e o `TRUST_PROXY`) no compose.
 
 ---
 
@@ -431,7 +433,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 ## 7. Limitações conhecidas e próximos passos
 
-- **Frontend** e o **Compose na raiz** com backend + frontend + banco num único comando: as decisões serão adicionadas aqui.
+- **Frontend:** as decisões do painel serão adicionadas aqui.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
 - **Escala do otimizador.** O(k²·K) responde em milissegundos até centenas de pedidos, mas chega a ~2 s com 1000 × 1000. Nessa escala, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
 - **Tempo real sem histórico.** O Redis pub/sub não guarda mensagens: quem reconecta recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams.

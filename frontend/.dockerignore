@@ -1,0 +1,8 @@
+# Contexto do build: frontend/. Só o necessário para instalar e buildar.
+node_modules
+dist
+coverage
+.env
+.env.*
+*.log
+**/.DS_Store

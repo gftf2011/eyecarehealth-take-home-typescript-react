@@ -16,7 +16,19 @@ Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mes
 
 ## Início rápido
 
-Com o backend no ar (`cd backend && npm run docker:up`):
+### Tudo com Docker (recomendado)
+
+Na **raiz do repositório**, um comando sobe banco, Redis, backend e o painel:
+
+```bash
+docker compose up --build
+```
+
+Painel em **http://localhost:3000**. Para parar: `docker compose down` (os dados ficam no volume; `docker compose down --volumes` recria tudo do zero no próximo `up`).
+
+### Desenvolvimento (Vite, com recarga)
+
+Com o backend no ar (`cd backend && npm run docker:up`, que sobe só os serviços do backend do compose da raiz):
 
 ```bash
 cd frontend
@@ -27,6 +39,18 @@ npm run dev        # http://localhost:3000
 Login: `admin@fastmeals.com` / `Admin@123` (acesso total) ou `viewer@fastmeals.com` / `Viewer@123` (somente leitura).
 
 O Vite encaminha `/api` para `http://localhost:3001` e `/realtime` para `ws://localhost:3002`. O painel e a API ficam na **mesma origem**: o cookie do refresh token (`httpOnly`, `SameSite=Strict`, `Path=/api/auth`) funciona sem CORS. Para apontar para outro backend, use `API_PROXY_TARGET` / `REALTIME_PROXY_TARGET` (proxy) ou `VITE_API_BASE_URL` (URL da API no navegador).
+
+### Imagem de produção
+
+[`Dockerfile`](Dockerfile) multi-stage: instala, roda o `typecheck` e o build, e entrega só o `dist/` num **nginx sem root** ([`nginx/default.conf.template`](nginx/default.conf.template)) que:
+
+- faz o proxy de `/api` e `/realtime` (WebSocket) para o backend na **mesma origem**, como o Vite em desenvolvimento;
+- resolve os nomes dos serviços pelo DNS do Docker a cada 10 s (se a API reiniciar com outro IP, o proxy acompanha);
+- devolve o `index.html` para qualquer rota do painel (SPA) e o revalida sempre, para um deploy novo valer na hora;
+- serve os assets com hash em cache longo e imutável, com gzip;
+- envia cabeçalhos de segurança: CSP restrita à própria origem (imagens de produtos podem vir de URLs `https`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` ([`nginx/security-headers.conf`](nginx/security-headers.conf)).
+
+No [`docker-compose.yml`](../docker-compose.yml) da raiz (único para o projeto todo), a API confia **só no IP fixo do nginx** como proxy (`TRUST_PROXY`): o rate limit por IP enxerga o cliente real, e ninguém forja `X-Forwarded-For` chamando a porta 3001 direto.
 
 ---
 

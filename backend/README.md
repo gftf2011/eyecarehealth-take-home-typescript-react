@@ -8,13 +8,17 @@ API REST, worker de outbox e gateway WebSocket do painel administrativo da **Fas
 
 ## Início rápido
 
-Com **Docker** instalado, um comando sobe o backend inteiro (PostgreSQL, Redis, migrations, seed, API, outbox relay e gateway WebSocket) e só termina quando tudo estiver saudável:
+O [`docker-compose.yml`](../docker-compose.yml) é único e fica na **raiz do repositório**. Lá, um comando sobe o projeto inteiro (PostgreSQL, Redis, migrations, seed, API, outbox relay, gateway WebSocket e o painel em http://localhost:3000):
+
+```bash
+docker compose up --build
+```
+
+Para subir **só o backend** (por exemplo, para desenvolver o painel com o Vite), dentro de `backend/`, o script usa o mesmo compose e só termina quando tudo estiver saudável:
 
 ```bash
 cd backend && npm run docker:up
 ```
-
-Sem Node.js na máquina, o equivalente é `docker compose up --build --detach --wait` dentro de `backend/`.
 
 Pronto: API em http://localhost:3001/api, WebSocket em ws://localhost:3002/realtime, login `admin@fastmeals.com` / `Admin@123`. Para parar: `npm run docker:down`.
 
@@ -93,7 +97,7 @@ Cada contexto segue as camadas `domain` → `application` → `infra` → `prese
 
 ### Opção 1 — Docker (recomendado)
 
-O [`docker-compose.yml`](docker-compose.yml) fica nesta pasta. Dentro de `backend/`:
+O [`docker-compose.yml`](../docker-compose.yml) da raiz descreve todos os serviços. Os scripts abaixo, dentro de `backend/`, usam esse compose para cuidar só do backend:
 
 ```bash
 npm run docker:up
@@ -101,14 +105,14 @@ npm run docker:up
 
 | Script | O que faz |
 |---|---|
-| `npm run docker:up` | Constrói a imagem e sobe tudo em segundo plano; termina quando todos os serviços estão saudáveis e mostra o estado de cada um |
+| `npm run docker:up` | Constrói a imagem e sobe o backend em segundo plano (API, relay, gateway e as dependências); termina quando todos os serviços estão saudáveis e mostra o estado de cada um |
 | `npm run docker:logs` | Acompanha os logs da API, do relay e do gateway |
 | `npm run docker:down` | Para e remove os contêineres (os dados do banco ficam no volume) |
 | `npm run docker:reset` | Apaga o volume do banco e sobe tudo de novo, com seed limpo |
 
-Os scripts só chamam o Docker Compose: `docker compose up --build` tem o mesmo efeito, mostrando os logs no terminal.
+Os scripts só chamam o Docker Compose (`docker compose -f ../docker-compose.yml …`).
 
-Sobe, nesta ordem: `postgres` e `redis` → `migrate` (aplica as migrations e sai) → `seed` (popula com `seed/data.json` e sai) → `api`, `outbox-relay` e `realtime`. Todos têm health check. A imagem é construída com a raiz do repositório como contexto (ela leva o `seed/data.json`), filtrada por [`Dockerfile.dockerignore`](Dockerfile.dockerignore), que só deixa entrar `backend/` e `seed/`.
+Sobe, nesta ordem: `postgres` e `redis` → `migrate` (aplica as migrations e sai) → `seed` (popula com `seed/data.json` e sai) → `api`, `outbox-relay` e `realtime`. Todos têm health check. A imagem é construída uma vez (pelo `migrate`) com a raiz do repositório como contexto (ela leva o `seed/data.json`), filtrada por [`Dockerfile.dockerignore`](Dockerfile.dockerignore), que só deixa entrar `backend/` e `seed/`; os outros serviços reaproveitam a mesma imagem.
 
 | Serviço | URL |
 |---|---|
@@ -121,11 +125,13 @@ Sobe, nesta ordem: `postgres` e `redis` → `migrate` (aplica as migrations e sa
 
 O seed é idempotente: num segundo `up`, ele só avisa que o banco já tem dados. Para recriar tudo do zero, use `npm run docker:reset`.
 
-> Os padrões do `docker-compose.yml` são de **desenvolvimento local** (segredos de exemplo, cookie sem `Secure` por ser HTTP). Para outro ambiente, defina as variáveis em `backend/.env`, que o Compose lê automaticamente (ver [`.env.example`](../.env.example)).
+> Os padrões do `docker-compose.yml` são de **desenvolvimento local** (segredos de exemplo, cookie sem `Secure` por ser HTTP). Para outro ambiente, defina as variáveis num `.env` **na raiz**, que o Compose lê automaticamente (ver [`.env.example`](../.env.example)).
+>
+> No compose, a API confia só no IP fixo do nginx do painel como proxy (`TRUST_PROXY`): o rate limit por IP enxerga o cliente real, e ninguém forja `X-Forwarded-For` chamando a porta 3001 direto.
 
 ### Opção 2 — Local, sem Docker para a aplicação
 
-Pré-requisitos: **Node.js 22+**, **PostgreSQL** e **Redis** rodando (por exemplo, só os dois via Docker, dentro de `backend/`: `docker compose up -d postgres redis`).
+Pré-requisitos: **Node.js 22+**, **PostgreSQL** e **Redis** rodando (por exemplo, só os dois via Docker, na raiz: `docker compose up -d postgres redis`).
 
 ```bash
 cd backend

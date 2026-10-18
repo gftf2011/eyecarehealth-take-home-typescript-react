@@ -1,20 +1,23 @@
-# FastMeals — backend completo com um comando (dentro de backend/):
+# FastMeals completo — banco, backend e painel com um comando (na raiz):
 #   docker compose up --build
 #
+# Painel: http://localhost:3000 (admin@fastmeals.com / Admin@123).
+# API:    http://localhost:3001/api · WebSocket: ws://localhost:3002/realtime
+#
 # Os valores padrão abaixo são de DESENVOLVIMENTO LOCAL (segredos de exemplo,
-# cookie sem Secure por ser HTTP). Para qualquer outro ambiente, defina as
-# variáveis em backend/.env (ver ../.env.example).
+# cookie sem Secure por ser HTTP). Para outro ambiente, defina as variáveis
+# num .env nesta pasta (ver .env.example), que o Compose lê sozinho.
 
 # Nome fixo: contêineres, rede e volume não dependem do nome da pasta.
 name: fastmeals
 
+# Uma imagem para todos os processos do backend. Só o `migrate` (o primeiro a
+# subir) a constrói: vários serviços com `build` da mesma imagem fazem o
+# BuildKit exportá-la em paralelo, e os exports colidem. Os demais só a usam
+# (pull_policy: never — é uma imagem local, não está em registry).
 x-backend: &backend
-  build:
-    # Contexto na raiz do repositório: a imagem também leva seed/data.json.
-    # O que entra no contexto é filtrado por backend/Dockerfile.dockerignore.
-    context: ..
-    dockerfile: backend/Dockerfile
   image: fastmeals-backend:local
+  pull_policy: never
   restart: unless-stopped
   environment: &backend-env
     NODE_ENV: production
@@ -53,9 +56,15 @@ services:
       retries: 20
 
   # Job de pré-deploy: aplica as migrations uma vez e sai (nunca no boot da API,
-  # para réplicas não migrarem ao mesmo tempo).
+  # para réplicas não migrarem ao mesmo tempo). Também constrói a imagem.
   migrate:
     <<: *backend
+    build:
+      # Contexto na raiz: a imagem também leva seed/data.json. O que entra no
+      # contexto é filtrado por backend/Dockerfile.dockerignore (lista permitida).
+      context: .
+      dockerfile: backend/Dockerfile
+    pull_policy: build
     restart: "no"
     command: ["node", "dist/migrate.js", "latest"]
     depends_on:
@@ -79,7 +88,9 @@ services:
       PORT: "3001"
       # HTTP em localhost: em produção (HTTPS) deixe o padrão (Secure).
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      TRUST_PROXY: ${TRUST_PROXY:-}
+      # Só o nginx do painel é proxy confiável: o rate limit por IP vê o
+      # cliente real, e ninguém forja X-Forwarded-For chamando a porta 3001.
+      TRUST_PROXY: ${TRUST_PROXY:-172.30.240.10}
     ports:
       - "${API_PORT:-3001}:3001"
     depends_on:
@@ -118,6 +129,7 @@ services:
     environment:
       <<: *backend-env
       REALTIME_PORT: "3002"
+      # O navegador abre o WebSocket a partir da origem do painel.
       REALTIME_ALLOWED_ORIGINS: ${REALTIME_ALLOWED_ORIGINS:-http://localhost:3000}
     ports:
       - "${REALTIME_PORT:-3002}:3002"
@@ -129,6 +141,36 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
+  # Painel: build estático servido por nginx, que faz o proxy de /api e
+  # /realtime para o backend na mesma origem (ver frontend/nginx/).
+  frontend:
+    build:
+      context: frontend
+    image: fastmeals-frontend:local
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+      realtime:
+        condition: service_healthy
+    networks:
+      default:
+        # IP fixo: é o único proxy em que a API confia (TRUST_PROXY do `api`).
+        ipv4_address: 172.30.240.10
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.240.0/24
 
 volumes:
   postgres-data:
