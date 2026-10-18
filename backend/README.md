@@ -2,13 +2,13 @@
 
 API REST, worker de outbox e gateway WebSocket do painel administrativo da **FastMeals**, uma plataforma de delivery de refeições. Gerencia cardápio, pedidos (máquina de estados), entregadores, relatórios analíticos e a **atribuição otimizada de entregadores** (algoritmo Húngaro + distância de Haversine), com atualização do painel em tempo real.
 
-- **Node.js 22+**, **TypeScript** estrito (sem `any`), **Fastify 5**, **PostgreSQL 17** com **Kysely**, **Redis 7**, **Zod**, **Vitest** + **Testcontainers**
+- **Node.js 22+**, **TypeScript** estrito (sem `any`), **Fastify 5**, **PostgreSQL 17** com **Kysely**, **Redis 7**, **AWS SNS + SQS** (emulados localmente pelo [Floci](https://floci.io)), **Zod**, **Vitest** + **Testcontainers**
 - Clean Architecture + DDD: um módulo por bounded context, domínio sem dependências de framework
-- Testes unitários, de integração (PostgreSQL/Redis reais), e2e (HTTP/WebSocket), de performance e de arquitetura (ArchUnitTS)
+- Testes unitários, de integração (PostgreSQL/Redis/Floci reais), e2e (HTTP/WebSocket), de performance e de arquitetura (ArchUnitTS)
 
 ## Início rápido
 
-O [`docker-compose.yml`](../docker-compose.yml) é único e fica na **raiz do repositório**. Lá, um comando sobe o projeto inteiro (PostgreSQL, Redis, migrations, seed, API, outbox relay, gateway WebSocket e o painel em http://localhost:3000):
+O [`docker-compose.yml`](../docker-compose.yml) é único e fica na **raiz do repositório**. Lá, um comando sobe o projeto inteiro (PostgreSQL, Redis, Floci com SNS/SQS, migrations, topologia de mensageria, seed, API, outbox relay, gateway WebSocket e o painel em http://localhost:3000):
 
 ```bash
 docker compose up --build
@@ -33,6 +33,7 @@ Pronto: API em http://localhost:3001/api, WebSocket em ws://localhost:3002/realt
 - [Autenticação e autorização](#autenticação-e-autorização)
 - [Erros](#erros)
 - [Tempo real (WebSocket)](#tempo-real-websocket)
+- [Mensageria (SNS + SQS)](#mensageria-sns--sqs)
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Scripts](#scripts)
 - [Estrutura de pastas](#estrutura-de-pastas)
@@ -55,19 +56,27 @@ O mesmo código (e a mesma imagem Docker) roda em três processos independentes:
                    (server.ts)                                                     │
                                                          outbox-relay (worker) ◄───┘
                                                          (outbox-relay.ts)
-                                                                  │ PUBLISH
+                                                                  │ Publish
                                                                   ▼
- painel <──WebSocket──  realtime :3002  <──SUBSCRIBE──  Redis pub/sub (fastmeals:ordering.order-updates,
-                        (realtime-gateway.ts)                           fastmeals:catalog.product-updates)
+                                                    SNS fastmeals-events (atributo `topic`)
+                                                                  │ assinatura (filtro por tópico, entrega crua)
+                                                                  ▼
+                                   SQS fastmeals-realtime ──5 recebimentos sem sucesso──► SQS fastmeals-realtime-dlq
+                                                                  │ long polling (uma réplica recebe)
+                                                                  ▼
+ painel <──WebSocket──  realtime :3002  ──PUBLISH/SUBSCRIBE──  Redis pub/sub (todas as réplicas recebem)
+                        (realtime-gateway.ts)
 ```
 
 | Processo | Entrypoint | Responsabilidade | Depende de |
 |---|---|---|---|
 | **API** | `src/main/server.ts` | REST, autenticação, regras de negócio; grava eventos de integração no outbox | PostgreSQL, Redis (rate limit), segredos JWT |
-| **Outbox relay** | `src/main/outbox-relay.ts` | Publica as mensagens confirmadas do outbox no Redis; retentativa com backoff; limpeza após 7 dias | PostgreSQL, Redis |
-| **Realtime gateway** | `src/main/realtime-gateway.ts` | WebSocket autenticado; repassa as atualizações de pedidos aos painéis | Redis, segredo do access token |
+| **Outbox relay** | `src/main/outbox-relay.ts` | Publica as mensagens confirmadas do outbox no tópico SNS; retentativa com backoff; fila morta do outbox; limpeza após 7 dias | PostgreSQL, SNS |
+| **Realtime gateway** | `src/main/realtime-gateway.ts` | Consome a fila SQS do tempo real, espalha cada evento pelo Redis entre as réplicas e o repassa aos painéis por WebSocket autenticado | SQS, Redis, segredo do access token |
 
-Por que separados: conexões longas (WebSocket) e o worker não competem com a API, cada um escala e reinicia sozinho, e um deploy da API não derruba os painéis. O relay pode ter várias réplicas (lotes disjuntos via `SKIP LOCKED`); o gateway também (fan-out pelo Redis).
+Dois jobs de uma execução preparam o ambiente: `migrate` (migrations) e `messaging-setup` (tópico, filas, fila morta e assinatura; ver [Mensageria](#mensageria-sns--sqs)).
+
+Por que separados: conexões longas (WebSocket) e o worker não competem com a API, cada um escala e reinicia sozinho, e um deploy da API não derruba os painéis. O relay pode ter várias réplicas (lotes disjuntos via `SKIP LOCKED`); o gateway também (a fila divide as mensagens entre as réplicas, e o Redis as leva a todas).
 
 ### Bounded contexts
 
@@ -112,7 +121,7 @@ npm run docker:up
 
 Os scripts só chamam o Docker Compose (`docker compose -f ../docker-compose.yml …`).
 
-Sobe, nesta ordem: `postgres` e `redis` → `migrate` (aplica as migrations e sai) → `seed` (popula com `seed/data.json` e sai) → `api`, `outbox-relay` e `realtime`. Todos têm health check. A imagem é construída uma vez (pelo `migrate`) com a raiz do repositório como contexto (ela leva o `seed/data.json`), filtrada por [`Dockerfile.dockerignore`](Dockerfile.dockerignore), que só deixa entrar `backend/` e `seed/`; os outros serviços reaproveitam a mesma imagem.
+Sobe, nesta ordem: `postgres`, `redis` e `floci` → `migrate` (aplica as migrations e sai) → `messaging-setup` (cria tópico SNS, filas SQS e assinatura, e sai) e `seed` (popula com `seed/data.json` e sai) → `api`, `outbox-relay` e `realtime`. Todos têm health check. A imagem é construída uma vez (pelo `migrate`) com a raiz do repositório como contexto (ela leva o `seed/data.json`), filtrada por [`Dockerfile.dockerignore`](Dockerfile.dockerignore), que só deixa entrar `backend/` e `seed/`; os outros serviços reaproveitam a mesma imagem.
 
 | Serviço | URL |
 |---|---|
@@ -122,16 +131,17 @@ Sobe, nesta ordem: `postgres` e `redis` → `migrate` (aplica as migrations e sa
 | Health do gateway | http://localhost:3002/health |
 | PostgreSQL | `localhost:5432` (usuário `fastmeals` / senha `fastmeals123`) |
 | Redis | `localhost:6379` |
+| Floci (SNS/SQS) | http://localhost:4566 (credenciais `test` / `test`) |
 
 O seed é idempotente: num segundo `up`, ele só avisa que o banco já tem dados. Para recriar tudo do zero, use `npm run docker:reset`.
 
 > Os padrões do `docker-compose.yml` são de **desenvolvimento local** (segredos de exemplo, cookie sem `Secure` por ser HTTP). Para outro ambiente, defina as variáveis num `.env` **na raiz**, que o Compose lê automaticamente (ver [`.env.example`](../.env.example)).
 >
-> No compose, a API confia em um salto de proxy (`TRUST_PROXY=1`): o nginx do painel, que acrescenta o IP real ao `X-Forwarded-For`, então o rate limit por IP enxerga o cliente real. As portas do backend (API, gateway, Postgres, Redis) só abrem em `127.0.0.1`: ninguém na rede chama a API direto forjando o cabeçalho. Nada depende de sub-rede ou IP fixo.
+> No compose, a API confia em um salto de proxy (`TRUST_PROXY=1`): o nginx do painel, que acrescenta o IP real ao `X-Forwarded-For`, então o rate limit por IP enxerga o cliente real. As portas do backend (API, gateway, Postgres, Redis, Floci) só abrem em `127.0.0.1`: ninguém na rede chama a API direto forjando o cabeçalho. Nada depende de sub-rede ou IP fixo.
 
 ### Opção 2 — Local, sem Docker para a aplicação
 
-Pré-requisitos: **Node.js 22+**, **PostgreSQL** e **Redis** rodando (por exemplo, só os dois via Docker, na raiz: `docker compose up -d postgres redis`).
+Pré-requisitos: **Node.js 22+**, **PostgreSQL**, **Redis** e o **Floci** rodando (por exemplo, via Docker, na raiz: `docker compose up -d postgres redis floci`).
 
 ```bash
 cd backend
@@ -141,7 +151,11 @@ npm run seed                   # aplica as migrations e popula o banco
 npm run dev                    # API em http://localhost:3001
 ```
 
-Para o painel em tempo real, em outros terminais:
+Para o painel em tempo real, crie a topologia de mensageria uma vez e suba o relay e o gateway em outros terminais:
+
+```bash
+npm run messaging:setup        # tópico SNS, fila SQS, fila morta e assinatura no Floci
+```
 
 ```bash
 npm run dev:relay              # worker do outbox
@@ -190,12 +204,12 @@ curl -s "localhost:3001/api/reports/revenue?startDate=2025-01-01&endDate=2025-12
 npm test                   # todas as suítes
 npm run test:unit          # só unitários (rápidos, sem Docker)
 npm run test:architecture  # regras de arquitetura (ArchUnitTS), sem Docker
-npm run test:integration   # adapters contra PostgreSQL e Redis reais
+npm run test:integration   # adapters contra PostgreSQL, Redis e Floci reais
 npm run test:e2e           # API HTTP e WebSocket de ponta a ponta
 npm run typecheck          # tsc --noEmit (strict)
 ```
 
-> **Integração e e2e exigem Docker em execução.** O Vitest sobe PostgreSQL 17 e Redis 7 descartáveis com Testcontainers (uma vez por execução), aplica as migrations reais e destrói tudo ao final. Nada é configurado à mão.
+> **Integração e e2e exigem Docker em execução.** O Vitest sobe PostgreSQL 17, Redis 7 e Floci (SNS/SQS) descartáveis com Testcontainers (uma vez por execução), aplica as migrations reais e destrói tudo ao final. Nada é configurado à mão.
 
 ### Tipos de teste
 
@@ -204,7 +218,7 @@ O tipo está no nome do arquivo, ao lado do código testado:
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
 | `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 81 |
-| `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, seed, migrations — contra bancos reais | 15 |
+| `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 19 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 9 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
 
@@ -396,6 +410,48 @@ A entrega é **pelo menos uma vez**: o cliente descarta repetidos pelo `id` e, a
 
 ---
 
+## Mensageria (SNS + SQS)
+
+O relay publica cada mensagem do outbox **uma vez**, no tópico SNS `fastmeals-events`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`) no atributo `topic`. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
+
+| Recurso | Nome | Papel |
+|---|---|---|
+| Tópico SNS | `fastmeals-events` | Recebe tudo o que sai do outbox |
+| Fila SQS | `fastmeals-realtime` | Assinada no tópico com filtro pelos tópicos do painel e entrega crua (o corpo é o envelope); visibility timeout de 30 s |
+| Fila morta | `fastmeals-realtime-dlq` | Recebe do SQS a mensagem que falhou 5 vezes; guarda por 14 dias |
+
+Em desenvolvimento e nos testes, tudo roda no **[Floci](https://floci.io)** (emulador local da AWS, em `http://localhost:4566`), criado pelo job `messaging-setup` ([`messaging-setup.ts`](src/main/messaging-setup.ts)), que pode rodar de novo sem efeito. Em produção, o mesmo código fala com a AWS: basta não definir `AWS_ENDPOINT_URL` e declarar os recursos na infraestrutura como código.
+
+O gateway lê a fila com long polling e, para cada mensagem, publica o envelope no Redis e só então a apaga. Se não conseguir (Redis fora, envelope inválido), não apaga: a mensagem reaparece depois do visibility timeout e, no 5º recebimento, o próprio SQS a move para a fila morta. A fila entrega cada mensagem a uma réplica do gateway; o Redis a espalha para todas.
+
+### Duas filas mortas
+
+| Onde falha | Fila morta | Listar | Devolver |
+|---|---|---|---|
+| **Publicar** (o SNS recusa a mensagem) | coluna `dead_lettered_at` do outbox | `npm run outbox:dead-letters` | `npm run outbox:redrive -- --all` |
+| **Consumir** (o gateway não consegue repassar) | SQS `fastmeals-realtime-dlq` | `npm run events:dead-letters` | `npm run events:redrive` |
+
+No Docker: `docker compose run --rm --no-deps outbox-relay node dist/outbox-redrive.js list` e `docker compose run --rm --no-deps realtime node dist/events-dead-letters.js list` (ou `redrive`).
+
+### Fila morta do outbox
+
+O relay separa dois tipos de falha:
+
+- **Broker fora** (SNS inalcançável, throttling, erro 5xx, credenciais): espera com backoff e tenta de novo, **sem contar tentativa**. Uma queda longa não mata nenhuma mensagem.
+- **Falha da mensagem** (o SNS a recusou: `InvalidParameter`, por exemplo, mensagem grande demais): soma uma tentativa. Na `OUTBOX_MAX_ATTEMPTS`-ésima (padrão 5), a mensagem ganha `dead_lettered_at` e o erro em `last_error`, sai da fila e as seguintes continuam sendo entregues. O relay registra um log `error` ("Mensagem do outbox enviada para a fila morta").
+
+As mensagens mortas não são apagadas pela retenção. Depois de corrigir a causa, devolva-as à fila; elas voltam com as tentativas zeradas:
+
+```bash
+npm run outbox:dead-letters                    # lista, com o último erro
+npm run outbox:redrive -- --id <uuid>          # devolve uma
+npm run outbox:redrive -- --all                # devolve todas
+```
+
+No Docker: `docker compose run --rm --no-deps outbox-relay node dist/outbox-redrive.js list` (ou `redrive --all`).
+
+---
+
 ## Variáveis de ambiente
 
 Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as suas no boot e falha com uma mensagem clara se algo estiver errado.
@@ -403,7 +459,7 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | Variável | Processos | Padrão | Descrição |
 |---|---|---|---|
 | `DATABASE_URL` | API, relay, seed, migrate | — | Conexão PostgreSQL |
-| `REDIS_URL` | API, relay, gateway | — | Conexão Redis |
+| `REDIS_URL` | API, gateway | — | Conexão Redis |
 | `JWT_SECRET` | API, gateway | — | Segredo do access token (32+ caracteres) |
 | `JWT_REFRESH_SECRET` | API | — | Segredo do refresh token (32+, diferente do anterior) |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | API | `15m` / `7d` | Validade dos tokens |
@@ -414,7 +470,16 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_MS` | API | `5` / `60000` | Tentativas de login por email + IP |
 | `BCRYPT_COST` | API, seed | `10` | Custo do bcrypt (10–15) |
 | `OUTBOX_POLL_INTERVAL_MS` / `OUTBOX_BATCH_SIZE` | relay | `500` / `100` | Latência máxima e tamanho do lote |
+| `OUTBOX_MAX_ATTEMPTS` | relay | `5` | Falhas permanentes de uma mensagem até a fila morta |
 | `RELAY_HEALTH_PORT` | relay | `3003` | Porta interna do health check |
+| `AWS_REGION` | relay, gateway, setup | `us-east-1` | Região AWS |
+| `AWS_ENDPOINT_URL` | relay, gateway, setup | vazio (AWS real) | Endpoint do emulador (`http://localhost:4566` com o Floci) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | relay, gateway, setup | cadeia padrão do SDK | Credenciais (`test` / `test` no Floci) |
+| `EVENTS_TOPIC_ARN` | relay | — | ARN do tópico SNS de eventos |
+| `EVENTS_TOPIC_NAME` | setup | `fastmeals-events` | Nome do tópico a criar |
+| `REALTIME_QUEUE_NAME` / `REALTIME_DLQ_NAME` | gateway, setup | `fastmeals-realtime` / `fastmeals-realtime-dlq` | Fila do tempo real e a fila morta dela |
+| `REALTIME_MAX_RECEIVE_COUNT` | setup | `5` | Recebimentos sem sucesso até a fila morta do SQS |
+| `REALTIME_VISIBILITY_TIMEOUT_SECONDS` | setup | `30` | Quanto a mensagem fica invisível enquanto é processada |
 | `REALTIME_PORT` | gateway | `3002` | Porta do WebSocket |
 | `REALTIME_ALLOWED_ORIGINS` | gateway | `http://localhost:3000` | Origens de navegador aceitas (separadas por vírgula) |
 | `SEED_FILE` | seed | `seed/data.json` da raiz | Arquivo de dados do seed |
@@ -430,7 +495,10 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `npm run dev:relay` / `npm run dev:realtime` | Worker do outbox / gateway WebSocket com recarga |
 | `npm run seed` | Aplica as migrations e popula o banco (`-- --reset` para recriar) |
 | `npm run migrate:latest` / `npm run migrate:down` | Aplica as migrations pendentes / desfaz a última |
-| `npm run build` | Bundles de produção em `dist/` (`server`, `outbox-relay`, `realtime-gateway`, `migrate`, `seed`) |
+| `npm run messaging:setup` | Cria tópico, filas, fila morta e assinatura (Floci ou AWS) |
+| `npm run outbox:dead-letters` / `npm run outbox:redrive` | Lista / devolve à fila as mensagens mortas do outbox (ver [Duas filas mortas](#duas-filas-mortas)) |
+| `npm run events:dead-letters` / `npm run events:redrive` | Lista / devolve à fila do tempo real as mensagens mortas do SQS |
+| `npm run build` | Bundles de produção em `dist/` (`server`, `outbox-relay`, `outbox-redrive`, `realtime-gateway`, `messaging-setup`, `events-dead-letters`, `migrate`, `seed`) |
 | `npm start`, `start:relay`, `start:realtime`, `start:migrate`, `start:seed` | Rodam os bundles de `dist/` |
 | `npm test`, `test:unit`, `test:architecture`, `test:integration`, `test:e2e`, `test:watch` | Testes |
 | `npm run typecheck` | Verificação de tipos |

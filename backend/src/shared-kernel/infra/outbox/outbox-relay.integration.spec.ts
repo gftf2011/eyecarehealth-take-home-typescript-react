@@ -1,17 +1,19 @@
 import { randomUUID } from 'node:crypto';
 
-import { Redis } from 'ioredis';
-import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { ReceiveMessageCommand } from '@aws-sdk/client-sqs';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
-import type { MessagePublisher, OutboxMessage, PublishedMessage } from '../../application';
+import { BrokerUnavailableError, type MessagePublisher, type OutboxMessage, type PublishedMessage } from '../../application';
 import { FixedClock } from '../../application/testing/fixed-clock';
-import { connectToTestRedis } from '../cache/redis/testing/test-redis';
-import { RedisMessagePublisher, type MessageEnvelope } from '../cache/redis/redis-message.publisher';
-import type { RedisConnection } from '../cache/redis/redis-connection';
 import { connectToTestDatabase, resetDatabase } from '../database/testing/test-database';
 import { KyselyOutboxWriter } from './kysely-outbox.writer';
 import type { OutboxDatabase } from './outbox-events.table';
-import { OutboxRelay } from './outbox-relay';
+import { createSnsClient } from '../messaging/aws/aws-clients';
+import { SnsMessagePublisher } from '../messaging/aws/sns-message.publisher';
+import { createTestMessaging, testAwsConfig } from '../messaging/aws/testing/test-aws';
+import type { MessageEnvelope } from '../messaging/message-envelope';
+import { OutboxDeadLetters } from './outbox-dead-letters';
+import { OutboxRelay, type DeadLetteredMessage } from './outbox-relay';
 
 const db = connectToTestDatabase<OutboxDatabase>();
 const NOW = new Date('2025-01-20T12:00:00Z');
@@ -40,9 +42,11 @@ async function givenPending(count: number): Promise<OutboxMessage[]> {
 class RecordingPublisher implements MessagePublisher {
   readonly published: PublishedMessage[] = [];
   failWhen: (message: PublishedMessage) => boolean = () => false;
+  /** Erro lançado quando `failWhen` casa: por padrão, defeito da mensagem (permanente). */
+  failWith: () => Error = () => new Error('payload recusado');
 
   async publish(published: PublishedMessage): Promise<void> {
-    if (this.failWhen(published)) throw new Error('broker fora do ar');
+    if (this.failWhen(published)) throw this.failWith();
     this.published.push(published);
   }
 }
@@ -53,37 +57,35 @@ async function pendingCount(): Promise<number> {
 }
 
 describe('OutboxRelay', () => {
-  let redis: RedisConnection;
-
-  beforeAll(async () => {
-    redis = await connectToTestRedis();
-  });
-
   beforeEach(async () => {
     await resetDatabase(db);
   });
 
   afterAll(async () => {
-    await redis.close();
     await db.destroy();
   });
 
-  it('publica no Redis em ordem e marca como entregues', async () => {
-    const prefix = `test:${randomUUID()}:`;
-    const subscriber = new Redis(inject('redisUrl'));
+  it('publica no SNS em ordem, a fila assinante recebe o envelope e as mensagens ficam entregues', async () => {
+    const messaging = await createTestMessaging();
     const received: MessageEnvelope[] = [];
-    await subscriber.subscribe(`${prefix}${TOPIC}`);
-    subscriber.on('message', (_channel, body: string) => received.push(JSON.parse(body) as MessageEnvelope));
     const messages = await givenPending(3);
-    const relay = new OutboxRelay(db, new RedisMessagePublisher(redis, prefix), new FixedClock(NOW));
+    const relay = new OutboxRelay(db, new SnsMessagePublisher(messaging.sns, messaging.topicArn), new FixedClock(NOW));
 
     const result = await relay.relayBatch(10);
-    await expect.poll(() => received.length).toBe(3);
-    await subscriber.quit();
+    await expect
+      .poll(async () => {
+        const { Messages = [] } = await messaging.sqs.send(
+          new ReceiveMessageCommand({ QueueUrl: messaging.queue.url, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 }),
+        );
+        received.push(...Messages.map((message) => JSON.parse(message.Body ?? '') as MessageEnvelope));
+        return received.length;
+      })
+      .toBe(3);
 
     expect(result).toEqual({ published: 3, failed: 0 });
-    expect(received.map((envelope) => envelope.id)).toEqual(messages.map((m) => m.id));
-    expect(received[0]).toEqual({
+    // Fila padrão: a ordem de chegada não é garantida (o painel só recarrega).
+    expect(new Set(received.map((envelope) => envelope.id))).toEqual(new Set(messages.map((m) => m.id)));
+    expect(received.find((envelope) => envelope.id === messages[0]?.id)).toEqual({
       id: messages[0]?.id,
       topic: TOPIC,
       version: 1,
@@ -152,16 +154,115 @@ describe('OutboxRelay', () => {
     expect(await pendingCount()).toBe(0);
   });
 
-  it('Redis fora do ar: nada é marcado como entregue', async () => {
+  it('SNS fora do ar: nada é entregue e a queda não conta tentativa', async () => {
     await givenPending(2);
+    const unreachable = createSnsClient({ ...testAwsConfig(), endpoint: 'http://127.0.0.1:1' });
     const offline = new OutboxRelay(
       db,
-      { publish: async () => Promise.reject(new Error('ECONNREFUSED')) },
+      new SnsMessagePublisher(unreachable, 'arn:aws:sns:us-east-1:000000000000:qualquer'),
       new FixedClock(NOW),
+      { maxAttempts: 1 },
     );
 
-    expect(await offline.relayBatch(10)).toEqual({ published: 0, failed: 1 });
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      expect(await offline.relayBatch(10)).toEqual({ published: 0, failed: 1 });
+    }
+    unreachable.destroy();
+
     expect(await pendingCount()).toBe(2);
+    const rows = await db.selectFrom('outbox_events').select(['attempts', 'dead_lettered_at']).execute();
+    expect(rows).toEqual([
+      { attempts: 0, dead_lettered_at: null },
+      { attempts: 0, dead_lettered_at: null },
+    ]);
+  });
+
+  describe('fila morta', () => {
+    const MAX_ATTEMPTS = 3;
+
+    async function poisonedRelay(deadLettered: DeadLetteredMessage[] = []) {
+      const publisher = new RecordingPublisher();
+      publisher.failWhen = (m) => m.payload['n'] === 1;
+      const relay = new OutboxRelay(db, publisher, new FixedClock(NOW), {
+        maxAttempts: MAX_ATTEMPTS,
+        onDeadLettered: (message) => deadLettered.push(message),
+      });
+      return { publisher, relay };
+    }
+
+    it('na última tentativa, a mensagem defeituosa sai da fila e as seguintes são entregues', async () => {
+      const messages = await givenPending(3);
+      const deadLettered: DeadLetteredMessage[] = [];
+      const { publisher, relay } = await poisonedRelay(deadLettered);
+
+      expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 1 });
+      expect(await relay.relayBatch(10)).toEqual({ published: 0, failed: 1 });
+      expect(deadLettered).toEqual([]);
+      expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 0 });
+
+      expect(publisher.published.map((m) => m.payload['n'])).toEqual([0, 2]);
+      expect(await pendingCount()).toBe(1);
+      const dead = await db
+        .selectFrom('outbox_events')
+        .select(['id', 'attempts', 'last_error', 'dead_lettered_at'])
+        .where('dead_lettered_at', 'is not', null)
+        .execute();
+      expect(dead).toEqual([
+        { id: messages[1]?.id, attempts: MAX_ATTEMPTS, last_error: 'Error: payload recusado', dead_lettered_at: NOW },
+      ]);
+      expect(deadLettered).toEqual([
+        {
+          id: messages[1]?.id,
+          topic: TOPIC,
+          aggregateId: '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b',
+          attempts: MAX_ATTEMPTS,
+          error: 'Error: payload recusado',
+        },
+      ]);
+
+      expect(await relay.relayBatch(10)).toEqual({ published: 0, failed: 0 });
+    });
+
+    it('queda do broker no meio não adianta a morte de uma mensagem', async () => {
+      await givenPending(2);
+      const { publisher, relay } = await poisonedRelay();
+      publisher.failWith = () => new BrokerUnavailableError();
+
+      for (let cycle = 0; cycle < MAX_ATTEMPTS + 2; cycle += 1) await relay.relayBatch(10);
+
+      const rows = await db.selectFrom('outbox_events').select(['attempts', 'dead_lettered_at']).execute();
+      expect(rows.every((row) => row.attempts === 0 && row.dead_lettered_at === null)).toBe(true);
+    });
+
+    it('a retenção não apaga mensagens mortas', async () => {
+      await givenPending(3);
+      const { relay } = await poisonedRelay();
+      for (let cycle = 0; cycle < MAX_ATTEMPTS; cycle += 1) await relay.relayBatch(10);
+
+      await relay.purgePublishedBefore(new Date(NOW.getTime() + 1));
+
+      expect(await new OutboxDeadLetters(db).list()).toHaveLength(1);
+    });
+
+    it('lista as mortas e, corrigida a causa, o redrive as devolve à fila', async () => {
+      const messages = await givenPending(3);
+      const { publisher, relay } = await poisonedRelay();
+      for (let cycle = 0; cycle < MAX_ATTEMPTS; cycle += 1) await relay.relayBatch(10);
+      const deadLetters = new OutboxDeadLetters(db);
+
+      expect(await deadLetters.list()).toEqual([
+        expect.objectContaining({ id: messages[1]?.id, topic: TOPIC, attempts: MAX_ATTEMPTS, deadLetteredAt: NOW }),
+      ]);
+
+      publisher.failWhen = () => false;
+      expect(await deadLetters.redrive([randomUUID()])).toBe(0);
+      expect(await deadLetters.redrive()).toBe(1);
+      expect(await deadLetters.list()).toEqual([]);
+
+      expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 0 });
+      expect(publisher.published.map((m) => m.payload['n'])).toEqual([0, 2, 1]);
+      expect(await pendingCount()).toBe(0);
+    });
   });
 
   it('a retenção remove só as entregues antes do corte', async () => {

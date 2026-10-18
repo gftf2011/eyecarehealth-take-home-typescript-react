@@ -20,15 +20,19 @@ const MIGRATION_SETS: readonly Record<string, Migration>[] = [
   orderingMigrations,
 ];
 
+/**
+ * Todas as migrations, em ordem cronológica: um contexto pode ganhar uma
+ * migration nova depois das dos outros (ex.: a fila morta do outbox).
+ */
 export function allMigrations(): Record<string, Migration> {
-  const merged: Record<string, Migration> = {};
+  const merged = new Map<string, Migration>();
   for (const set of MIGRATION_SETS) {
     for (const [name, migration] of Object.entries(set)) {
-      if (name in merged) throw new Error(`Migration duplicada: ${name}`);
-      merged[name] = migration;
+      if (merged.has(name)) throw new Error(`Migration duplicada: ${name}`);
+      merged.set(name, migration);
     }
   }
-  return merged;
+  return Object.fromEntries([...merged].sort(([left], [right]) => left.localeCompare(right)));
 }
 
 /**

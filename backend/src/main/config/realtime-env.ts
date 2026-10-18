@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { awsEnvShape, realtimeQueueEnvShape } from './messaging-env';
+
 /** Lista separada por vírgula; `*` não é aceito (qualquer site abriria sockets). */
 const originsSchema = z
   .string()
@@ -14,12 +16,15 @@ const originsSchema = z
   });
 
 /**
- * Configuração do gateway de tempo real: só Redis e o segredo do access
- * token (sem banco nem configurações da API).
+ * Configuração do gateway de tempo real: a fila SQS de onde lê os eventos, o
+ * Redis que os espalha entre as réplicas e o segredo do access token (sem
+ * banco nem configurações da API).
  */
 const realtimeEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   REDIS_URL: z.string().min(1),
+  ...awsEnvShape,
+  REALTIME_QUEUE_NAME: realtimeQueueEnvShape.REALTIME_QUEUE_NAME,
   /** O mesmo segredo da API: o gateway só verifica tokens, nunca emite. */
   JWT_SECRET: z.string().min(32, 'O segredo JWT deve ter pelo menos 32 caracteres'),
   REALTIME_HOST: z.string().default('0.0.0.0'),

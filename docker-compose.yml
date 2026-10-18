@@ -3,6 +3,7 @@
 #
 # Painel: http://localhost:3000 (admin@fastmeals.com / Admin@123).
 # API:    http://localhost:3001/api · WebSocket: ws://localhost:3002/realtime
+# AWS local (Floci, SNS/SQS): http://localhost:4566
 #
 # Os valores padrão abaixo são de DESENVOLVIMENTO LOCAL (segredos de exemplo,
 # cookie sem Secure por ser HTTP). Para outro ambiente, defina as variáveis
@@ -28,6 +29,17 @@ x-backend: &backend
     REDIS_URL: redis://redis:6379
     JWT_SECRET: ${JWT_SECRET:-dev-only-access-secret-change-me-32-chars}
     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret-change-me-32-chars}
+
+# Mensageria: SNS/SQS no Floci (emulador local da AWS). Para usar uma conta
+# AWS de verdade, aponte AWS_ENDPOINT_URL para vazio e informe credenciais.
+x-aws-env: &aws-env
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://floci:4566}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  EVENTS_TOPIC_NAME: ${EVENTS_TOPIC_NAME:-fastmeals-events}
+  REALTIME_QUEUE_NAME: ${REALTIME_QUEUE_NAME:-fastmeals-realtime}
+  REALTIME_DLQ_NAME: ${REALTIME_DLQ_NAME:-fastmeals-realtime-dlq}
 
 services:
   postgres:
@@ -57,6 +69,42 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
+  # Emulador local da AWS (só SNS e SQS são usados). Estado persistente no
+  # volume: reiniciar o contêiner não perde filas nem mensagens.
+  floci:
+    image: floci/floci:2.1.0
+    restart: unless-stopped
+    environment:
+      # URLs de fila com o nome do serviço, alcançáveis pelos outros contêineres.
+      FLOCI_HOSTNAME: floci
+      FLOCI_STORAGE_MODE: persistent
+    ports:
+      - "127.0.0.1:${FLOCI_PORT:-4566}:4566"
+    volumes:
+      - floci-data:/app/data
+    healthcheck:
+      # A imagem não tem curl, wget nem grep: HTTP à mão pelo /dev/tcp do bash.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/4566 && printf 'GET /_floci/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && read -r status <&3 && [[ $$status == *' 200 '* ]]"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Job de pré-deploy: cria tópico SNS, fila do tempo real, fila morta e a
+  # assinatura entre eles (pode rodar de novo sem efeito) e sai.
+  messaging-setup:
+    <<: *backend
+    restart: "no"
+    command: ["node", "dist/messaging-setup.js"]
+    environment:
+      <<: [*backend-env, *aws-env]
+      REALTIME_MAX_RECEIVE_COUNT: ${REALTIME_MAX_RECEIVE_COUNT:-5}
+      REALTIME_VISIBILITY_TIMEOUT_SECONDS: ${REALTIME_VISIBILITY_TIMEOUT_SECONDS:-30}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      floci:
+        condition: service_healthy
 
   # Job de pré-deploy: aplica as migrations uma vez e sai (nunca no boot da API,
   # para réplicas não migrarem ao mesmo tempo). Também constrói a imagem.
@@ -113,15 +161,16 @@ services:
     <<: *backend
     command: ["node", "dist/outbox-relay.js"]
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *aws-env]
+      # O Floci usa a conta 000000000000; na AWS, o ARN do tópico real.
+      EVENTS_TOPIC_ARN: ${EVENTS_TOPIC_ARN:-arn:aws:sns:us-east-1:000000000000:fastmeals-events}
       RELAY_HEALTH_PORT: "3003"
       OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-500}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
     depends_on:
-      migrate:
+      messaging-setup:
         condition: service_completed_successfully
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/health"]
       interval: 10s
@@ -132,7 +181,7 @@ services:
     <<: *backend
     command: ["node", "dist/realtime-gateway.js"]
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *aws-env]
       REALTIME_PORT: "3002"
       # O navegador abre o WebSocket a partir da origem do painel (acompanha
       # FRONTEND_PORT, se a 3000 estiver ocupada na máquina).
@@ -142,6 +191,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      messaging-setup:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health"]
       interval: 10s
@@ -173,3 +224,4 @@ services:
 
 volumes:
   postgres-data:
+  floci-data:

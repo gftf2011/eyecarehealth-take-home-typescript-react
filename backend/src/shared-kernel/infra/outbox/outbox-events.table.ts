@@ -14,7 +14,12 @@ export interface OutboxEventsTable {
   payload: ColumnType<JsonObject, string, string>;
   occurred_at: Date;
   published_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  /** Falhas permanentes de publicação (queda do broker não conta). */
   attempts: Generated<number>;
+  /** Preenchida ao desistir da mensagem (fila morta); `null` = segue na fila. */
+  dead_lettered_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  /** Última falha de publicação, para investigar a mensagem morta. */
+  last_error: ColumnType<string | null, string | null | undefined, string | null>;
   created_at: Generated<Date>;
 }
 

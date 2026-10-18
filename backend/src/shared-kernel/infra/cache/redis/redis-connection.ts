@@ -38,6 +38,11 @@ export class RedisConnection {
     await once(this.#client, 'ready');
   }
 
+  /** Conectado e aceitando comandos (sem fila offline, comandos fora disso falham). */
+  get isReady(): boolean {
+    return this.#client.status === 'ready';
+  }
+
   /** Lança se o Redis não responder (usado pelo health check). */
   async ping(): Promise<void> {
     await this.#client.ping();

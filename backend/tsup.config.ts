@@ -8,6 +8,9 @@ export default defineConfig({
   entry: {
     server: 'src/main/server.ts',
     'outbox-relay': 'src/main/outbox-relay.ts',
+    'outbox-redrive': 'src/main/outbox-redrive.ts',
+    'messaging-setup': 'src/main/messaging-setup.ts',
+    'events-dead-letters': 'src/main/events-dead-letters.ts',
     'realtime-gateway': 'src/main/realtime-gateway.ts',
     migrate: 'src/main/database/migrate.ts',
     // Em contêiner, o arquivo vem de SEED_FILE (o caminho padrão é relativo a src/).

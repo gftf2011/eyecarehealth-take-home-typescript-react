@@ -11,15 +11,20 @@ import { buildTestApp, TEST_SECRETS, type TestApp } from '../../main/http/testin
 import { ORDER_UPDATES_TOPIC } from '../../ordering/application/messages/order-update.message';
 import { insertProduct } from '../../ordering/infra/persistence/testing/ordering-test-data';
 import { connectToTestRedis } from '../../shared-kernel/infra/cache/redis/testing/test-redis';
-import { channelOf, RedisMessagePublisher } from '../../shared-kernel/infra/cache/redis/redis-message.publisher';
+import { channelOf } from '../../shared-kernel/infra/cache/redis/redis-channel';
 import type { RedisConnection } from '../../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisSubscription } from '../../shared-kernel/infra/cache/redis/redis-subscription';
+import { SystemClock } from '../../shared-kernel/infra/clock/system-clock';
 import { resetDatabase } from '../../shared-kernel/infra/database/testing/test-database';
 import type { OutboxDatabase } from '../../shared-kernel/infra/outbox/outbox-events.table';
+import { SnsMessagePublisher } from '../../shared-kernel/infra/messaging/aws/sns-message.publisher';
+import { SqsQueueConsumer } from '../../shared-kernel/infra/messaging/aws/sqs-queue-consumer';
+import { createTestMessaging } from '../../shared-kernel/infra/messaging/aws/testing/test-aws';
 import { OutboxRelay } from '../../shared-kernel/infra/outbox/outbox-relay';
 import { RealtimeHub } from '../application/realtime-hub';
 import type { ServerMessage } from '../application/realtime-protocol';
 import { toRealtimeEvent } from '../infra/broker-envelope';
+import { RealtimeFanoutForwarder } from '../infra/realtime-fanout.forwarder';
 import { buildRealtimeApp, REALTIME_PATH } from './realtime-app';
 
 const BURGER_ID = '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b';
@@ -33,12 +38,16 @@ type Client = {
   readonly closed: Promise<{ code: number; reason: string }>;
 };
 
-describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocket)', () => {
+describe('Gateway de tempo real (API → outbox → relay → SNS → SQS → Redis → WebSocket)', () => {
   let api: TestApp;
   let gateway: FastifyInstance;
   let subscription: RedisSubscription;
   let redis: RedisConnection;
   let relay: OutboxRelay;
+  let consumer: SqsQueueConsumer;
+  /** Outra réplica do gateway: só assina o Redis, sem consumir a fila. */
+  let replica: RedisSubscription;
+  const replicaReceived: string[] = [];
   let url: string;
   /** Prefixo próprio dos canais: o Redis de teste é compartilhado. */
   const channelPrefix = `test:${randomUUID()}:`;
@@ -46,11 +55,25 @@ describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocke
   beforeAll(async () => {
     api = await buildTestApp({ auth: 'jwt' });
     redis = await connectToTestRedis();
+    const messaging = await createTestMessaging({ topics: [ORDER_UPDATES_TOPIC], visibilityTimeoutSeconds: 30 });
     relay = new OutboxRelay(
       api.orderingDb as unknown as Kysely<OutboxDatabase>,
-      new RedisMessagePublisher(redis, channelPrefix),
+      new SnsMessagePublisher(messaging.sns, messaging.topicArn),
       api.clock,
     );
+    const forwarder = new RealtimeFanoutForwarder(redis, channelPrefix);
+    consumer = new SqsQueueConsumer(messaging.sqs, {
+      queueUrl: messaging.queue.url,
+      handle: (message) => forwarder.forward(message.body),
+      onError: () => undefined,
+      clock: new SystemClock(),
+      waitTimeSeconds: 1,
+    });
+    consumer.start();
+    replica = await RedisSubscription.open(inject('redisUrl'), [channelOf(ORDER_UPDATES_TOPIC, channelPrefix)], {
+      onMessage: (_channel, body) => replicaReceived.push(body),
+      onError: () => undefined,
+    });
 
     const hub = new RealtimeHub();
     subscription = await RedisSubscription.open(inject('redisUrl'), [channelOf(ORDER_UPDATES_TOPIC, channelPrefix)], {
@@ -67,7 +90,7 @@ describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocke
       clock: api.clock,
       requiredPermission: 'orders:read',
       allowedOrigins: [ALLOWED_ORIGIN],
-      healthChecks: { redis: () => subscription.isReady },
+      healthChecks: { redis: () => subscription.isReady, queue: () => consumer.isAlive(60_000) },
       authTimeoutMs: 300,
     });
     await gateway.listen({ host: '127.0.0.1', port: 0 });
@@ -80,8 +103,9 @@ describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocke
   });
 
   afterAll(async () => {
+    await consumer.stop();
     await gateway.close();
-    await subscription.close();
+    await Promise.all([subscription.close(), replica.close()]);
     await redis.close();
     await api.close();
   });
@@ -145,6 +169,9 @@ describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocke
         payload: { type: 'order.placed', orderId, status: 'pending', totalAmount: 65.8 },
       });
     expect(performance.now() - startedAt).toBeLessThan(2_000);
+    // A fila entregou uma vez; o Redis levou o evento também à outra réplica.
+    await expect.poll(() => replicaReceived.length).toBe(1);
+    expect(client.messages.filter((message) => message.type === 'event')).toHaveLength(1);
     client.socket.close();
   });
 
@@ -188,7 +215,7 @@ describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocke
     expect((await pending.closed).code).toBe(1012);
   });
 
-  it('health informa o Redis e as conexões abertas', async () => {
+  it('health informa o Redis, a fila e as conexões abertas', async () => {
     const viewer = await accessToken(`viewer-${randomUUID()}@fastmeals.com`, 'Viewer@123', 'viewer');
     const client = await connect();
     await authenticate(client, viewer);
@@ -198,7 +225,7 @@ describe('Gateway de tempo real (API → outbox → relay → Redis → WebSocke
     expect(health.statusCode).toBe(200);
     expect(health.json()).toMatchObject({
       status: 'ok',
-      checks: { redis: 'up' },
+      checks: { redis: 'up', queue: 'up' },
       connections: { open: 1, authenticated: 1 },
     });
     client.socket.close();

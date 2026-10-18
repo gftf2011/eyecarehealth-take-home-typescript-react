@@ -20,6 +20,8 @@ const INFRASTRUCTURE_PACKAGES = [
   'kysely',
   'pg',
   'ioredis',
+  '@aws-sdk/client-sns',
+  '@aws-sdk/client-sqs',
   'jose',
   '@node-rs/bcrypt',
   'ws',

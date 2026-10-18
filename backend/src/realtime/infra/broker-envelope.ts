@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { JsonObject } from '../../shared-kernel/domain';
 import type { RealtimeEvent } from '../application/realtime-protocol';
 
-/** Envelope publicado pelo outbox relay (ver `RedisMessagePublisher`). */
+/** Envelope publicado pelo outbox relay (ver `MessageEnvelope`). */
 const envelopeSchema = z.object({
   id: z.string().min(1),
   topic: z.string().min(1),
