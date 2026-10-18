@@ -7,6 +7,9 @@
 # Os valores padrão abaixo são de DESENVOLVIMENTO LOCAL (segredos de exemplo,
 # cookie sem Secure por ser HTTP). Para outro ambiente, defina as variáveis
 # num .env nesta pasta (ver .env.example), que o Compose lê sozinho.
+#
+# Portável: nenhuma sub-rede ou IP fixo (a rede é a padrão do Compose) e,
+# fora o painel, as portas só abrem em 127.0.0.1.
 
 # Nome fixo: contêineres, rede e volume não dependem do nome da pasta.
 name: fastmeals
@@ -35,7 +38,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fastmeals123}
       POSTGRES_DB: ${POSTGRES_DB:-fastmeals}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -48,7 +51,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -88,11 +91,13 @@ services:
       PORT: "3001"
       # HTTP em localhost: em produção (HTTPS) deixe o padrão (Secure).
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      # Só o nginx do painel é proxy confiável: o rate limit por IP vê o
-      # cliente real, e ninguém forja X-Forwarded-For chamando a porta 3001.
-      TRUST_PROXY: ${TRUST_PROXY:-172.30.240.10}
+      # Um salto de proxy confiável: o nginx do painel, que acrescenta o IP
+      # real ao X-Forwarded-For (o rate limit por IP vê o cliente real; um
+      # valor forjado pelo cliente fica à esquerda e é ignorado). A porta da
+      # API só abre em 127.0.0.1, então ninguém na rede fala direto com ela.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
     ports:
-      - "${API_PORT:-3001}:3001"
+      - "127.0.0.1:${API_PORT:-3001}:3001"
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -129,10 +134,11 @@ services:
     environment:
       <<: *backend-env
       REALTIME_PORT: "3002"
-      # O navegador abre o WebSocket a partir da origem do painel.
-      REALTIME_ALLOWED_ORIGINS: ${REALTIME_ALLOWED_ORIGINS:-http://localhost:3000}
+      # O navegador abre o WebSocket a partir da origem do painel (acompanha
+      # FRONTEND_PORT, se a 3000 estiver ocupada na máquina).
+      REALTIME_ALLOWED_ORIGINS: ${REALTIME_ALLOWED_ORIGINS:-http://localhost:${FRONTEND_PORT:-3000},http://127.0.0.1:${FRONTEND_PORT:-3000}}
     ports:
-      - "${REALTIME_PORT:-3002}:3002"
+      - "127.0.0.1:${REALTIME_PORT:-3002}:3002"
     depends_on:
       redis:
         condition: service_healthy
@@ -156,21 +162,11 @@ services:
         condition: service_healthy
       realtime:
         condition: service_healthy
-    networks:
-      default:
-        # IP fixo: é o único proxy em que a API confia (TRUST_PROXY do `api`).
-        ipv4_address: 172.30.240.10
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 3s
       retries: 10
-
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: 172.30.240.0/24
 
 volumes:
   postgres-data:

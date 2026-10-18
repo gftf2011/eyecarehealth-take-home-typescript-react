@@ -127,7 +127,7 @@ O seed é idempotente: num segundo `up`, ele só avisa que o banco já tem dados
 
 > Os padrões do `docker-compose.yml` são de **desenvolvimento local** (segredos de exemplo, cookie sem `Secure` por ser HTTP). Para outro ambiente, defina as variáveis num `.env` **na raiz**, que o Compose lê automaticamente (ver [`.env.example`](../.env.example)).
 >
-> No compose, a API confia só no IP fixo do nginx do painel como proxy (`TRUST_PROXY`): o rate limit por IP enxerga o cliente real, e ninguém forja `X-Forwarded-For` chamando a porta 3001 direto.
+> No compose, a API confia em um salto de proxy (`TRUST_PROXY=1`): o nginx do painel, que acrescenta o IP real ao `X-Forwarded-For`, então o rate limit por IP enxerga o cliente real. As portas do backend (API, gateway, Postgres, Redis) só abrem em `127.0.0.1`: ninguém na rede chama a API direto forjando o cabeçalho. Nada depende de sub-rede ou IP fixo.
 
 ### Opção 2 — Local, sem Docker para a aplicação
 

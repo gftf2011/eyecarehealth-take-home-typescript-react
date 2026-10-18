@@ -50,7 +50,7 @@ O Vite encaminha `/api` para `http://localhost:3001` e `/realtime` para `ws://lo
 - serve os assets com hash em cache longo e imutável, com gzip;
 - envia cabeçalhos de segurança: CSP restrita à própria origem (imagens de produtos podem vir de URLs `https`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` ([`nginx/security-headers.conf`](nginx/security-headers.conf)).
 
-No [`docker-compose.yml`](../docker-compose.yml) da raiz (único para o projeto todo), a API confia **só no IP fixo do nginx** como proxy (`TRUST_PROXY`): o rate limit por IP enxerga o cliente real, e ninguém forja `X-Forwarded-For` chamando a porta 3001 direto.
+No [`docker-compose.yml`](../docker-compose.yml) da raiz (único para o projeto todo), a API confia em **um salto** de proxy (`TRUST_PROXY=1`), o nginx, que acrescenta o IP real ao `X-Forwarded-For`: o rate limit por IP enxerga o cliente real e um valor forjado pelo cliente é ignorado. As portas da API, do gateway, do Postgres e do Redis só abrem em `127.0.0.1`, então ninguém na rede fala com eles sem passar pelo painel. Nada depende de sub-rede ou IP fixo: o compose roda em qualquer máquina com Docker. Se a porta 3000 estiver ocupada, use `FRONTEND_PORT=8080 docker compose up --build` (a allowlist do WebSocket acompanha).
 
 ---
 
