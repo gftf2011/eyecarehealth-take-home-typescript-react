@@ -3,6 +3,9 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ReportPeriodInput } from '../../application';
 import { useReportingServices, type ReportingServices } from '../providers/reporting-provider';
 
+/** Prefixo comum das consultas de relatório (recarga em bloco). */
+export const REPORTS_QUERY_KEY = ['reports'] as const;
+
 export type ReportKind = keyof ReportingServices;
 
 type ReportOf<TKind extends ReportKind> = Awaited<ReturnType<ReportingServices[TKind]['execute']>>;
@@ -15,7 +18,7 @@ type ReportOf<TKind extends ReportKind> = Awaited<ReturnType<ReportingServices[T
 export function useReport<TKind extends ReportKind>(kind: TKind, period: ReportPeriodInput, enabled: boolean) {
   const services = useReportingServices();
   return useQuery<ReportOf<TKind>>({
-    queryKey: ['reports', kind, period.startDate, period.endDate],
+    queryKey: [...REPORTS_QUERY_KEY, kind, period.startDate, period.endDate],
     queryFn: ({ signal }) => services[kind].execute({ ...period, signal }) as Promise<ReportOf<TKind>>,
     enabled,
     placeholderData: keepPreviousData,

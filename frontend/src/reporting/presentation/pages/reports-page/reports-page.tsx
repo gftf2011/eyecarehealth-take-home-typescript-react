@@ -7,6 +7,7 @@ import { RevenueChart } from '../../components/revenue-chart/revenue-chart';
 import { SummaryMetrics } from '../../components/summary-metrics/summary-metrics';
 import { TopProductsChart } from '../../components/top-products-chart/top-products-chart';
 import { useReport } from '../../hooks/use-report';
+import { useReportLiveUpdates } from '../../hooks/use-report-live-updates';
 import { useReportPeriod } from '../../hooks/use-report-period';
 import styles from './reports-page.module.css';
 
@@ -14,6 +15,7 @@ const asDate = (iso: string | undefined): string => (iso === undefined ? '' : fo
 
 /** Relatórios: as quatro métricas do backend para o período, com resumo e gráficos. */
 export function ReportsPage() {
+  useReportLiveUpdates();
   const { period, valid, applyPeriod } = useReportPeriod();
   const revenue = useReport('revenue', period, valid);
   const ordersByStatus = useReport('ordersByStatus', period, valid);

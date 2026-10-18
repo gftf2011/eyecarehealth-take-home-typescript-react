@@ -5,7 +5,7 @@ import styles from './live-status-indicator.module.css';
 
 const LABELS: Readonly<Record<Exclude<LiveStatus, 'idle'>, { text: string; hint: string }>> = {
   connecting: { text: 'Conectando…', hint: 'Conectando às atualizações em tempo real' },
-  live: { text: 'Ao vivo', hint: 'Pedidos atualizam sozinhos, sem recarregar a página' },
+  live: { text: 'Ao vivo', hint: 'Pedidos, cardápio e relatórios atualizam sozinhos, sem recarregar a página' },
   reconnecting: { text: 'Reconectando…', hint: 'A conexão caiu; tentando de novo. As telas recarregam ao voltar.' },
   forbidden: { text: 'Sem tempo real', hint: 'Seu perfil não recebe atualizações em tempo real' },
   unavailable: { text: 'Sem tempo real', hint: 'Atualizações em tempo real indisponíveis; recarregue a página' },

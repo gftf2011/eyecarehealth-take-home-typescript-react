@@ -3,6 +3,7 @@ import { ws } from 'msw';
 import { TEST_REALTIME_URL } from '../../../shared-kernel/infra/testing/test-api';
 
 const ORDER_UPDATES_TOPIC = 'ordering.order-updates';
+const PRODUCT_UPDATES_TOPIC = 'catalog.product-updates';
 
 type Client = Parameters<Parameters<ReturnType<typeof ws.link>['addEventListener']>[1]>[0]['client'];
 
@@ -38,8 +39,17 @@ export class FakeRealtimeGateway {
   }
 
   /** Publica uma atualização de pedido para todos os painéis conectados. */
-  publishOrderUpdate(payload: Record<string, unknown>, id = `evt-${(this.#sequence += 1)}`): void {
-    const message = { type: 'event', id, topic: ORDER_UPDATES_TOPIC, occurredAt: new Date().toISOString(), payload };
+  publishOrderUpdate(payload: Record<string, unknown>, id?: string): void {
+    this.publish(ORDER_UPDATES_TOPIC, payload, id);
+  }
+
+  /** Publica uma mudança no cardápio para todos os painéis conectados. */
+  publishProductUpdate(payload: Record<string, unknown>, id?: string): void {
+    this.publish(PRODUCT_UPDATES_TOPIC, payload, id);
+  }
+
+  publish(topic: string, payload: Record<string, unknown>, id = `evt-${(this.#sequence += 1)}`): void {
+    const message = { type: 'event', id, topic, occurredAt: new Date().toISOString(), payload };
     for (const client of this.#clients) client.send(JSON.stringify(message));
   }
 

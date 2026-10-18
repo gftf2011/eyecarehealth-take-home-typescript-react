@@ -16,11 +16,13 @@ import { ProductTable } from '../../components/product-table/product-table';
 import { ProductTableSkeleton } from '../../components/product-table-skeleton/product-table-skeleton';
 import { RemoveProductDialog } from '../../components/remove-product-dialog/remove-product-dialog';
 import { useProductFilters } from '../../hooks/use-product-filters';
+import { useProductLiveUpdates } from '../../hooks/use-product-live-updates';
 import { useProducts } from '../../hooks/use-products';
 import styles from './products-page.module.css';
 
 /** Cardápio: busca e filtros na URL, tabela paginada, criar/editar em modal e exclusão confirmada. */
 export function ProductsPage() {
+  useProductLiveUpdates();
   const canWrite = useCan('products:write');
   const { filters, input, applyFilters, goToPage } = useProductFilters();
   const products = useProducts(input);
