@@ -18,7 +18,7 @@ Este documento registra as decisões técnicas do projeto: por que cada bibliote
 
 ## 1. Visão geral
 
-O projeto tem duas aplicações. O **backend** é um **monólito modular**: um repositório, uma imagem Docker e três processos com responsabilidades diferentes. O **painel** (React) é servido por um nginx que também faz o proxy da API e do WebSocket na mesma origem.
+O projeto tem duas aplicações. O **backend** é um **monólito modular**: um repositório, uma imagem Docker e três processos com responsabilidades diferentes. Os eventos saem do outbox por **SNS + SQS** (no Floci em desenvolvimento), com fila morta ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)). O **painel** (React) é servido por um nginx que também faz o proxy da API e do WebSocket na mesma origem.
 
 ```mermaid
 flowchart LR
@@ -32,15 +32,21 @@ flowchart LR
     end
 
     pg[(PostgreSQL 17<br/>tabelas + outbox_events)]
-    redis[(Redis 7<br/>rate limit + pub/sub)]
+    redis[(Redis 7<br/>rate limit + fan-out)]
+    sns[[SNS fastmeals-events]]
+    sqs[[SQS fastmeals-realtime]]
+    dlq[[SQS fastmeals-realtime-dlq]]
 
     navegador -- HTTPS / WebSocket --> painel
     painel -- /api --> api
     api -- caso de uso + mensagem do outbox<br/>na mesma transação --> pg
     api -- contadores de rate limit --> redis
     relay -- FOR UPDATE SKIP LOCKED --> pg
-    relay -- PUBLISH --> redis
-    redis -- SUBSCRIBE --> gw
+    relay -- Publish --> sns
+    sns -- assinatura com filtro --> sqs
+    sqs -- 5 falhas --> dlq
+    sqs -- long polling --> gw
+    gw -- PUBLISH / SUBSCRIBE<br/>entre as réplicas --> redis
     painel -- /realtime --> gw
 ```
 
@@ -91,7 +97,8 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 |---|---|---|---|
 | **Fastify 5** | Servidor HTTP da API e do gateway | Erros de handlers `async` tratados nativamente; plugins encapsulados (cookie, rate limit, websocket) mantidos pelo próprio time; `inject()` para testes e2e sem abrir porta; bom desempenho de serialização. O Fastify só aparece em `presentation`/`main`: controllers recebem um `HttpRequest` próprio. | **Express 5**: tratamento async chegou só na v5 e quase tudo vem de middlewares de terceiros. **Koa**: minimalista demais para rate limit, cookies e websocket integrados. |
 | **Kysely** + **pg** | Acesso ao PostgreSQL e migrations | Query builder com tipos inferidos do schema, mas é SQL: os relatórios agrupam por dia local de São Paulo, o relay usa `FOR UPDATE SKIP LOCKED`, as escritas usam `FOR UPDATE`/`FOR SHARE`, e existem índices parciais e trigram. Tudo isso é natural em Kysely e trabalhoso num ORM. Não impõe modelo: o agregado é do domínio e um mapper converte linha ↔ agregado. `pg` é o driver padrão, com pool. | **Prisma** / **TypeORM**: o modelo gerado (ou com decorators) compete com o agregado DDD, e locks, `SKIP LOCKED` e agregações com fuso acabariam em SQL cru. **Drizzle**: alternativa próxima; Kysely foi escolhido por ser só query builder (sem camada de ORM) e ter migrations simples em TypeScript. **Knex**: tipagem fraca. |
-| **ioredis** | Rate limit distribuído e pub/sub do tempo real | Reconexão automática, scripts Lua (o contador faz `INCR` + `PEXPIRE` atomicamente), suporte a Cluster/Sentinel se o Redis crescer, conexão dedicada para `SUBSCRIBE`. | **node-redis**: equivalente; ioredis tem API de Lua e reconexão mais diretas. |
+| **@aws-sdk/client-sns** + **@aws-sdk/client-sqs** | Publicar eventos, consumir a fila do tempo real, fila morta e redrive | SDK oficial v3, modular (só os dois clientes), com `AbortSignal` para interromper o long polling no shutdown e `AWS_ENDPOINT_URL` para apontar ao emulador sem mudar código. | `sqs-consumer` (abstrai o laço, mas esconde o controle de apagar só depois de repassar e do encerramento), LocalStack SDKs |
+| **ioredis** | Rate limit distribuído e fan-out do tempo real entre as réplicas do gateway | Reconexão automática, scripts Lua (o contador faz `INCR` + `PEXPIRE` atomicamente), suporte a Cluster/Sentinel se o Redis crescer, conexão dedicada para `SUBSCRIBE`. | **node-redis**: equivalente; ioredis tem API de Lua e reconexão mais diretas. |
 | **jose** | Emissão e verificação de JWT (HS256) | Implementação fiel às RFCs, sem dependências, API `async`, validação de `audience`/`issuer`/expiração embutida (access e refresh usam segredos e audiences diferentes). | **jsonwebtoken**: API de callbacks, CommonJS, menos rigor por padrão. |
 | **@node-rs/bcrypt** | Hash de senhas (custo ≥ 10) | bcrypt nativo (Rust) que roda **fora do event loop**, com binários pré-compilados (sem `node-gyp` no Docker). Um login não trava as outras requisições. | **bcryptjs**: JavaScript puro, bloqueia o event loop e é várias vezes mais lento. **bcrypt**: nativo, mas compila com `node-gyp`. **argon2**: mais moderno, mas o enunciado pede bcrypt. |
 | **Zod 4** | Validação de entrada HTTP, variáveis de ambiente e `seed/data.json` | Esquema e tipo TypeScript da mesma fonte; mensagens em português por campo; coerção de query string. Cada processo valida o ambiente no boot e falha com mensagem clara. | **JSON Schema do Fastify** (Ajv): prenderia a validação ao framework e não daria o tipo. **class-validator**: depende de decorators e classes. |
@@ -107,7 +114,8 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 | **tsx** | `npm run dev` | Executa TypeScript direto, com recarga, sem build. |
 | **tsup** | Build de produção | Um bundle ESM por entrypoint (API, relay, gateway, migrate, seed) com esbuild; dependências ficam externas. Resolve os imports sem extensão, que o `tsc` puro não emitiria de forma executável. |
 | **Vitest** | Testes | ESM e TypeScript nativos (o Jest ainda trata ESM como experimental), *projects* separando unit / architecture / integration / e2e, *fake timers* para o relay e o gateway. |
-| **Testcontainers** | PostgreSQL e Redis reais nos testes | Constraints, locks, `EXPLAIN`, fusos e concorrência só são testados de verdade no banco real. Os containers sobem uma vez por execução e são destruídos ao final. Nada a configurar à mão. |
+| **Floci** | SNS e SQS locais (Compose e testes) | Emulador da AWS MIT, em uma imagem com healthcheck HTTP; tem redrive (`RedrivePolicy`, `StartMessageMoveTask`), filtro de assinatura e entrega crua. Alternativa: LocalStack, cuja edição gratuita passou a exigir token. |
+| **Testcontainers** | PostgreSQL, Redis e Floci reais nos testes | Constraints, locks, `EXPLAIN`, fusos e concorrência só são testados de verdade no banco real. Os containers sobem uma vez por execução e são destruídos ao final. Nada a configurar à mão. |
 | **ArchUnitTS** | Testes de arquitetura | As regras de camadas, contextos e convenções viram testes do Vitest, com mensagens claras. Alternativas: **dependency-cruiser** (configuração JSON fora da suíte de testes) e **eslint-plugin-boundaries** (só dependências, sem regras de conteúdo como "todo caso de uso implementa `UseCase`"). |
 
 ### Frontend — produção
@@ -312,14 +320,15 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   1. Os agregados registram eventos de domínio (`OrderPlaced`, `OrderStatusChanged`, ...).
   2. Os repositórios só os **coletam**; o Unit of Work os entrega a um **mediator em memória**, ainda dentro da transação e antes do commit.
   3. Um *handler* decide o que sai do processo: o [`PublishOrderUpdateHandler`](backend/src/ordering/application/event-handlers/publish-order-update.handler.ts) converte os eventos de pedido numa mensagem pública versionada (`ordering.order-updates` v1, **sem dados pessoais do cliente**) e a grava na tabela `outbox_events`, na mesma transação. O Catalog faz o mesmo com o [`PublishProductUpdateHandler`](backend/src/catalog/application/event-handlers/publish-product-update.handler.ts) (`catalog.product-updates` v1: criado, editado, preço, disponibilidade, removido).
-  4. O [relay](backend/src/shared-kernel/infra/outbox/outbox-relay.ts) lê o outbox em lotes e publica no Redis.
-- **Alternativas.** *Publicar no Redis direto do caso de uso*: perde o evento se o processo cair depois do commit, ou publica um evento de uma transação que vai falhar. *Todo evento de domínio no outbox automaticamente*: expõe a estrutura interna do domínio como contrato público. *CDC (Debezium) ou broker (Kafka/RabbitMQ)*: robustos, mas infraestrutura demais para um painel.
-- **Consequências.** ➕ Consistência garantida pelo banco (o evento existe se, e só se, a mudança foi confirmada). ➕ O contrato público é separado do evento interno. ➖ Entrega **pelo menos uma vez** com latência de polling (padrão: até 500 ms); o cliente descarta repetidos pelo `id`.
+  4. O [relay](backend/src/shared-kernel/infra/outbox/outbox-relay.ts) lê o outbox em lotes e publica no tópico SNS de eventos ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
+  5. **Fila morta no próprio outbox**, para o que o broker **recusa**. Queda do broker (`BrokerUnavailableError`: rede, throttling, 5xx) não conta tentativa: o relay espera e tenta de novo. Recusa da mensagem (`InvalidParameter`, por exemplo, grande demais) conta. Na `OUTBOX_MAX_ATTEMPTS`-ésima (padrão 5), a linha ganha `dead_lettered_at` e `last_error`, sai do índice de pendentes e o lote segue. A retenção não apaga mensagens mortas, e o [`outbox-redrive`](backend/src/main/outbox-redrive.ts) lista e devolve à fila depois de corrigida a causa.
+- **Alternativas.** *Publicar no Redis direto do caso de uso*: perde o evento se o processo cair depois do commit, ou publica um evento de uma transação que vai falhar. *Todo evento de domínio no outbox automaticamente*: expõe a estrutura interna do domínio como contrato público. *CDC (Debezium) ou broker (Kafka/RabbitMQ)*: robustos, mas infraestrutura demais para um painel. *Fila morta da publicação no SQS*: mover a mensagem recusada para outro sistema deixaria de ser atômico com a transação do outbox; no banco, marcar como morta é um `UPDATE` na mesma transação. O SQS tem a fila morta do **consumo** ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
+- **Consequências.** ➕ Consistência garantida pelo banco (o evento existe se, e só se, a mudança foi confirmada). ➕ O contrato público é separado do evento interno. ➕ Uma mensagem defeituosa não trava as outras, e nenhuma é perdida em silêncio. ➖ Pular uma mensagem morta quebra a ordem daquele agregado; aceitável porque o painel só invalida e recarrega pela API. ➖ Entrega **pelo menos uma vez** com latência de polling (padrão: até 500 ms); o cliente descarta repetidos pelo `id`.
 
 ### ADR-05 — Três processos: API, outbox relay e gateway WebSocket
 
 - **Contexto.** Tempo real é diferencial no enunciado (polling de 30 s seria aceitável). Conexões WebSocket são longas e com estado; o relay é um laço contínuo.
-- **Decisão.** Três entrypoints do mesmo código e da mesma imagem. O relay pode ter várias réplicas (`FOR UPDATE SKIP LOCKED` dá lotes disjuntos) e para no primeiro erro de publicação, para manter a ordem. O gateway pode ter várias réplicas (fan-out pelo Redis pub/sub).
+- **Decisão.** Três entrypoints do mesmo código e da mesma imagem. O relay pode ter várias réplicas (`FOR UPDATE SKIP LOCKED` dá lotes disjuntos) e para no primeiro erro de publicação, para manter a ordem. O gateway pode ter várias réplicas: a fila SQS divide as mensagens entre elas, e o Redis pub/sub as leva a todas ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
 - **Protocolo do gateway.** Autenticação pela **primeira mensagem** `{ type: "auth", accessToken }` em até 5 s. O navegador não envia `Authorization` em WebSocket, e token na URL vazaria em logs de proxy. Além disso: allowlist de `Origin` antes do upgrade, *heartbeat* ping/pong de 30 s, limite de 4 KB por mensagem, *backpressure* de 1 MB (cliente lento é desconectado com `1013`), reautenticação para estender a sessão e `1012` no shutdown para o cliente reconectar.
 - **Alternativas.** WebSocket dentro da API: mais simples, mas um deploy da API derrubaria todos os painéis, e conexões longas competiriam com requisições curtas. Relay dentro da API: com N réplicas da API seriam N relays, acoplados ao ciclo de vida do HTTP.
 - **Consequências.** ➕ Cada processo escala, reinicia e tem health check próprio. ➖ Mais serviços para operar; o pub/sub não guarda mensagens, então o cliente recarrega a lista pela API ao reconectar.
@@ -387,7 +396,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   | Tipo | Arquivos | Cobre |
   |---|---|---|
   | `*.unit.spec.ts` | 81 | Domínio e casos de uso com fakes em memória |
-  | `*.integration.spec.ts` | 15 | Repositórios, ACLs, consultas, outbox, Redis, seed, migrations — contra PostgreSQL e Redis reais |
+  | `*.integration.spec.ts` | 19 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
   | `*.e2e.spec.ts` | 9 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
 
@@ -504,6 +513,19 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Cypress/Playwright** para tudo: mais realista, mas lento para cobrir cada caso de borda (ver [limitações](#7-limitações-conhecidas-e-próximos-passos)).
 - **Consequências.** ➕ Os testes de integração pegam o que só aparece com as peças juntas (ex.: o tempo real recarregando a lista filtrada). ➖ Sem navegador real nos testes automatizados: layout e CSS foram verificados manualmente no navegador.
 
+### ADR-22 — Eventos por SNS + SQS, com fila morta, e o Redis só para o fan-out
+
+- **Contexto.** O relay publicava direto no Redis pub/sub: sem retentativa do lado de quem consome, sem fila morta e sem como acrescentar outro consumidor (e-mail, analytics) sem mexer no relay. Uma mensagem que o gateway não conseguisse repassar se perdia em silêncio.
+- **Decisão.**
+  1. O relay publica cada mensagem **uma vez** no tópico SNS `fastmeals-events` ([`SnsMessagePublisher`](backend/src/shared-kernel/infra/messaging/aws/sns-message.publisher.ts)), com o tópico lógico no atributo `topic`. É só outro adaptador da porta `MessagePublisher`: o outbox e o relay não mudaram.
+  2. Cada consumidor tem a **própria fila SQS** assinada no tópico, com **filtro** por tópico lógico e **entrega crua** (o corpo é o envelope). Hoje há uma: `fastmeals-realtime`.
+  3. **Fila morta nativa do SQS:** `RedrivePolicy` com `maxReceiveCount=5` para `fastmeals-realtime-dlq` (retenção de 14 dias). O gateway ([`SqsQueueConsumer`](backend/src/shared-kernel/infra/messaging/aws/sqs-queue-consumer.ts)) só apaga a mensagem depois de repassá-la; se falhar, ela reaparece após o visibility timeout (30 s). Reprocessar é `StartMessageMoveTask` (`npm run events:redrive`).
+  4. **O Redis continua, só para o fan-out.** A fila entrega cada mensagem a **uma** réplica do gateway; essa réplica a publica no Redis ([`RealtimeFanoutForwarder`](backend/src/realtime/infra/realtime-fanout.forwarder.ts)), e **todas** a recebem. Sem o Redis, com duas réplicas, metade dos painéis perderia cada evento.
+  5. **Duas filas mortas, uma por ponto de falha.** A do outbox ([ADR-04](#adr-04--eventos-de-domínio-com-mediator-em-memória-e-transactional-outbox)) guarda o que o SNS **recusa** (mensagem inválida); a do SQS, o que o gateway **não consegue consumir**. Queda do SNS (rede, throttling, 5xx, credenciais) é transitória: o relay espera sem contar tentativa.
+  6. **Floci** ([floci.io](https://floci.io)), emulador local da AWS, roda SNS e SQS no Compose e nos testes (Testcontainers). O job `messaging-setup` cria tópico, filas, redrive, política da fila e assinatura; pode rodar de novo sem efeito. Em produção, o mesmo código fala com a AWS (sem `AWS_ENDPOINT_URL`), e os recursos viriam da infraestrutura como código.
+- **Alternativas.** *Só Redis pub/sub* (a versão anterior): mais simples, mas sem retentativa nem fila morta do lado do consumo. *SQS direto, sem SNS*: o relay teria que conhecer cada fila; o SNS desacopla quem publica de quem consome. *Fila por réplica do gateway* (cada uma assinada no tópico, sem Redis): elimina o Redis do caminho, mas filas efêmeras precisam ser criadas e removidas a cada deploy, e réplicas mortas deixam filas órfãs. *Kafka/RabbitMQ*: robustos, mas mais infraestrutura para operar do que dois serviços gerenciados. *FIFO*: ordem e deduplicação por grupo, mas o painel só invalida e recarrega, então a ordem não importa, e o cliente já descarta repetidos pelo `id`. *LocalStack*: a edição gratuita passou a exigir token; o Floci é MIT e cobre SNS/SQS com redrive.
+- **Consequências.** ➕ Uma mensagem que falha no consumo é retentada e, se não der, guardada e reprocessável, em vez de perdida. ➕ Novos consumidores entram sem mexer no relay. ➕ Alertas e métricas prontos na AWS (idade da mensagem mais antiga, tamanho da fila morta). ➖ Um salto a mais: a latência até o painel sobe de ~500 ms para algo entre 0,5 s e 1 s (polling do outbox + long polling). ➖ Mais um serviço no Compose e o SDK da AWS como dependência. ➖ Com o Redis fora por mais de ~2,5 min (5 × 30 s), eventos vão para a fila morta; aceitável, porque o painel recarrega tudo ao reconectar, e o que está lá já está vencido para o tempo real.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -596,6 +618,12 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 20. **Cardápio que só mudava com F5.** Com duas abas abertas, pausar um produto numa delas não mudava a outra, nem ao trocar de aba: só pedidos passavam pelo tempo real, e o `staleTime` de 30 s impedia a recarga ao focar. **Solução:** o Catalog passou a publicar `catalog.product-updates` pelo mesmo outbox, o gateway assina os dois tópicos, e a tabela de produtos e os relatórios invalidam o cache a cada evento. Um teste de integração cobre o cenário.
 
+21. **Uma mensagem defeituosa travaria o tempo real inteiro.** O relay parava na primeira falha e só somava tentativas, para não publicar fora de ordem com o Redis fora. Mas uma mensagem que falhasse sempre ficaria eternamente na frente: nenhum evento chegaria mais ao painel, sem alerta. Contar toda falha também não servia: uma queda do Redis de 30 s mataria a mensagem da frente. **Solução:** o publisher distingue a queda do broker (`BrokerUnavailableError`, sem contar tentativa) da falha da mensagem, que vai para a fila morta no limite de tentativas (ver [ADR-04](#adr-04--eventos-de-domínio-com-mediator-em-memória-e-transactional-outbox)).
+
+22. **Healthcheck do Floci que nunca ficava saudável.** A imagem não tem `curl`, `wget` nem `grep`, e o primeiro healthcheck (HTTP/1.0 à mão pelo `/dev/tcp` do bash) derrubava o endpoint `/_floci/health` com `NullPointerException`: ele exige o cabeçalho `Host`. **Solução:** HTTP/1.1 com `Host` e a checagem do status só com bash (`[[ $status == *' 200 '* ]]`).
+
+23. **URLs de fila que outro contêiner não alcança.** O Floci devolve `QueueUrl` com o host dele (`localhost:4566`), e o cliente SQS usa essa URL como endpoint por padrão: do contêiner do gateway, `localhost` é ele mesmo. **Solução:** `FLOCI_HOSTNAME=floci` no Compose e, com endpoint próprio, `useQueueUrlAsEndpoint: false` no cliente, que passa a mandar tudo ao `AWS_ENDPOINT_URL`. Funciona igual nos testes, em que o endpoint é a porta mapeada pelo Testcontainers.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
@@ -606,5 +634,6 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
 - **Escala do otimizador.** O(k²·K) responde em milissegundos até centenas de pedidos, mas chega a ~2 s com 1000 × 1000. Nessa escala, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
-- **Tempo real sem histórico.** O Redis pub/sub não guarda mensagens: quem reconecta recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams.
+- **Tempo real sem histórico.** A fila SQS segura o evento até uma réplica do gateway repassá-lo, mas o Redis pub/sub não guarda mensagens: o painel que estava desconectado recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams ou guardar os últimos eventos por tópico.
+- **Floci não é a AWS.** Retentativas de entrega do SNS, latências e limites são aproximações locais. Antes de produção, os mesmos testes de integração deveriam rodar contra uma conta AWS de teste, e a topologia ir para o Terraform (com alarmes na idade da mensagem mais antiga e no tamanho da fila morta).
 - **Revogação imediata de access token.** Hoje vale até expirar (15 min). Se for necessária, uma denylist curta no Redis resolveria.
