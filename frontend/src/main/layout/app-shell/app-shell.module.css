@@ -79,6 +79,13 @@
   padding: var(--space-6) var(--space-5);
 }
 
+.loading {
+  display: grid;
+  place-items: center;
+  min-height: 40vh;
+  color: var(--color-brand);
+}
+
 @media (max-width: 640px) {
   .header {
     flex-wrap: wrap;

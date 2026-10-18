@@ -1,7 +1,10 @@
+import { lazy } from 'react';
 import type { RouteObject } from 'react-router';
 
 import { RequirePermission } from '../../../shared-kernel/presentation';
-import { OrdersPage } from '../pages/orders-page/orders-page';
+
+// Carregada sob demanda: cada tela vira um chunk próprio no build.
+const OrdersPage = lazy(() => import('../pages/orders-page/orders-page').then((module) => ({ default: module.OrdersPage })));
 
 export const ORDERS_PATH = '/pedidos';
 

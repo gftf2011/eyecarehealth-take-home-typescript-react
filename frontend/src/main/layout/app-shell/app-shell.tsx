@@ -1,7 +1,8 @@
+import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
 import { UserMenu } from '../../../identity/presentation';
-import { cx, usePermissions, type NavigationItem } from '../../../shared-kernel/presentation';
+import { Spinner, cx, usePermissions, type NavigationItem } from '../../../shared-kernel/presentation';
 import styles from './app-shell.module.css';
 
 /** Moldura das telas autenticadas: marca, menu filtrado pelo perfil e usuário logado. */
@@ -37,7 +38,16 @@ export function AppShell({ navigation }: { readonly navigation: readonly Navigat
       </header>
 
       <main className={styles.content}>
-        <Outlet />
+        {/* As telas são carregadas sob demanda (um chunk por rota). */}
+        <Suspense
+          fallback={
+            <div className={styles.loading}>
+              <Spinner label="Carregando a tela" />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );
