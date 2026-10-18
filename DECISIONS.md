@@ -2,7 +2,7 @@
 
 Este documento registra as decisões técnicas do projeto: por que cada biblioteca foi escolhida, como funciona o algoritmo de atribuição de entregadores, as decisões de arquitetura (no formato de ADRs, com alternativas e consequências), as mudanças no esquema de referência e as dificuldades encontradas.
 
-> **Escopo atual:** o backend ([`backend/`](backend), com instruções em [`backend/README.md`](backend/README.md)). As decisões do frontend entram aqui quando ele for implementado.
+> **Escopo:** o projeto inteiro — o backend ([`backend/`](backend), instruções em [`backend/README.md`](backend/README.md)), o painel ([`frontend/`](frontend), instruções em [`frontend/README.md`](frontend/README.md)) e o [`docker-compose.yml`](docker-compose.yml) da raiz, que sobe tudo com `docker compose up --build`. As ADRs 01–13 tratam do backend e da infraestrutura; as ADRs 14–21, do painel.
 
 ## Sumário
 
@@ -18,13 +18,14 @@ Este documento registra as decisões técnicas do projeto: por que cada bibliote
 
 ## 1. Visão geral
 
-O backend é um **monólito modular**: um repositório, uma imagem Docker e três processos com responsabilidades diferentes.
+O projeto tem duas aplicações. O **backend** é um **monólito modular**: um repositório, uma imagem Docker e três processos com responsabilidades diferentes. O **painel** (React) é servido por um nginx que também faz o proxy da API e do WebSocket na mesma origem.
 
 ```mermaid
 flowchart LR
-    painel([Painel])
+    navegador([Navegador])
+    painel[Painel :3000<br/>nginx + React]
 
-    subgraph processos[Mesma imagem, três processos]
+    subgraph processos[Backend: mesma imagem, três processos]
         api[API REST :3001<br/>server.ts]
         relay[Outbox relay<br/>outbox-relay.ts]
         gw[Gateway WebSocket :3002<br/>realtime-gateway.ts]
@@ -33,13 +34,14 @@ flowchart LR
     pg[(PostgreSQL 17<br/>tabelas + outbox_events)]
     redis[(Redis 7<br/>rate limit + pub/sub)]
 
-    painel -- HTTP --> api
+    navegador -- HTTPS / WebSocket --> painel
+    painel -- /api --> api
     api -- caso de uso + mensagem do outbox<br/>na mesma transação --> pg
     api -- contadores de rate limit --> redis
     relay -- FOR UPDATE SKIP LOCKED --> pg
     relay -- PUBLISH --> redis
     redis -- SUBSCRIBE --> gw
-    gw -- WebSocket --> painel
+    painel -- /realtime --> gw
 ```
 
 Dentro do código, cada **bounded context** (`identity`, `catalog`, `ordering`, `delivery`, `reporting`, `realtime`) tem as camadas `domain → application → infra → presentation` e é montado em `main/`. Um `shared-kernel` guarda o que é comum (agregados, eventos, unit of work, HTTP, paginação, datas).
@@ -55,13 +57,35 @@ flowchart TB
 
 As setas são as únicas dependências permitidas, e isso é verificado por testes de arquitetura ([ADR-11](#adr-11--regras-de-arquitetura-verificadas-por-testes)).
 
+O **painel** segue a mesma organização ([ADR-14](#adr-14--o-painel-com-a-mesma-arquitetura-do-backend)): os mesmos contextos (`identity`, `catalog`, `ordering`, `delivery`, `reporting`, `realtime`), as mesmas camadas e as mesmas regras verificadas por ArchUnitTS. O React fica só em `presentation` e `main`.
+
+```mermaid
+flowchart TB
+    subgraph tela[presentation: React]
+        paginas[páginas, componentes, hooks<br/>TanStack Query]
+    end
+    subgraph app[application]
+        casos[casos de uso, inputs, ports]
+    end
+    subgraph dom[domain]
+        regras[Value Objects e regras da API<br/>OrderStatus, ProductName, ReportPeriod]
+    end
+    subgraph inf[infra]
+        http[gateways HTTP + Zod<br/>WebSocket, Web Locks, timers]
+    end
+    paginas --> casos --> regras
+    http --> casos
+    http -- fetch /api --> api[(API)]
+    http -- ws /realtime --> gw[(Gateway)]
+```
+
 ---
 
 ## 2. Bibliotecas
 
 Critério geral: cada biblioteca resolve um problema concreto que não vale reimplementar, e fica **presa à camada de infra ou de apresentação**. O domínio e os casos de uso não importam nenhuma delas (exceto Zod na validação de entrada), então trocar qualquer uma afeta só um adapter.
 
-### Produção
+### Backend — produção
 
 | Biblioteca | Para quê | Por que ela | Alternativas consideradas |
 |---|---|---|---|
@@ -75,7 +99,7 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 | **@fastify/rate-limit** | 100 req/min por IP | Plugin oficial com `Retry-After`; aceita um *store* customizado, que aponta para o contador no Redis (limite compartilhado entre réplicas). | Middleware próprio: reimplementaria cabeçalhos e janela. |
 | **@fastify/websocket** + **ws** | Gateway em tempo real | Integra o WebSocket ao ciclo de vida do Fastify (health check, shutdown) usando `ws`, a implementação mais usada e estável em Node. `ws` é dependência direta para não ser embutida no bundle ([dificuldade 5](#6-dificuldades-encontradas-e-como-foram-resolvidas)). | **Socket.IO**: protocolo próprio, fallback para long polling e cliente obrigatório; para um painel moderno, WebSocket puro basta. **SSE**: serviria (o fluxo é só servidor → cliente), mas WebSocket deixa a reautenticação na mesma conexão. |
 
-### Desenvolvimento e testes
+### Backend — desenvolvimento e testes
 
 | Biblioteca | Para quê | Por que ela |
 |---|---|---|
@@ -86,7 +110,28 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 | **Testcontainers** | PostgreSQL e Redis reais nos testes | Constraints, locks, `EXPLAIN`, fusos e concorrência só são testados de verdade no banco real. Os containers sobem uma vez por execução e são destruídos ao final. Nada a configurar à mão. |
 | **ArchUnitTS** | Testes de arquitetura | As regras de camadas, contextos e convenções viram testes do Vitest, com mensagens claras. Alternativas: **dependency-cruiser** (configuração JSON fora da suíte de testes) e **eslint-plugin-boundaries** (só dependências, sem regras de conteúdo como "todo caso de uso implementa `UseCase`"). |
 
-`npm audit` está zerado. A única vulnerabilidade herdada (via ArchUnitTS, sem correção publicada) foi neutralizada com um `overrides` restrito ([dificuldade 9](#6-dificuldades-encontradas-e-como-foram-resolvidas)).
+### Frontend — produção
+
+| Biblioteca | Para quê | Por que ela | Alternativas consideradas |
+|---|---|---|---|
+| **React 19** | Interface | Exigido pelo enunciado (18+). A versão 19 traz `use()` para contextos, `ref` como prop e o contexto como provider (`<Context value>`), o que deixa os providers dos contextos curtos. | — |
+| **React Router 8** | Rotas | Rotas como objetos (`RouteObject`), cada contexto exporta as suas, e `main` as compõe. `useSearchParams` guarda filtros e paginação na URL. `lazy` + `Suspense` dividem o código por tela. | **TanStack Router**: tipos melhores para *search params*, mas mais conceitos para o tamanho do painel; os filtros já são validados pelos inputs da aplicação. |
+| **TanStack Query 5** | Estado vindo do servidor (listas, detalhes, relatórios) | Cache por chave, cancelamento (`AbortSignal` até o `fetch`), *retry* só para falhas transitórias, `keepPreviousData` (a lista anterior fica na tela enquanto a nova chega), invalidação por prefixo (o tempo real só invalida) e atualização otimista com rollback (disponibilidade do produto). | **Redux Toolkit/RTK Query**, **Zustand**, **Context API**: ver [ADR-15](#adr-15--estado-o-servidor-no-tanstack-query-a-url-para-filtros-sem-store-global). |
+| **Zod 4** | Contrato das respostas da API e configuração | Toda resposta é validada antes de virar agregado: uma mudança no backend vira um erro claro ("resposta fora do contrato"), não um `undefined` na tela. | Tipos só em TypeScript: somem em tempo de execução. |
+| **Recharts 3** | Gráficos dos relatórios (área, barras, rosca) | Componentes React em SVG com tooltip, eixos e responsividade prontos; cores lidas dos tokens do tema (claro/escuro). Fica só no chunk da tela de relatórios. | **Chart.js**: canvas, sem componentes React nativos e menos acessível. **Nivo/visx**: mais pesados ou mais baixo nível. **SVG à mão**: zero dependência, mas mais código para manter. |
+
+Sem biblioteca de componentes nem de CSS ([ADR-19](#adr-19--estilo-css-modules-design-tokens-e-componentes-próprios-acessíveis)): CSS Modules com design tokens e componentes próprios acessíveis.
+
+### Frontend — desenvolvimento e testes
+
+| Biblioteca | Para quê | Por que ela |
+|---|---|---|
+| **Vite 8** | Dev server e build | Recarga instantânea, proxy de `/api` e `/realtime` na mesma origem (o cookie `httpOnly` funciona sem CORS) e build com divisão por rota. |
+| **Vitest + Testing Library** | Testes | Os mesmos *projects* do backend (unit / integration / architecture). Testing Library consulta por papel e nome acessível (`getByRole('button', { name: 'Entrar' })`), então os testes também verificam a acessibilidade. |
+| **MSW 3** | API e WebSocket simulados nos testes | Intercepta o `fetch` **e o WebSocket** no Node: as telas são testadas inteiras, com o cliente HTTP, a renovação de token e a conexão em tempo real reais. Requisição sem handler falha o teste, então nada sai para a rede. |
+| **ArchUnitTS** | Testes de arquitetura | As mesmas regras do backend, mais regras do navegador ([ADR-14](#adr-14--o-painel-com-a-mesma-arquitetura-do-backend)). |
+
+`npm audit` está zerado nos dois projetos. A única vulnerabilidade herdada (via ArchUnitTS, sem correção publicada) foi neutralizada com um `overrides` restrito ([dificuldade 9](#6-dificuldades-encontradas-e-como-foram-resolvidas)).
 
 ---
 
@@ -361,6 +406,104 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Alternativas.** Um compose por aplicação (o do backend chegou a existir em `backend/`), unidos na raiz com `include`: duplica a configuração ou exige override, e o comando do enunciado fica na raiz de qualquer jeito. Para o proxy confiável, uma sub-rede e um IP fixos para o nginx (`TRUST_PROXY=<ip>`) chegaram a ser usados, mas quebram em máquinas onde aquela faixa já existe ("pool overlaps"): foram trocados pelo salto único com as portas presas em `127.0.0.1`.
 - **Consequências.** ➕ Um comando, um arquivo, roda em qualquer máquina com Docker (rede padrão, imagens multi-arquitetura), seed idempotente, banco nunca exposto na rede. ➖ Um processo na própria máquina ainda consegue chamar a porta 3001 com um `X-Forwarded-For` forjado; em produção, a API ficaria só na rede interna.
 
+### ADR-14 — O painel com a mesma arquitetura do backend
+
+- **Contexto.** O painel tem regras de verdade: botões que dependem da máquina de estados, validação de formulários, filtros com limites, sessão com renovação, reconexão em tempo real. O enunciado sugere pastas por tipo técnico (`pages/`, `components/`, `hooks/`, `services/`).
+- **Decisão.** Os mesmos bounded contexts e camadas do backend (`frontend/src/<contexto>/{domain,application,infra,presentation,main}`), adaptados ao navegador:
+  - **domain:** Value Objects e regras iguais às da API (`OrderStatus` com as transições, `ProductName`, `ReportPeriod` com o limite de 366 dias). Decide, por exemplo, quais botões de status aparecem e por que "Despachar" fica bloqueado sem entregador;
+  - **application:** casos de uso (`ListOrdersUseCase`, `CreateProductUseCase`, `AcceptAssignmentUseCase`…) que dependem de **gateways** (ports), não de `fetch`;
+  - **infra:** gateways HTTP com schemas Zod, WebSocket, Web Locks, timers;
+  - **presentation:** React (páginas, componentes, hooks). Nunca importa a infra.
+
+  Sem Unit of Work (a transação é da API) e com **gateways** no lugar de repositórios: o painel não persiste nada, só pede à API. Contextos não se importam: as permissões e os eventos em tempo real chegam por providers do shared kernel, montados em `main`.
+
+  As regras viram testes com ArchUnitTS ([`frontend/src/architecture/`](frontend/src/architecture), 75 regras): camadas, isolamento entre contextos, domínio sem bibliotecas, aplicação sem React/HTTP e **sem APIs do navegador** (`fetch`, `window`, `document`, storage, timers entram por ports), JSX só em `presentation`/`main`, nomes e pastas de componentes, páginas, hooks e rotas, e regras de segurança (nada em `localStorage`, `sessionStorage` ou IndexedDB, nada de `dangerouslySetInnerHTML`, nada de `document.cookie`).
+- **Alternativas.** As pastas sugeridas pelo enunciado: mais familiares, mas a regra de negócio acaba espalhada em componentes e hooks, e qualquer arquivo importa qualquer outro.
+- **Consequências.** ➕ Regras testáveis sem DOM (307 testes unitários rodam em segundos); uma tela nova sabe onde cada coisa fica; a mesma linguagem nos dois lados facilita a entrevista técnica e a manutenção. ➖ Mais arquivos que um CRUD em React costuma ter; DTO ↔ agregado ↔ JSON também no navegador.
+
+### ADR-15 — Estado: o servidor no TanStack Query, a URL para filtros, sem store global
+
+- **Contexto.** O enunciado avalia o gerenciamento de estado "justificado". Quase todo o estado do painel é **cópia de dados do servidor** (pedidos, produtos, relatórios), que envelhece e precisa ser recarregada.
+- **Decisão.** Cada tipo de estado no lugar certo:
+
+  | Estado | Onde | Por quê |
+  |---|---|---|
+  | Dados da API | **TanStack Query** | Cache, deduplicação, cancelamento, *retry*, invalidação por prefixo (o tempo real só invalida), atualização otimista |
+  | Filtros, página, pedido aberto | **URL** (`useSearchParams`) | Recarregar, voltar e compartilhar o link mantêm a mesma visão |
+  | Sessão | Store observável do Identity (`useSyncExternalStore`) | Muda por eventos (login, renovação, expiração), não por consultas |
+  | Formulários, modais | Estado local (`useState`) | Ninguém fora do componente precisa dele |
+
+- **Alternativas.** **Redux Toolkit** (com RTK Query): resolveria o cache, mas com *slices*, *store* e *middleware* para um painel sem estado de cliente compartilhado relevante. **Zustand**: ótimo para estado de cliente, mas o estado aqui é do servidor, e seria preciso reimplementar cache e invalidação. **Context API** para os dados: re-renderiza todos os consumidores e não tem cache nem cancelamento. Context é usado só para injetar dependências (casos de uso, permissões).
+- **Consequências.** ➕ Nenhum dado duplicado em dois lugares; telas sempre coerentes com a API. ➖ As chaves de cache são parte do contrato entre hooks (centralizadas em `queries/*-query-keys.ts` por contexto).
+
+### ADR-16 — Sessão no navegador: token em memória, renovação única e trava entre abas
+
+- **Contexto.** O backend devolve o access token no corpo e o refresh token num cookie `httpOnly` ([ADR-06](#adr-06--access-token-em-memória-e-refresh-token-rotativo-em-cookie-httponly)). O painel precisa sobreviver a recarregar a página, a vários pedidos ao mesmo tempo com o token vencendo e a várias abas abertas.
+- **Decisão.**
+  - **Access token só em memória** (nunca em storage, verificado por teste de arquitetura). Ao recarregar, a sessão é restaurada por `POST /auth/refresh` com o cookie.
+  - **Uma renovação por vez:** requisições simultâneas que encontram o token vencendo (ou recebem `401`) compartilham a mesma renovação e repetem uma única vez.
+  - **Renovação antecipada:** enquanto o painel está aberto, o token é renovado 1 minuto antes de vencer, então o painel em tempo real nunca fica com token vencido, e uma sessão revogada no servidor leva ao login na hora.
+  - **Trava entre abas com a Web Locks API:** a API trata o reuso de um refresh token já rotacionado como roubo e revoga a sessão. Duas abas renovando ao mesmo tempo mandariam o mesmo cookie, e a segunda derrubaria as duas. Com a trava, a segunda espera e renova com o cookie novo.
+  - **Sessão expirada:** volta ao login com "Sua sessão expirou" e, depois de entrar, à página em que o usuário estava.
+- **Alternativas.** Token em `localStorage` (legível por qualquer XSS). Renovar só ao receber `401` (a primeira requisição depois do vencimento sempre falha e é repetida; o WebSocket ficaria com token vencido). Sem trava entre abas (funciona até o dia em que duas abas renovam juntas e o gestor é deslogado "do nada").
+- **Consequências.** ➕ XSS não lê o refresh token; o gestor não é deslogado por corrida entre abas; nenhuma tela trata token. ➖ Um `POST /auth/refresh` a cada recarga de página e a cada 14 minutos com o painel aberto.
+
+### ADR-17 — Validação em tempo real com os mesmos Value Objects da API
+
+- **Contexto.** Formulários com "validação em tempo real" e mensagens claras, sem divergir do que a API aceita.
+- **Decisão.** Os formulários rodam, a cada digitação, **a mesma validação do caso de uso** (`productFormErrors(values)` chama os Value Objects `ProductName`, `ProductPrice`…). O erro de um campo aparece depois que ele é visitado ou numa tentativa de envio, some enquanto a pessoa corrige, e o envio foca o primeiro campo inválido. Erros por campo vindos da API (`400 VALIDATION_ERROR`) caem no campo certo, porque os nomes dos campos são os da API. Filtros inválidos (período invertido, mais de 366 dias) mostram o erro e não consultam a API.
+
+  Os Value Objects do produto são os do backend, e **os testes deles foram copiados do backend sem nenhuma mudança**: rodam nos dois lados como teste de contrato. Se as regras divergirem, o mesmo teste falha em um deles.
+- **Alternativas.** **react-hook-form + schema Zod separado**: uma segunda cópia das regras, com mensagens que divergem com o tempo. **Validação HTML** (`required`, `min`): mensagens do navegador, sem as regras de negócio (2 casas decimais, preço > 0).
+- **Consequências.** ➕ O que o formulário aceita é exatamente o que a API aceita, com as mesmas mensagens. ➖ Regras duplicadas entre os dois projetos (mitigado pelos testes de contrato).
+
+### ADR-18 — Tempo real: invalidar, não aplicar o evento no cache
+
+- **Contexto.** O gateway entrega eventos `order.placed`, `order.status-changed` e `order.delivery-person-assigned` ([ADR-05](#adr-05--três-processos-api-outbox-relay-e-gateway-websocket)), com entrega "pelo menos uma vez" e sem histórico ao reconectar.
+- **Decisão.**
+  - O contexto **Realtime** cuida só da conexão (`LiveConnection`): autentica pela primeira mensagem, reautentica quando o token renova (sem derrubar a conexão), reage a cada código de fechamento (`4401` renova a sessão e reconecta, `4403` desiste, queda ou deploy reconectam com **backoff exponencial e aleatório**), descarta eventos repetidos pelo `id` e, ao voltar de uma queda, pede às telas que recarreguem.
+  - Os eventos passam por um canal do shared kernel (`LiveEventBus`). Cada contexto assina o tópico e **invalida o próprio cache**: a lista de pedidos, o detalhe aberto e o quadro de atribuição recarregam pela API.
+  - Selo "Ao vivo", "Reconectando…" ou "Sem tempo real" no topo, com `role="status"`.
+- **Alternativas.** **Aplicar o payload direto no cache** (sem nova requisição): mais rápido, mas o evento não traz o pedido completo (sem dados pessoais, de propósito), e com filtros e paginação a lista teria que recalcular ordem e totais. **Polling a cada 30 s** (aceito pelo enunciado): mais simples, mas o painel fica até 30 s desatualizado e gera tráfego constante.
+- **Consequências.** ➕ A API continua sendo a única fonte da verdade, e os filtros e a paginação continuam certos depois de cada evento. ➖ Cada evento custa uma consulta por tela aberta (barato com as listagens indexadas em < 200 ms).
+
+### ADR-19 — Estilo: CSS Modules, design tokens e componentes próprios acessíveis
+
+- **Contexto.** O enunciado pede para "demonstrar que sabe customizar" se usar biblioteca de componentes, e avalia tema consistente, acessibilidade e responsividade.
+- **Decisão.** **CSS Modules** com **design tokens** em variáveis CSS (cores, espaçamento, raio, sombra, movimento), tema escuro pela preferência do sistema e componentes próprios no shared kernel:
+  - `Dialog` com foco preso, Esc, foco devolvido a quem abriu e `aria-modal`; `ConfirmDialog` como `alertdialog`;
+  - `Switch` (`role="switch"`), campos com `label`, `aria-invalid` e `aria-describedby`, `Alert` com `role="alert"` nos erros;
+  - `Skeleton`, `EmptyState` e paginação.
+
+  Status de pedido com cor **e** forma (vazado, pulsando, sólido), para não depender só da cor. Gráficos com tabela equivalente para leitores de tela. Animações curtas, desligadas com `prefers-reduced-motion`.
+- **Alternativas.** **MUI/Chakra**: rápidos de começar, mas pesados, com o visual "de biblioteca" a sobrescrever. **Tailwind**: produtivo, mas espalha decisões de design nas classes dos componentes; tokens em CSS mantêm uma fonte única.
+- **Consequências.** ➕ Zero dependência de UI, CSS pequeno (≈ 9 kB gzip somando todas as telas), tema escuro "de graça". ➖ Componentes complexos (data picker, combobox com busca) teriam de ser escritos ou trazidos depois.
+
+### ADR-20 — Desempenho: código dividido por tela e carregamento sem "piscar"
+
+- **Decisão.**
+  - Cada tela é um chunk carregado sob demanda (`React.lazy` por rota). O pacote principal (React, roteador, cache, login) tem **110 kB gzip**; pedidos, produtos e atribuição, **3–4 kB** cada; **Recharts** fica só no chunk de relatórios (**116 kB**), carregado quando a tela abre.
+  - Os barrels dos contextos exportam só providers e rotas, para `main` não puxar as páginas estaticamente.
+  - Listas mantêm os dados anteriores enquanto a nova página chega (`keepPreviousData`), com *skeleton* só no primeiro carregamento.
+  - Busca de produtos com *debounce* de 300 ms: uma requisição quando a pessoa para de digitar, não uma por tecla.
+  - Consultas obsoletas são canceladas (`AbortSignal` até o `fetch`).
+  - Só falhas transitórias (rede, 5xx) são repetidas, até 2 vezes; um `4xx` não muda tentando de novo.
+- **Consequências.** ➕ O login abre sem esperar o código dos gráficos; trocar filtros não pisca a tela. ➖ A primeira visita a cada tela baixa um chunk (alguns kB).
+
+### ADR-21 — Testes do painel: telas inteiras com a API e o WebSocket simulados
+
+- **Decisão.** A mesma pirâmide do backend, com o tipo no nome do arquivo:
+
+  | Tipo | Arquivos | Testes | Cobre |
+  |---|---|---|---|
+  | `*.unit.spec.ts(x)` | 46 | 307 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 6 | 48 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real |
+  | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
+
+  Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
+- **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Cypress/Playwright** para tudo: mais realista, mas lento para cobrir cada caso de borda (ver [limitações](#7-limitações-conhecidas-e-próximos-passos)).
+- **Consequências.** ➕ Os testes de integração pegam o que só aparece com as peças juntas (ex.: o tempo real recarregando a lista filtrada). ➖ Sem navegador real nos testes automatizados: layout e CSS foram verificados manualmente no navegador.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -409,6 +552,8 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 ## 6. Dificuldades encontradas e como foram resolvidas
 
+### No backend
+
 1. **Teste de concorrência que travava a si mesmo.** O helper que abre uma transação e a deixa bloqueada num lock era uma função `async` que devolvia a promise do resultado. Uma função `async` "desembrulha" a promise devolvida, então o helper só retornava quando a transação terminava, e ela esperava o próprio teste liberá-la (deadlock). **Solução:** devolver um objeto `{ outcome }` com a promise dentro. O helper foi para o shared kernel e é usado por todos os testes de concorrência.
 
 2. **Despacho duplo apesar do lock.** O caminho óbvio, travar o entregador e verificar "tem entrega em andamento?" no mesmo comando SQL, tem uma armadilha: no `READ COMMITTED`, cada comando enxerga o snapshot de quando começou. Se o comando esperou o lock de outra transação, a verificação ainda vê o estado anterior a ela e deixa passar o segundo despacho. **Solução:** travar o entregador num comando e verificar num comando **seguinte**, que já enxerga o commit da outra transação. O índice único parcial ficou como rede de segurança, e um teste com transações paralelas reais cobre o cenário.
@@ -429,11 +574,35 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 10. **Os testes de arquitetura acharam violações reais.** A camada de aplicação do `realtime` dependia de um contrato da camada de apresentação do shared kernel, e 45 imports usavam `/index`. **Solução:** uma porta `RealtimeAuthenticator` na aplicação do `realtime` e a limpeza dos imports. Também houve limitações do ArchUnitTS a contornar: o nome do arquivo vem sem extensão, e padrões com dois `**` não selecionam nada. Foram criados helpers para isso, e cada regra foi validada injetando uma violação de propósito e vendo o teste falhar.
 
+### No painel e na infraestrutura
+
+11. **Corrida no build das imagens.** Os cinco serviços do backend declaravam `build` com a mesma imagem, e o BuildKit às vezes os exportava em paralelo: `failed to prepare extraction snapshot … parent snapshot does not exist`. Tinha passado antes por sorte. **Solução:** só o `migrate` constrói a imagem; os outros a reaproveitam (`pull_policy: never`).
+
+12. **Compose que não rodaria em outra máquina.** Para a API confiar só no nginx, a primeira versão fixava a sub-rede e o IP do nginx. Numa máquina onde aquela faixa já existisse, o `docker compose up` falharia ("pool overlaps"). **Solução:** um salto de proxy confiável (`TRUST_PROXY=1`) com as portas do backend presas em `127.0.0.1` ([ADR-13](#adr-13--docker-uma-imagem-por-aplicação-e-um-compose-único-na-raiz)). Verificado com um `X-Forwarded-For` forjado: a API registrou o IP real do cliente, e as portas do backend ficaram fechadas pela rede.
+
+13. **Tempo real que não chegava ao painel.** No teste de ponta a ponta, o selo dizia "Ao vivo", mas a lista não mudava. A mensagem estava no outbox com `published_at` vazio: o `outbox-relay` não estava rodando, porque `docker compose up frontend` sobe só as dependências declaradas do painel (API e gateway). **Solução:** o `frontend` passou a depender do `outbox-relay`. O defeito só apareceu juntando todas as peças, o que justifica o teste manual com o stack real além dos automatizados.
+
+14. **Renovação de token derrubando outras abas.** Com a rotação do refresh token e a detecção de reuso na API, duas abas renovando juntas fariam a segunda ser tratada como roubo e revogariam a sessão das duas. **Solução:** renovação única por aba e uma trava entre abas com a Web Locks API ([ADR-16](#adr-16--sessão-no-navegador-token-em-memória-renovação-única-e-trava-entre-abas)), com fila local onde a API não existe (jsdom, navegadores antigos).
+
+15. **Foco perdido nos filtros.** O jeito mais curto de sincronizar o formulário de filtros com a URL, remontar o componente com uma `key` derivada dos filtros, tiraria o foco do campo a cada mudança aplicada (os filtros aplicam enquanto a pessoa digita). **Solução:** o rascunho só é substituído quando a URL muda por fora (voltar, limpar, link), comparando com o último valor sincronizado durante a renderização, o padrão do React para estado derivado.
+
+16. **Selo "Ao vivo" invisível para o leitor de tela.** Em `role="status"`, o nome acessível vem do autor (`aria-label`/`title`), não do conteúdo: o selo era anunciado com o texto da dica. Um teste de integração, que procura o selo pelo nome acessível, pegou o problema. **Solução:** `aria-label` explícito ("Tempo real: Ao vivo").
+
+17. **Testes de tela instáveis sob carga.** Com todas as suítes em paralelo, montar uma tela inteira (sessão restaurada e consultas) às vezes passava de 1 s, o tempo padrão do `findBy`. **Solução:** tempo de espera do Testing Library em 3 s (as asserções continuam esperando pela mesma condição) e esperas explícitas em vez de supor a ordem das requisições. Num caso, o "erro" era correto: um `503` é repetido duas vezes (1 s + 2 s) antes de aparecer, e o teste passou a esperar esse comportamento em vez de escondê-lo.
+
+18. **Bibliotecas mais novas que a documentação conhecida.** React Router 8, MSW 3 (`onUnhandledFrame`, WebSocket com `ws.link`), Vite 8 e TypeScript 7 foram usados conferindo as APIs nos tipos instalados antes de escrever o código. As classes de CSS Modules vêm como `string | undefined` com `noUncheckedIndexedAccess`, e um helper `cx` evitou espalhar `?? ''`. A Recharts precisa de `ResizeObserver`, que o jsdom não tem, e um stub no setup dos testes resolveu (o conteúdo dos gráficos é verificado pelas tabelas acessíveis).
+
+19. **Pacote de 515 kB.** O build avisou que o JavaScript passava de 500 kB. **Solução:** divisão por rota e barrels que não reexportam as páginas ([ADR-20](#adr-20--desempenho-código-dividido-por-tela-e-carregamento-sem-piscar)): o pacote principal caiu para 110 kB gzip, e a biblioteca de gráficos só baixa na tela de relatórios.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
 
-- **Frontend:** as decisões do painel serão adicionadas aqui.
+- **Testes E2E com navegador real** (Playwright) e **CI** (GitHub Actions com lint e testes): não implementados. Os testes de integração cobrem as telas com MSW, e o layout foi conferido manualmente no navegador. Também não há ESLint configurado; o TypeScript estrito e os testes de arquitetura cobrem parte do que ele pegaria.
+- **Tela de entregadores (CRUD).** A API tem as rotas, mas o enunciado não lista a tela, e ela não foi feita. Os entregadores vêm do seed.
+- **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
+- **Relatórios fora do tempo real.** O painel de pedidos e o quadro de atribuição recarregam a cada evento; os relatórios só quando o período muda ou a tela abre.
+- **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
 - **Escala do otimizador.** O(k²·K) responde em milissegundos até centenas de pedidos, mas chega a ~2 s com 1000 × 1000. Nessa escala, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
 - **Tempo real sem histórico.** O Redis pub/sub não guarda mensagens: quem reconecta recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams.
