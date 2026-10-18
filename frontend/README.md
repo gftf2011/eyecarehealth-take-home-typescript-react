@@ -5,7 +5,11 @@ Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mes
 - **Vite 8**, **React 19**, **React Router 8**, **TanStack Query 5**, **Zod 4**, CSS Modules com design tokens (tema claro/escuro)
 - Testes com **Vitest**, **Testing Library**, **MSW** (API simulada) e **ArchUnitTS**
 
-> **Estado atual:** base do projeto e o contexto **Identity** completos — login, sessão, renovação de token, rotas protegidas por sessão e permissão, logout. As telas de pedidos, produtos, entregadores, atribuição e relatórios entram nos próximos passos.
+> **Estado atual:**
+> - **Identity**: login, sessão, renovação de token, rotas protegidas por sessão e permissão, logout.
+> - **Ordering**: painel de pedidos (`/pedidos`, a página inicial) com filtros por status, período e ordenação guardados na URL, lista paginada, detalhe em modal com link próprio e botões de status contextuais (só as transições válidas; cancelar pede confirmação; despachar sem entregador fica bloqueado com o motivo; perfil `viewer` não vê ações).
+>
+> As telas de produtos, entregadores, atribuição, relatórios e a atualização em tempo real entram nos próximos passos.
 
 ## Início rápido
 
@@ -27,7 +31,7 @@ O Vite encaminha `/api` para `http://localhost:3001` e `/realtime` para `ws://lo
 
 ### Contextos e camadas
 
-As pastas espelham os bounded contexts do backend (por enquanto, `identity`), mais o `shared-kernel` e a composição em `main/`:
+As pastas espelham os bounded contexts do backend (por enquanto, `identity` e `ordering`), mais o `shared-kernel` e a composição em `main/`:
 
 ```
 src/
@@ -37,6 +41,7 @@ src/
 │   ├── infra/           gateway HTTP, store da sessão, trava entre abas, agendador de renovação
 │   ├── presentation/    componentes, páginas, hooks, rotas (React)
 │   └── main/            composition root do contexto
+├── ordering/            painel de pedidos: OrderStatus (máquina de estados), Order, filtros, casos de uso, telas
 ├── shared-kernel/       base comum: erros, validação, cliente HTTP, componentes de UI, tema
 ├── main/                entrypoint, roteador, layout, injeção das dependências
 └── architecture/        testes de arquitetura (ArchUnitTS)
@@ -53,6 +58,7 @@ main → presentation → application → domain
 - **application**: casos de uso que dependem de **ports** (`AuthGateway`, `SessionStore`, `SessionRenewalLock`); não conhecem React, `fetch` nem timers.
 - **infra**: implementa os ports (HTTP com `fetch`, Web Locks API, `setTimeout`).
 - **presentation**: React. Chama os casos de uso por hooks (TanStack Query para estado de servidor) e nunca a infra.
+- Contextos não se importam: as permissões da sessão chegam às telas de pedidos por um provider do shared kernel (`useCan`), montado em `main/` a partir do Identity.
 
 ### Sessão e segurança
 

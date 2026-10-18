@@ -1,11 +1,11 @@
 export { LoginForm, type LoginFormProps } from './components/login-form/login-form';
-export { RequirePermission } from './components/require-permission/require-permission';
 export {
   RequireSession,
   type LoginRedirectState,
 } from './components/require-session/require-session';
+export { SessionPermissions } from './components/session-permissions/session-permissions';
 export { UserMenu } from './components/user-menu/user-menu';
-export { useCan, useCurrentSession, useLogin, useLogout, useSessionState } from './hooks';
+export { useCurrentSession, useLogin, useLogout, useSessionState } from './hooks';
 export { LoginPage } from './pages/login-page/login-page';
 export {
   IdentityProvider,

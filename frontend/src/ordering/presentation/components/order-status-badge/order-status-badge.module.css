@@ -1,0 +1,70 @@
+.badge {
+  --tone: var(--color-text-muted);
+  --tone-soft: var(--color-surface-muted);
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--tone-soft);
+  color: var(--tone);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.icon {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+/* Cada status tem também uma forma: pendente vazado, em andamento pulsando, finais sólidos. */
+.pending .icon {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+
+.preparing {
+  --tone: var(--color-warning);
+  --tone-soft: var(--color-warning-soft);
+}
+
+.ready {
+  --tone: var(--color-brand);
+  --tone-soft: var(--color-brand-soft);
+}
+
+.delivering {
+  --tone: var(--color-info);
+  --tone-soft: var(--color-info-soft);
+}
+
+.preparing .icon,
+.delivering .icon {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.delivered {
+  --tone: var(--color-success);
+  --tone-soft: var(--color-success-soft);
+}
+
+.cancelled {
+  --tone: var(--color-danger);
+  --tone-soft: var(--color-danger-soft);
+}
+
+.cancelled .icon {
+  width: 0.625rem;
+  height: 2px;
+  border-radius: 1px;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

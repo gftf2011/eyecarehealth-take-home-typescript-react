@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-import type { Permission } from '../../../../shared-kernel/domain';
-import { Alert } from '../../../../shared-kernel/presentation';
+import type { Permission } from '../../../domain';
 import { useCan } from '../../hooks/use-can';
+import { Alert } from '../alert/alert';
 
 /** Mostra a tela só para perfis com a permissão; os demais veem um aviso de acesso negado. */
 export function RequirePermission({

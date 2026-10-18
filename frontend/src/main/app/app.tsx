@@ -1,10 +1,11 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, type DataRouter } from 'react-router';
 
-import { IdentityProvider } from '../../identity/presentation';
+import { IdentityProvider, SessionPermissions } from '../../identity/presentation';
+import { OrderingProvider } from '../../ordering/presentation';
 import type { AppDependencies } from './create-app-dependencies';
 
-/** Raiz do painel: cache de consultas, serviços dos contextos e rotas. */
+/** Raiz do painel: cache de consultas, serviços dos contextos, permissões da sessão e rotas. */
 export function App({
   dependencies,
   router,
@@ -15,7 +16,11 @@ export function App({
   return (
     <QueryClientProvider client={dependencies.queryClient}>
       <IdentityProvider services={dependencies.identity.services}>
-        <RouterProvider router={router} />
+        <SessionPermissions>
+          <OrderingProvider services={dependencies.ordering.services}>
+            <RouterProvider router={router} />
+          </OrderingProvider>
+        </SessionPermissions>
       </IdentityProvider>
     </QueryClientProvider>
   );

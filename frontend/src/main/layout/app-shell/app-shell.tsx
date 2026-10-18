@@ -1,13 +1,13 @@
 import { NavLink, Outlet } from 'react-router';
 
-import { UserMenu, useCurrentSession } from '../../../identity/presentation';
-import { cx, type NavigationItem } from '../../../shared-kernel/presentation';
+import { UserMenu } from '../../../identity/presentation';
+import { cx, usePermissions, type NavigationItem } from '../../../shared-kernel/presentation';
 import styles from './app-shell.module.css';
 
 /** Moldura das telas autenticadas: marca, menu filtrado pelo perfil e usuário logado. */
 export function AppShell({ navigation }: { readonly navigation: readonly NavigationItem[] }) {
-  const session = useCurrentSession();
-  const visible = navigation.filter((item) => session?.permissions.includes(item.permission));
+  const permissions = usePermissions();
+  const visible = navigation.filter((item) => permissions.includes(item.permission));
 
   return (
     <div className={styles.shell}>

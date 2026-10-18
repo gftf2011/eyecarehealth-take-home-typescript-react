@@ -1,15 +1,15 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { createIdentityModule, type IdentityModule } from '../../identity/main/identity.module';
 import type { SessionRenewalSchedulerOptions } from '../../identity/infra';
+import { createIdentityModule, type IdentityModule } from '../../identity/main/identity.module';
+import { createOrderingModule, type OrderingModule } from '../../ordering/main/ordering.module';
 import { FetchHttpClient, SystemClock } from '../../shared-kernel/infra';
 import type { AppConfig } from '../config/app-config';
 import { createQueryClient } from './create-query-client';
 
 export type AppDependencies = {
   readonly identity: IdentityModule;
-  /** Cliente das rotas autenticadas, compartilhado pelos contextos de negócio. */
-  readonly api: FetchHttpClient;
+  readonly ordering: OrderingModule;
   readonly queryClient: QueryClient;
 };
 
@@ -30,11 +30,16 @@ export function createAppDependencies(options: AppDependenciesOptions): AppDepen
     ...(options.renewal === undefined ? {} : { renewal: options.renewal }),
   });
 
+  // Cliente das rotas autenticadas, compartilhado pelos contextos de negócio.
   const api = new FetchHttpClient({
     baseUrl: options.apiBaseUrl,
     accessTokens: identity.accessTokens,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 
-  return { identity, api, queryClient: createQueryClient() };
+  return {
+    identity,
+    ordering: createOrderingModule(api),
+    queryClient: createQueryClient(),
+  };
 }
