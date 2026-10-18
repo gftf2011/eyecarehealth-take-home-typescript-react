@@ -472,9 +472,15 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Decisão.**
   - O contexto **Realtime** cuida só da conexão (`LiveConnection`): autentica pela primeira mensagem, reautentica quando o token renova (sem derrubar a conexão), reage a cada código de fechamento (`4401` renova a sessão e reconecta, `4403` desiste, queda ou deploy reconectam com **backoff exponencial e aleatório**), descarta eventos repetidos pelo `id` e, ao voltar de uma queda, pede às telas que recarreguem.
   - Os eventos passam por um canal do shared kernel (`LiveEventBus`). Cada contexto assina o tópico e **invalida o próprio cache**: a lista de pedidos, o detalhe aberto, o quadro de atribuição, a tabela de produtos e os relatórios recarregam pela API. Um produto pausado numa aba ou por outro gestor aparece pausado nas outras telas sem F5.
+  - **Invalidar sem multiplicar consultas** ([`useLiveInvalidation`](frontend/src/shared-kernel/presentation/hooks/use-live-invalidation.ts)). Invalidar a cada evento fazia **toda tela aberta** consultar a API **a cada evento**: com 50 gestores e 2 pedidos por segundo, ~100 listagens por segundo, e cada aba de relatórios disparava as quatro agregações. Cada tela agora declara regras por tópico, e três filtros se somam:
+    1. **Relevância:** só as consultas que o evento muda. A lista filtrada por `delivered` ignora um pedido novo (`pending`); o detalhe só recarrega com eventos do próprio pedido; o quadro de atribuição ignora pedido novo e só reage a `ready`/`delivering`; nos relatórios, pedido novo só mexe na contagem por status, pedido entregue nos quatro, produto editado nos mais vendidos, e preço, disponibilidade e troca de entregador em nenhum.
+    2. **Rajadas** ([`RefreshThrottle`](frontend/src/shared-kernel/application/live-refresh/refresh-throttle.ts)): o primeiro evento recarrega na hora; os que chegam no intervalo saem juntos no fim dele. No máximo uma recarga por segundo por tela (5 s nos relatórios), seja qual for o volume de eventos.
+    3. **Aba em segundo plano:** a consulta só é marcada como desatualizada, sem requisição; ela recarrega quando a aba volta a ficar visível.
+
+    Ao reconectar, tudo recarrega na hora, como antes (eventos podem ter se perdido).
   - Selo "Ao vivo", "Reconectando…" ou "Sem tempo real" no topo, com `role="status"`.
 - **Alternativas.** **Aplicar o payload direto no cache** (sem nova requisição): mais rápido, mas o evento não traz o pedido completo (sem dados pessoais, de propósito), e com filtros e paginação a lista teria que recalcular ordem e totais. **Polling a cada 30 s** (aceito pelo enunciado): mais simples, mas o painel fica até 30 s desatualizado e gera tráfego constante.
-- **Consequências.** ➕ A API continua sendo a única fonte da verdade, e os filtros e a paginação continuam certos depois de cada evento. ➖ Cada evento custa uma consulta por tela aberta (barato com as listagens indexadas em < 200 ms).
+- **Consequências.** ➕ A API continua sendo a única fonte da verdade, e os filtros e a paginação continuam certos depois de cada evento. ➕ O custo do tempo real fica limitado por tela visível (uma consulta por segundo, no pior caso), não pelo volume de eventos, e abas esquecidas abertas não consultam nada. ➖ Uma tela pode ficar até 1 s (5 s nos relatórios) atrás do último evento de uma rajada. ➖ As regras de relevância conhecem o significado dos eventos: um tipo novo de evento cai no padrão conservador (recarregar). ➖ A aba que fez a mudança ainda recarrega duas vezes (a da própria ação e a do evento que volta), porque o evento não diz quem o causou.
 
 ### ADR-19 — Estilo: CSS Modules, design tokens e componentes próprios acessíveis
 
@@ -505,8 +511,8 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
-  | `*.unit.spec.ts(x)` | 46 | 307 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 7 | 53 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real |
+  | `*.unit.spec.ts(x)` | 50 | 330 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 8 | 59 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
