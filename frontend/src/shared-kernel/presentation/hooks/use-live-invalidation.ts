@@ -31,8 +31,11 @@ const DEFAULT_INTERVAL_MS = 1_000;
  * - **aba em segundo plano:** só marca a consulta como desatualizada, sem
  *   requisição; ela recarrega quando a aba volta a ficar visível.
  *
- * Ao reconectar (eventos podem ter se perdido), invalida todas as
- * candidatas na hora.
+ * A cada conexão aceita, inclusive a primeira (eventos publicados antes da
+ * assinatura se perdem), invalida todas as candidatas na hora: as que já têm
+ * dados e as que ainda estão carregando (são canceladas e refeitas, pois a
+ * leitura pode ter começado antes da assinatura). Telas que abrem depois não
+ * recebem o aviso e não pagam a recarga extra.
  */
 export function useLiveInvalidation(
   rules: readonly LiveInvalidationRule[],

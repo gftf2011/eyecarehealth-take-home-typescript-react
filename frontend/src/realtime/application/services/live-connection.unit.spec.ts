@@ -46,6 +46,15 @@ describe('LiveConnection', () => {
     expect(connection.status()).toBe('live');
   });
 
+  it('primeira conexão também pede para recarregar (a tela pode ter lido a API antes da assinatura)', () => {
+    sockets.last.open();
+    expect(resyncs).toBe(0);
+
+    sockets.last.ready();
+
+    expect(resyncs).toBe(1);
+  });
+
   it('repassa os eventos ao canal e descarta repetidos', () => {
     sockets.last.open();
     sockets.last.ready();
@@ -90,20 +99,22 @@ describe('LiveConnection', () => {
     expect(scheduler.runNext()).toBe(1_000);
 
     sockets.last.open();
+    expect(resyncs).toBe(1);
     sockets.last.ready();
     expect(connection.status()).toBe('live');
-    expect(resyncs).toBe(1);
+    expect(resyncs).toBe(2);
     expect(sockets.sockets).toHaveLength(3);
   });
 
   it('reautenticar não conta como queda (nada a recarregar)', () => {
     sockets.last.open();
     sockets.last.ready();
+    expect(resyncs).toBe(1);
 
     tokens.change('token-2');
     sockets.last.ready();
 
-    expect(resyncs).toBe(0);
+    expect(resyncs).toBe(1);
   });
 
   it('4401 (token vencido): renova a sessão e reconecta com o token novo', async () => {

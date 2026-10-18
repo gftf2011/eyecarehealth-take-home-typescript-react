@@ -17,16 +17,21 @@ export class FakeRealtimeGateway {
   readonly authTokens: string[] = [];
   connections = 0;
   #sequence = 0;
+  #held: (() => void)[] | null = null;
 
   handler() {
     return this.#link.addEventListener('connection', ({ client }) => {
       this.connections += 1;
-      this.#clients.add(client);
       client.addEventListener('message', (message) => {
         const parsed = JSON.parse(String(message.data)) as { type?: string; accessToken?: string };
         if (parsed.type !== 'auth' || parsed.accessToken === undefined) return;
         this.authTokens.push(parsed.accessToken);
-        client.send(JSON.stringify({ type: 'ready', expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() }));
+        const ready = () => {
+          this.#clients.add(client);
+          client.send(JSON.stringify({ type: 'ready', expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() }));
+        };
+        if (this.#held === null) ready();
+        else this.#held.push(ready);
       });
       client.addEventListener('close', () => {
         this.#clients.delete(client);
@@ -34,8 +39,23 @@ export class FakeRealtimeGateway {
     });
   }
 
+  /** Conexões assinadas (que já receberam `ready`). */
   get openConnections(): number {
     return this.#clients.size;
+  }
+
+  /**
+   * Segura o `ready` (a assinatura no pub/sub) até `releaseReady()`: o que for
+   * publicado nesse meio-tempo não chega ao painel, como no gateway real.
+   */
+  holdReady(): void {
+    this.#held ??= [];
+  }
+
+  releaseReady(): void {
+    const held = this.#held ?? [];
+    this.#held = null;
+    for (const ready of held) ready();
   }
 
   /** Publica uma atualização de pedido para todos os painéis conectados. */

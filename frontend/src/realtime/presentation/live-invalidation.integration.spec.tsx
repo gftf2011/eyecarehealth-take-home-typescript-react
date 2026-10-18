@@ -23,7 +23,16 @@ function open(path: string) {
   return app;
 }
 
-const liveBadge = () => screen.findByRole('status', { name: /Ao vivo/ });
+/**
+ * "Ao vivo" e sem consultas em andamento: a cada conexão aceita as telas abertas
+ * recarregam (eventos anteriores à assinatura se perdem), e as contagens dos
+ * testes só valem depois dessa recarga.
+ */
+async function liveBadge(): Promise<HTMLElement> {
+  const badge = await screen.findByRole('status', { name: /Ao vivo/ });
+  await waitFor(() => expect(app?.dependencies.queryClient.isFetching()).toBe(0));
+  return badge;
+}
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** O navegador esconde ou mostra a aba (o TanStack Query ouve `visibilitychange`). */

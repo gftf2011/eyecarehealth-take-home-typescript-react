@@ -22,7 +22,16 @@ function open(path: string) {
 }
 
 const availability = (name: string) => screen.findByRole('switch', { name: `Disponível: ${name}` });
-const liveBadge = () => screen.findByRole('status', { name: /Ao vivo/ });
+/**
+ * "Ao vivo" e sem consultas em andamento: a cada conexão aceita as telas abertas
+ * recarregam (eventos anteriores à assinatura se perdem), e as contagens dos
+ * testes só valem depois dessa recarga.
+ */
+async function liveBadge(): Promise<HTMLElement> {
+  const badge = await screen.findByRole('status', { name: /Ao vivo/ });
+  await waitFor(() => expect(app?.dependencies.queryClient.isFetching()).toBe(0));
+  return badge;
+}
 
 beforeAll(() => api.listen());
 beforeEach(() => {
@@ -82,6 +91,11 @@ describe('Relatórios em tempo real', () => {
   const PERIOD = '/relatorios?startDate=2026-10-01&endDate=2026-10-17';
 
   const reloaded = (before: number) => reports.queries.slice(before).map((query) => query.report).sort();
+  const loaded = async (): Promise<number> => {
+    await waitFor(() => expect(reports.queries.length).toBeGreaterThanOrEqual(4));
+    await liveBadge();
+    return reports.queries.length;
+  };
 
   it.each([
     ['pedido novo', () => gateway.publishOrderUpdate({ type: 'order.placed', orderId: 'x' }), ['orders-by-status']],
@@ -103,26 +117,24 @@ describe('Relatórios em tempo real', () => {
     ],
   ])('%s recarrega só as métricas que ele muda', async (_, publish, expected) => {
     open(PERIOD);
-    await waitFor(() => expect(reports.queries).toHaveLength(4));
-    await liveBadge();
+    const before = await loaded();
 
     publish();
 
-    await waitFor(() => expect(reloaded(4)).toEqual(expected));
+    await waitFor(() => expect(reloaded(before)).toEqual(expected));
     await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(reloaded(4)).toEqual(expected);
+    expect(reloaded(before)).toEqual(expected);
     expect(within(await screen.findByRole('region', { name: 'Receita por dia' })).getByRole('table')).toBeInTheDocument();
   });
 
   it('mudança de preço ou disponibilidade não recarrega nenhum relatório', async () => {
     open(PERIOD);
-    await waitFor(() => expect(reports.queries).toHaveLength(4));
-    await liveBadge();
+    const before = await loaded();
 
     gateway.publishProductUpdate({ type: 'product.price-changed', productId: 'p-burger' });
     gateway.publishProductUpdate({ type: 'product.availability-changed', productId: 'p-burger', isAvailable: false });
 
     await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(reports.queries).toHaveLength(4);
+    expect(reports.queries).toHaveLength(before);
   });
 });

@@ -26,7 +26,16 @@ const rowOf = async (customer: string): Promise<HTMLElement> => {
   return row;
 };
 
-const liveBadge = () => screen.findByRole('status', { name: /Ao vivo/ });
+/**
+ * "Ao vivo" e sem consultas em andamento: a cada conexão aceita as telas abertas
+ * recarregam (eventos anteriores à assinatura se perdem), e as contagens dos
+ * testes só valem depois dessa recarga.
+ */
+async function liveBadge(): Promise<HTMLElement> {
+  const badge = await screen.findByRole('status', { name: /Ao vivo/ });
+  await waitFor(() => expect(app?.dependencies.queryClient.isFetching()).toBe(0));
+  return badge;
+}
 
 beforeAll(() => api.listen());
 beforeEach(() => {
@@ -50,6 +59,31 @@ describe('Painel de pedidos em tempo real', () => {
 
     expect(await liveBadge()).toBeInTheDocument();
     expect(gateway.authTokens).toEqual(['access-1']);
+  });
+
+  it('mudança publicada entre a primeira leitura e a assinatura não se perde', async () => {
+    gateway.holdReady();
+    open();
+    await within(await rowOf('João Silva')).findByText('Pendente');
+
+    orders.update('order-joao', { status: 'cancelled' });
+    gateway.publishOrderUpdate({ type: 'order.status-changed', orderId: 'order-joao', previousStatus: 'pending', status: 'cancelled' });
+    gateway.releaseReady();
+
+    expect(await within(await rowOf('João Silva')).findByText('Cancelado')).toBeInTheDocument();
+  });
+
+  it('tela aberta depois da conexão carrega uma vez só', async () => {
+    const view = open();
+    await rowOf('João Silva');
+    await liveBadge();
+    const before = orders.listQueries.length;
+
+    await view.router.navigate('/pedidos?status=delivered');
+
+    await waitFor(() => expect(orders.listQueries.length).toBe(before + 1));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(orders.listQueries.length).toBe(before + 1);
   });
 
   it('pedido alterado em outro lugar atualiza a lista sem recarregar', async () => {

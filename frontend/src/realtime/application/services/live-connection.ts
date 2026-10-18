@@ -22,8 +22,11 @@ export type LiveConnectionDependencies = {
  * - token recusado (`4401`): renova e reconecta; queda ou deploy: reconecta
  *   com espera crescente e aleatória; sem permissão (`4403`): desiste;
  * - descarta eventos repetidos (entrega "pelo menos uma vez");
- * - depois de uma queda, pede às telas que recarreguem (o pub/sub não guarda
- *   o que passou enquanto o painel estava desconectado).
+ * - a cada conexão aceita (`ready`), inclusive a primeira, pede às telas que
+ *   recarreguem: o pub/sub não guarda o que passou antes da assinatura, e uma
+ *   tela pode ter lido a API antes dela (a sessão é restaurada e a lista e o
+ *   WebSocket começam juntos) ou durante uma queda. Reautenticar na mesma
+ *   conexão não pede recarga.
  */
 export class LiveConnection {
   readonly #listeners = new Set<() => void>();
@@ -35,7 +38,6 @@ export class LiveConnection {
   #attempt = 0;
   #cancelRetry: (() => void) | null = null;
   #awaitingFirstReady = false;
-  #wasLive = false;
   #unsubscribeTokens: (() => void) | null = null;
 
   constructor(private readonly deps: LiveConnectionDependencies) {
@@ -99,9 +101,8 @@ export class LiveConnection {
     if (message === null) return;
 
     if (message.type === 'ready') {
-      if (this.#awaitingFirstReady && this.#wasLive) this.deps.events.resync();
+      if (this.#awaitingFirstReady) this.deps.events.resync();
       this.#awaitingFirstReady = false;
-      this.#wasLive = true;
       this.#attempt = 0;
       this.#setStatus('live');
       return;
@@ -150,7 +151,6 @@ export class LiveConnection {
     this.#socket = null;
     this.#token = null;
     this.#attempt = 0;
-    this.#wasLive = false;
     this.#setStatus('idle');
   }
 
