@@ -57,8 +57,8 @@ O mesmo código (e a mesma imagem Docker) roda em três processos independentes:
                                                          (outbox-relay.ts)
                                                                   │ PUBLISH
                                                                   ▼
- painel <──WebSocket──  realtime :3002  <──SUBSCRIBE──  Redis pub/sub (fastmeals:ordering.order-updates)
-                        (realtime-gateway.ts)
+ painel <──WebSocket──  realtime :3002  <──SUBSCRIBE──  Redis pub/sub (fastmeals:ordering.order-updates,
+                        (realtime-gateway.ts)                           fastmeals:catalog.product-updates)
 ```
 
 | Processo | Entrypoint | Responsabilidade | Depende de |
@@ -203,7 +203,7 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 80 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 81 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, seed, migrations — contra bancos reais | 15 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 9 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
@@ -377,7 +377,10 @@ Endpoint: `ws://localhost:3002/realtime`. A origem do navegador precisa estar em
 }
 ```
 
-Tipos de `payload.type`: `order.placed`, `order.status-changed` (com `previousStatus`, `status`, `deliveryPersonId`) e `order.delivery-person-assigned`. Dados pessoais do cliente não trafegam pelo canal.
+Tópicos e tipos de `payload.type`:
+
+- `ordering.order-updates`: `order.placed`, `order.status-changed` (com `previousStatus`, `status`, `deliveryPersonId`) e `order.delivery-person-assigned`. Dados pessoais do cliente não trafegam pelo canal.
+- `catalog.product-updates`: `product.created`, `product.updated`, `product.price-changed`, `product.availability-changed` (com `isAvailable`) e `product.removed`, todos com `productId`. O painel recarrega os dados pela API.
 
 3. Um novo `auth` com o token renovado estende a conexão; quando o token vence, o servidor fecha com `4401`.
 

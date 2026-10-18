@@ -1,9 +1,11 @@
 /**
  * Gateway de tempo real: assina o Redis pub/sub (alimentado pelo outbox
- * relay) e repassa as atualizações de pedidos aos painéis por WebSocket.
+ * relay) e repassa as atualizações de pedidos e do cardápio aos painéis por
+ * WebSocket.
  * Processo próprio: conexões longas ficam isoladas da API e um deploy da API
  * não derruba os painéis. Pode rodar em várias réplicas (fan-out pelo Redis).
  */
+import { PRODUCT_UPDATES_TOPIC } from '../catalog/application/messages/product-update.message';
 import { makeTokenAuthenticator } from '../identity/main/token-authenticator.factory';
 import { ORDER_UPDATES_TOPIC } from '../ordering/application/messages/order-update.message';
 import { RealtimeHub } from '../realtime/application/realtime-hub';
@@ -21,7 +23,9 @@ async function main(): Promise<void> {
 
   // O logger do Fastify só existe depois do app: até lá, avisos vão ao console.
   let warn = (message: string, error?: unknown): void => console.warn(message, error);
-  const subscription = await RedisSubscription.open(env.REDIS_URL, [channelOf(ORDER_UPDATES_TOPIC)], {
+  // Tópicos públicos que o painel acompanha: pedidos e cardápio.
+  const topics = [ORDER_UPDATES_TOPIC, PRODUCT_UPDATES_TOPIC];
+  const subscription = await RedisSubscription.open(env.REDIS_URL, topics.map((topic) => channelOf(topic)), {
     connectionName: 'fastmeals-realtime-gateway',
     onMessage: (_channel, body) => {
       const event = toRealtimeEvent(body);
