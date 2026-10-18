@@ -20,7 +20,7 @@ export function App({
 }) {
   return (
     <QueryClientProvider client={dependencies.queryClient}>
-      <LiveEventsProvider bus={dependencies.liveEvents}>
+      <LiveEventsProvider bus={dependencies.liveEvents} scheduler={dependencies.scheduler}>
         <RealtimeProvider connection={dependencies.realtime.connection}>
           <IdentityProvider services={dependencies.identity.services}>
             <SessionPermissions>

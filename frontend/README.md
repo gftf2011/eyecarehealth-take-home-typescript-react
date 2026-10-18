@@ -91,6 +91,7 @@ main → presentation → application → domain
 - **presentation**: React. Chama os casos de uso por hooks (TanStack Query para estado de servidor) e nunca a infra.
 - Cada tela é carregada sob demanda (`React.lazy`): um chunk por rota no build, e o login não espera o código das outras telas.
 - Eventos em tempo real passam por um canal do shared kernel (`LiveEventBus`): o Realtime publica e cada contexto assina o tópico que lhe interessa e invalida o próprio cache. O Realtime não conhece as telas.
+- A invalidação (`useLiveInvalidation`) só recarrega as consultas que o evento afeta (regras por tela), junta rajadas em no máximo uma recarga por segundo (5 s nos relatórios) e, com a aba em segundo plano, só marca como desatualizado, recarregando quando ela volta a ficar visível.
 - Contextos não se importam: as permissões da sessão chegam às telas de pedidos por um provider do shared kernel (`useCan`), montado em `main/` a partir do Identity.
 
 ### Sessão e segurança

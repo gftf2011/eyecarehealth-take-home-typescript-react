@@ -81,17 +81,48 @@ describe('Cardápio em tempo real', () => {
 describe('Relatórios em tempo real', () => {
   const PERIOD = '/relatorios?startDate=2026-10-01&endDate=2026-10-17';
 
+  const reloaded = (before: number) => reports.queries.slice(before).map((query) => query.report).sort();
+
   it.each([
-    ['pedido novo', () => gateway.publishOrderUpdate({ type: 'order.placed', orderId: 'x' })],
-    ['produto renomeado', () => gateway.publishProductUpdate({ type: 'product.updated', productId: 'p-burger' })],
-  ])('%s recarrega as quatro métricas', async (_, publish) => {
+    ['pedido novo', () => gateway.publishOrderUpdate({ type: 'order.placed', orderId: 'x' }), ['orders-by-status']],
+    [
+      'produto renomeado',
+      () => gateway.publishProductUpdate({ type: 'product.updated', productId: 'p-burger' }),
+      ['top-products'],
+    ],
+    [
+      'pedido entregue',
+      () =>
+        gateway.publishOrderUpdate({
+          type: 'order.status-changed',
+          orderId: 'x',
+          previousStatus: 'delivering',
+          status: 'delivered',
+        }),
+      ['average-delivery-time', 'orders-by-status', 'revenue', 'top-products'],
+    ],
+  ])('%s recarrega só as métricas que ele muda', async (_, publish, expected) => {
     open(PERIOD);
     await waitFor(() => expect(reports.queries).toHaveLength(4));
     await liveBadge();
 
     publish();
 
-    await waitFor(() => expect(reports.queries).toHaveLength(8));
+    await waitFor(() => expect(reloaded(4)).toEqual(expected));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(reloaded(4)).toEqual(expected);
     expect(within(await screen.findByRole('region', { name: 'Receita por dia' })).getByRole('table')).toBeInTheDocument();
+  });
+
+  it('mudança de preço ou disponibilidade não recarrega nenhum relatório', async () => {
+    open(PERIOD);
+    await waitFor(() => expect(reports.queries).toHaveLength(4));
+    await liveBadge();
+
+    gateway.publishProductUpdate({ type: 'product.price-changed', productId: 'p-burger' });
+    gateway.publishProductUpdate({ type: 'product.availability-changed', productId: 'p-burger', isAvailable: false });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(reports.queries).toHaveLength(4);
   });
 });

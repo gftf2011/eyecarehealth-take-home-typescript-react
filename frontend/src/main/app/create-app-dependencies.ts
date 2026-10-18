@@ -8,7 +8,7 @@ import { createOrderingModule, type OrderingModule } from '../../ordering/main/o
 import { createReportingModule, type ReportingModule } from '../../reporting/main/reporting.module';
 import type { RealtimeSocketFactory } from '../../realtime/application';
 import { createRealtimeModule, type RealtimeModule } from '../../realtime/main/realtime.module';
-import type { LiveEventBus } from '../../shared-kernel/application';
+import type { LiveEventBus, Scheduler } from '../../shared-kernel/application';
 import { FetchHttpClient, InMemoryLiveEventBus, SystemClock, TimeoutScheduler } from '../../shared-kernel/infra';
 import type { AppConfig } from '../config/app-config';
 import { createQueryClient } from './create-query-client';
@@ -22,6 +22,8 @@ export type AppDependencies = {
   readonly realtime: RealtimeModule;
   /** Canal dos eventos em tempo real entre os contextos. */
   readonly liveEvents: LiveEventBus;
+  /** Timers da aplicação (reconexão, espaçamento das recargas do tempo real). */
+  readonly scheduler: Scheduler;
   readonly queryClient: QueryClient;
 };
 
@@ -52,11 +54,12 @@ export function createAppDependencies(options: AppDependenciesOptions): AppDepen
   });
 
   const liveEvents = new InMemoryLiveEventBus();
+  const scheduler = new TimeoutScheduler();
   const realtime = createRealtimeModule({
     url: options.realtimeUrl,
     tokens: identity.tokens,
     events: liveEvents,
-    scheduler: new TimeoutScheduler(),
+    scheduler,
     ...(options.realtimeSockets === undefined ? {} : { sockets: options.realtimeSockets }),
   });
 
@@ -64,6 +67,7 @@ export function createAppDependencies(options: AppDependenciesOptions): AppDepen
     identity,
     realtime,
     liveEvents,
+    scheduler,
     catalog: createCatalogModule(api),
     delivery: createDeliveryModule(api),
     ordering: createOrderingModule(api),

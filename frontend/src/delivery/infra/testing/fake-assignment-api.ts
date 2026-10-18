@@ -29,11 +29,14 @@ export class FakeAssignmentApi {
   readonly staleOrders = new Set<string>();
   readonly dispatched: { orderId: string; deliveryPersonId: string }[] = [];
   suggestions = 0;
+  /** Leituras do quadro (pedidos prontos). */
+  boardQueries = 0;
 
   handlers(): HttpHandler[] {
     return [
       http.get(apiUrl('/orders'), ({ request }) => {
         const status = new URL(request.url).searchParams.get('status');
+        if (status === 'ready') this.boardQueries += 1;
         const data = status === 'ready' ? this.orders : [];
         return HttpResponse.json({
           data: data.map((order) => ({
