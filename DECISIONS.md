@@ -307,11 +307,11 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
 ### ADR-04 — Eventos de domínio com mediator em memória e transactional outbox
 
-- **Contexto.** Mudanças em pedidos precisam chegar ao painel em tempo real, sem perder eventos se o processo cair entre gravar no banco e publicar.
+- **Contexto.** Mudanças em pedidos e no cardápio precisam chegar ao painel em tempo real, sem perder eventos se o processo cair entre gravar no banco e publicar.
 - **Decisão.**
   1. Os agregados registram eventos de domínio (`OrderPlaced`, `OrderStatusChanged`, ...).
   2. Os repositórios só os **coletam**; o Unit of Work os entrega a um **mediator em memória**, ainda dentro da transação e antes do commit.
-  3. Um *handler* decide o que sai do processo: o [`PublishOrderUpdateHandler`](backend/src/ordering/application/event-handlers/publish-order-update.handler.ts) converte os eventos de pedido numa mensagem pública versionada (`ordering.order-updates` v1, **sem dados pessoais do cliente**) e a grava na tabela `outbox_events`, na mesma transação.
+  3. Um *handler* decide o que sai do processo: o [`PublishOrderUpdateHandler`](backend/src/ordering/application/event-handlers/publish-order-update.handler.ts) converte os eventos de pedido numa mensagem pública versionada (`ordering.order-updates` v1, **sem dados pessoais do cliente**) e a grava na tabela `outbox_events`, na mesma transação. O Catalog faz o mesmo com o [`PublishProductUpdateHandler`](backend/src/catalog/application/event-handlers/publish-product-update.handler.ts) (`catalog.product-updates` v1: criado, editado, preço, disponibilidade, removido).
   4. O [relay](backend/src/shared-kernel/infra/outbox/outbox-relay.ts) lê o outbox em lotes e publica no Redis.
 - **Alternativas.** *Publicar no Redis direto do caso de uso*: perde o evento se o processo cair depois do commit, ou publica um evento de uma transação que vai falhar. *Todo evento de domínio no outbox automaticamente*: expõe a estrutura interna do domínio como contrato público. *CDC (Debezium) ou broker (Kafka/RabbitMQ)*: robustos, mas infraestrutura demais para um painel.
 - **Consequências.** ➕ Consistência garantida pelo banco (o evento existe se, e só se, a mudança foi confirmada). ➕ O contrato público é separado do evento interno. ➖ Entrega **pelo menos uma vez** com latência de polling (padrão: até 500 ms); o cliente descarta repetidos pelo `id`.
@@ -386,7 +386,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 80 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 81 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 15 | Repositórios, ACLs, consultas, outbox, Redis, seed, migrations — contra PostgreSQL e Redis reais |
   | `*.e2e.spec.ts` | 9 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
@@ -459,10 +459,10 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
 ### ADR-18 — Tempo real: invalidar, não aplicar o evento no cache
 
-- **Contexto.** O gateway entrega eventos `order.placed`, `order.status-changed` e `order.delivery-person-assigned` ([ADR-05](#adr-05--três-processos-api-outbox-relay-e-gateway-websocket)), com entrega "pelo menos uma vez" e sem histórico ao reconectar.
+- **Contexto.** O gateway entrega os eventos de pedido (`order.placed`, `order.status-changed`, `order.delivery-person-assigned`) e do cardápio (`product.*`) ([ADR-05](#adr-05--três-processos-api-outbox-relay-e-gateway-websocket)), com entrega "pelo menos uma vez" e sem histórico ao reconectar.
 - **Decisão.**
   - O contexto **Realtime** cuida só da conexão (`LiveConnection`): autentica pela primeira mensagem, reautentica quando o token renova (sem derrubar a conexão), reage a cada código de fechamento (`4401` renova a sessão e reconecta, `4403` desiste, queda ou deploy reconectam com **backoff exponencial e aleatório**), descarta eventos repetidos pelo `id` e, ao voltar de uma queda, pede às telas que recarreguem.
-  - Os eventos passam por um canal do shared kernel (`LiveEventBus`). Cada contexto assina o tópico e **invalida o próprio cache**: a lista de pedidos, o detalhe aberto e o quadro de atribuição recarregam pela API.
+  - Os eventos passam por um canal do shared kernel (`LiveEventBus`). Cada contexto assina o tópico e **invalida o próprio cache**: a lista de pedidos, o detalhe aberto, o quadro de atribuição, a tabela de produtos e os relatórios recarregam pela API. Um produto pausado numa aba ou por outro gestor aparece pausado nas outras telas sem F5.
   - Selo "Ao vivo", "Reconectando…" ou "Sem tempo real" no topo, com `role="status"`.
 - **Alternativas.** **Aplicar o payload direto no cache** (sem nova requisição): mais rápido, mas o evento não traz o pedido completo (sem dados pessoais, de propósito), e com filtros e paginação a lista teria que recalcular ordem e totais. **Polling a cada 30 s** (aceito pelo enunciado): mais simples, mas o painel fica até 30 s desatualizado e gera tráfego constante.
 - **Consequências.** ➕ A API continua sendo a única fonte da verdade, e os filtros e a paginação continuam certos depois de cada evento. ➖ Cada evento custa uma consulta por tela aberta (barato com as listagens indexadas em < 200 ms).
@@ -497,7 +497,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
   | `*.unit.spec.ts(x)` | 46 | 307 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 6 | 48 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real |
+  | `*.integration.spec.tsx` | 7 | 53 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
@@ -594,6 +594,8 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 19. **Pacote de 515 kB.** O build avisou que o JavaScript passava de 500 kB. **Solução:** divisão por rota e barrels que não reexportam as páginas ([ADR-20](#adr-20--desempenho-código-dividido-por-tela-e-carregamento-sem-piscar)): o pacote principal caiu para 110 kB gzip, e a biblioteca de gráficos só baixa na tela de relatórios.
 
+20. **Cardápio que só mudava com F5.** Com duas abas abertas, pausar um produto numa delas não mudava a outra, nem ao trocar de aba: só pedidos passavam pelo tempo real, e o `staleTime` de 30 s impedia a recarga ao focar. **Solução:** o Catalog passou a publicar `catalog.product-updates` pelo mesmo outbox, o gateway assina os dois tópicos, e a tabela de produtos e os relatórios invalidam o cache a cada evento. Um teste de integração cobre o cenário.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
@@ -601,7 +603,6 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 - **Testes E2E com navegador real** (Playwright) e **CI** (GitHub Actions com lint e testes): não implementados. Os testes de integração cobrem as telas com MSW, e o layout foi conferido manualmente no navegador. Também não há ESLint configurado; o TypeScript estrito e os testes de arquitetura cobrem parte do que ele pegaria.
 - **Tela de entregadores (CRUD).** A API tem as rotas, mas o enunciado não lista a tela, e ela não foi feita. Os entregadores vêm do seed.
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
-- **Relatórios fora do tempo real.** O painel de pedidos e o quadro de atribuição recarregam a cada evento; os relatórios só quando o período muda ou a tela abre.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
 - **Escala do otimizador.** O(k²·K) responde em milissegundos até centenas de pedidos, mas chega a ~2 s com 1000 × 1000. Nessa escala, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
