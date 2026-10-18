@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, type DataRouter } from 'react-router';
 
 import { CatalogProvider } from '../../catalog/presentation';
+import { DeliveryProvider } from '../../delivery/presentation';
 import { IdentityProvider, SessionPermissions } from '../../identity/presentation';
 import { OrderingProvider } from '../../ordering/presentation';
 import type { AppDependencies } from './create-app-dependencies';
@@ -20,7 +21,9 @@ export function App({
         <SessionPermissions>
           <CatalogProvider services={dependencies.catalog.services}>
             <OrderingProvider services={dependencies.ordering.services}>
-              <RouterProvider router={router} />
+              <DeliveryProvider services={dependencies.delivery.services}>
+                <RouterProvider router={router} />
+              </DeliveryProvider>
             </OrderingProvider>
           </CatalogProvider>
         </SessionPermissions>

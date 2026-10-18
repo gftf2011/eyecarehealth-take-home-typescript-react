@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { createCatalogModule, type CatalogModule } from '../../catalog/main/catalog.module';
+import { createDeliveryModule, type DeliveryModule } from '../../delivery/main/delivery.module';
 import type { SessionRenewalSchedulerOptions } from '../../identity/infra';
 import { createIdentityModule, type IdentityModule } from '../../identity/main/identity.module';
 import { createOrderingModule, type OrderingModule } from '../../ordering/main/ordering.module';
@@ -11,6 +12,7 @@ import { createQueryClient } from './create-query-client';
 export type AppDependencies = {
   readonly identity: IdentityModule;
   readonly catalog: CatalogModule;
+  readonly delivery: DeliveryModule;
   readonly ordering: OrderingModule;
   readonly queryClient: QueryClient;
 };
@@ -42,6 +44,7 @@ export function createAppDependencies(options: AppDependenciesOptions): AppDepen
   return {
     identity,
     catalog: createCatalogModule(api),
+    delivery: createDeliveryModule(api),
     ordering: createOrderingModule(api),
     queryClient: createQueryClient(),
   };

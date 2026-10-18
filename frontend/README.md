@@ -8,9 +8,10 @@ Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mes
 > **Estado atual:**
 > - **Identity**: login, sessão, renovação de token, rotas protegidas por sessão e permissão, logout.
 > - **Catalog**: tela de produtos (`/produtos`) com busca por nome enquanto digita, filtros de categoria e disponibilidade na URL, tabela paginada, criar/editar em modal com validação em tempo real (as mesmas regras e mensagens da API), alternar disponibilidade na linha com atualização otimista e exclusão com confirmação (o `409 PRODUCT_IN_USE` sugere desativar em vez de excluir).
+> - **Delivery**: tela de atribuição (`/atribuicao`, só para `orders:write`) com os pedidos prontos e os entregadores livres (sem GPS sinalizado), a sugestão do otimizador do backend (pares com distância, total em km, algoritmo e tempo de execução) e aceitar/rejeitar cada par ou aceitar todos. Aceitar despacha o pedido (`delivering`); uma sugestão desatualizada é marcada com o motivo da API sem afetar os outros pares.
 > - **Ordering**: painel de pedidos (`/pedidos`, a página inicial) com filtros por status, período e ordenação guardados na URL, lista paginada, detalhe em modal com link próprio e botões de status contextuais (só as transições válidas; cancelar pede confirmação; despachar sem entregador fica bloqueado com o motivo; perfil `viewer` não vê ações).
 >
-> As telas de entregadores, atribuição, relatórios e a atualização em tempo real entram nos próximos passos.
+> Os relatórios e a atualização em tempo real entram nos próximos passos.
 
 ## Início rápido
 
@@ -32,7 +33,7 @@ O Vite encaminha `/api` para `http://localhost:3001` e `/realtime` para `ws://lo
 
 ### Contextos e camadas
 
-As pastas espelham os bounded contexts do backend (por enquanto, `identity`, `catalog` e `ordering`), mais o `shared-kernel` e a composição em `main/`:
+As pastas espelham os bounded contexts do backend (por enquanto, `identity`, `catalog`, `delivery` e `ordering`), mais o `shared-kernel` e a composição em `main/`:
 
 ```
 src/
@@ -43,6 +44,7 @@ src/
 │   ├── presentation/    componentes, páginas, hooks, rotas (React)
 │   └── main/            composition root do contexto
 ├── catalog/             cardápio: Value Objects do produto, formulário, casos de uso, tela de produtos
+├── delivery/            atribuição: AssignmentPlan (decisões por par), ACL dos pedidos prontos, tela de atribuição
 ├── ordering/            painel de pedidos: OrderStatus (máquina de estados), Order, filtros, casos de uso, telas
 ├── shared-kernel/       base comum: erros, validação, cliente HTTP, componentes de UI, tema
 ├── main/                entrypoint, roteador, layout, injeção das dependências
@@ -60,6 +62,7 @@ main → presentation → application → domain
 - **application**: casos de uso que dependem de **ports** (`AuthGateway`, `SessionStore`, `SessionRenewalLock`); não conhecem React, `fetch` nem timers.
 - **infra**: implementa os ports (HTTP com `fetch`, Web Locks API, `setTimeout`).
 - **presentation**: React. Chama os casos de uso por hooks (TanStack Query para estado de servidor) e nunca a infra.
+- Cada tela é carregada sob demanda (`React.lazy`): um chunk por rota no build, e o login não espera o código das outras telas.
 - Contextos não se importam: as permissões da sessão chegam às telas de pedidos por um provider do shared kernel (`useCan`), montado em `main/` a partir do Identity.
 
 ### Sessão e segurança
