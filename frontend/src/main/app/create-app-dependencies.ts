@@ -5,6 +5,7 @@ import { createDeliveryModule, type DeliveryModule } from '../../delivery/main/d
 import type { SessionRenewalSchedulerOptions } from '../../identity/infra';
 import { createIdentityModule, type IdentityModule } from '../../identity/main/identity.module';
 import { createOrderingModule, type OrderingModule } from '../../ordering/main/ordering.module';
+import { createReportingModule, type ReportingModule } from '../../reporting/main/reporting.module';
 import { FetchHttpClient, SystemClock } from '../../shared-kernel/infra';
 import type { AppConfig } from '../config/app-config';
 import { createQueryClient } from './create-query-client';
@@ -14,6 +15,7 @@ export type AppDependencies = {
   readonly catalog: CatalogModule;
   readonly delivery: DeliveryModule;
   readonly ordering: OrderingModule;
+  readonly reporting: ReportingModule;
   readonly queryClient: QueryClient;
 };
 
@@ -46,6 +48,7 @@ export function createAppDependencies(options: AppDependenciesOptions): AppDepen
     catalog: createCatalogModule(api),
     delivery: createDeliveryModule(api),
     ordering: createOrderingModule(api),
+    reporting: createReportingModule(api),
     queryClient: createQueryClient(),
   };
 }

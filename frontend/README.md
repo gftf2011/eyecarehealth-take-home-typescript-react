@@ -2,16 +2,17 @@
 
 Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mesma arquitetura do backend: um módulo por bounded context, Clean Architecture dentro de cada um, regras de negócio sem React e testes de arquitetura que impedem a estrutura de se degradar.
 
-- **Vite 8**, **React 19**, **React Router 8**, **TanStack Query 5**, **Zod 4**, CSS Modules com design tokens (tema claro/escuro)
+- **Vite 8**, **React 19**, **React Router 8**, **TanStack Query 5**, **Zod 4**, **Recharts 3** (gráficos), CSS Modules com design tokens (tema claro/escuro)
 - Testes com **Vitest**, **Testing Library**, **MSW** (API simulada) e **ArchUnitTS**
 
 > **Estado atual:**
 > - **Identity**: login, sessão, renovação de token, rotas protegidas por sessão e permissão, logout.
 > - **Catalog**: tela de produtos (`/produtos`) com busca por nome enquanto digita, filtros de categoria e disponibilidade na URL, tabela paginada, criar/editar em modal com validação em tempo real (as mesmas regras e mensagens da API), alternar disponibilidade na linha com atualização otimista e exclusão com confirmação (o `409 PRODUCT_IN_USE` sugere desativar em vez de excluir).
 > - **Delivery**: tela de atribuição (`/atribuicao`, só para `orders:write`) com os pedidos prontos e os entregadores livres (sem GPS sinalizado), a sugestão do otimizador do backend (pares com distância, total em km, algoritmo e tempo de execução) e aceitar/rejeitar cada par ou aceitar todos. Aceitar despacha o pedido (`delivering`); uma sugestão desatualizada é marcada com o motivo da API sem afetar os outros pares.
+> - **Reporting**: relatórios (`/relatorios`) com período na URL (atalhos de 7 dias, 30 dias e mês atual; até 366 dias, dias de São Paulo), resumo (receita, pedidos entregues, ticket médio, tempo médio de entrega), receita por dia (área), top 10 produtos (barras), pedidos por status (rosca) e tempo de entrega por veículo. Cada relatório carrega e falha sozinho, e cada gráfico tem uma tabela equivalente para leitores de tela.
 > - **Ordering**: painel de pedidos (`/pedidos`, a página inicial) com filtros por status, período e ordenação guardados na URL, lista paginada, detalhe em modal com link próprio e botões de status contextuais (só as transições válidas; cancelar pede confirmação; despachar sem entregador fica bloqueado com o motivo; perfil `viewer` não vê ações).
 >
-> Os relatórios e a atualização em tempo real entram nos próximos passos.
+> A atualização em tempo real entra no próximo passo.
 
 ## Início rápido
 
@@ -33,7 +34,7 @@ O Vite encaminha `/api` para `http://localhost:3001` e `/realtime` para `ws://lo
 
 ### Contextos e camadas
 
-As pastas espelham os bounded contexts do backend (por enquanto, `identity`, `catalog`, `delivery` e `ordering`), mais o `shared-kernel` e a composição em `main/`:
+As pastas espelham os bounded contexts do backend (`identity`, `catalog`, `delivery`, `ordering` e `reporting`), mais o `shared-kernel` e a composição em `main/`:
 
 ```
 src/
@@ -46,6 +47,7 @@ src/
 ├── catalog/             cardápio: Value Objects do produto, formulário, casos de uso, tela de produtos
 ├── delivery/            atribuição: AssignmentPlan (decisões por par), ACL dos pedidos prontos, tela de atribuição
 ├── ordering/            painel de pedidos: OrderStatus (máquina de estados), Order, filtros, casos de uso, telas
+├── reporting/           relatórios: ReportPeriod (até 366 dias), casos de uso por relatório, gráficos
 ├── shared-kernel/       base comum: erros, validação, cliente HTTP, componentes de UI, tema
 ├── main/                entrypoint, roteador, layout, injeção das dependências
 └── architecture/        testes de arquitetura (ArchUnitTS)

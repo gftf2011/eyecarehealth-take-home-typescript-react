@@ -127,7 +127,7 @@ describe('Convenções da apresentação', () => {
         return (
           baseName(file) === folder &&
           KEBAB_CASE.test(folder) &&
-          file.content.includes(`export function ${pascal(folder)}(`)
+          new RegExp(`export function ${pascal(folder)}[<(]`).test(file.content)
         );
       },
     );

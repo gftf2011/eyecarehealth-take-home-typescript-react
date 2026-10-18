@@ -63,13 +63,13 @@ describe('Fluxo de login', () => {
   });
 
   it('depois do login, volta para a página que o usuário tentou abrir', async () => {
-    const view = open({ path: '/relatorios?inicio=2026-10-01' });
+    const view = open({ path: '/pedidos?status=ready' });
 
     await signIn(view, SEED_USERS.viewer.email, SEED_USERS.viewer.password);
 
     await screen.findByRole('button', { name: 'Sair' });
-    expect(view.router.state.location.pathname).toBe('/relatorios');
-    expect(view.router.state.location.search).toBe('?inicio=2026-10-01');
+    expect(view.router.state.location.pathname).toBe('/pedidos');
+    expect(view.router.state.location.search).toBe('?status=ready');
   });
 
   it('ao recarregar com o cookie válido, entra direto (sessão restaurada)', async () => {

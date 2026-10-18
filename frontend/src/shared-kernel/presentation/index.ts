@@ -17,6 +17,7 @@ export { formatCents, formatDate, formatDateTime } from './format/format';
 export { useCan } from './hooks/use-can';
 export { useDebouncedValue } from './hooks/use-debounced-value';
 export { usePermissions } from './hooks/use-permissions';
+export { useThemeColors, type ThemeColors } from './hooks/use-theme-colors';
 export type { NavigationItem } from './navigation/navigation-item';
 export { PermissionsProvider } from './providers/permissions-provider';
 export { cx } from './styles/cx';
