@@ -61,6 +61,9 @@ export class SqsQueueConsumer {
   start(): void {
     if (this.#running) return;
     this.#running = true;
+    // Vivo desde o início: com a fila vazia, a primeira leitura só volta no
+    // fim do long polling (até 20 s), e o health não deve acusar queda nisso.
+    this.#lastPollAt = this.#options.clock.now();
     this.#loop = this.#run();
   }
 
@@ -71,7 +74,7 @@ export class SqsQueueConsumer {
     this.#loop = null;
   }
 
-  /** Rodando e com uma leitura bem-sucedida da fila há no máximo `maxStaleMs`. */
+  /** Rodando e sem falhar ao ler a fila (ou travar) há mais de `maxStaleMs`. */
   isAlive(maxStaleMs: number): boolean {
     if (!this.#running || this.#lastPollAt === null) return false;
     return this.#options.clock.now().getTime() - this.#lastPollAt.getTime() <= maxStaleMs;

@@ -97,6 +97,8 @@ describe('SqsQueueConsumer e fila morta (Floci)', () => {
       waitTimeSeconds: 20,
     });
     running.start();
+    // Vivo já no boot, antes de a primeira espera de 20 s terminar.
+    expect(running.isAlive(5_000)).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const started = Date.now();
