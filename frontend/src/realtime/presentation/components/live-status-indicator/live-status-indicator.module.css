@@ -1,0 +1,45 @@
+.indicator {
+  --tone: var(--color-text-muted);
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.125rem var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
+  border-radius: var(--radius-full);
+  color: var(--tone);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+.live {
+  --tone: var(--color-success);
+}
+
+.live .dot {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.connecting,
+.reconnecting {
+  --tone: var(--color-warning);
+}
+
+.forbidden,
+.unavailable {
+  --tone: var(--color-text-muted);
+}
+
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 25%, transparent);
+  }
+}

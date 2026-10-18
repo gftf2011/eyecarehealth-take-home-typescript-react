@@ -1,4 +1,6 @@
 export { SystemClock } from './clock/system-clock';
+export { TimeoutScheduler } from './clock/timeout-scheduler';
+export { InMemoryLiveEventBus } from './events/in-memory-live-event-bus';
 export type { AccessTokenProvider } from './http/access-token-provider';
 export {
   FetchHttpClient,

@@ -22,3 +22,4 @@ createRoot(root).render(
 );
 
 void dependencies.identity.start();
+void dependencies.realtime.connection.start();

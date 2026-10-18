@@ -2,12 +2,14 @@ import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router';
 
 import { UserMenu } from '../../../identity/presentation';
-import { Spinner, cx, usePermissions, type NavigationItem } from '../../../shared-kernel/presentation';
+import { LiveStatusIndicator } from '../../../realtime/presentation';
+import { Spinner, cx, useCan, usePermissions, type NavigationItem } from '../../../shared-kernel/presentation';
 import styles from './app-shell.module.css';
 
 /** Moldura das telas autenticadas: marca, menu filtrado pelo perfil e usuário logado. */
 export function AppShell({ navigation }: { readonly navigation: readonly NavigationItem[] }) {
   const permissions = usePermissions();
+  const seesLiveOrders = useCan('orders:read');
   const visible = navigation.filter((item) => permissions.includes(item.permission));
 
   return (
@@ -34,7 +36,10 @@ export function AppShell({ navigation }: { readonly navigation: readonly Navigat
           </nav>
         )}
 
-        <UserMenu />
+        <div className={styles.end}>
+          {seesLiveOrders ? <LiveStatusIndicator /> : null}
+          <UserMenu />
+        </div>
       </header>
 
       <main className={styles.content}>

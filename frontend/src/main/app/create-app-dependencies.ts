@@ -6,7 +6,10 @@ import type { SessionRenewalSchedulerOptions } from '../../identity/infra';
 import { createIdentityModule, type IdentityModule } from '../../identity/main/identity.module';
 import { createOrderingModule, type OrderingModule } from '../../ordering/main/ordering.module';
 import { createReportingModule, type ReportingModule } from '../../reporting/main/reporting.module';
-import { FetchHttpClient, SystemClock } from '../../shared-kernel/infra';
+import type { RealtimeSocketFactory } from '../../realtime/application';
+import { createRealtimeModule, type RealtimeModule } from '../../realtime/main/realtime.module';
+import type { LiveEventBus } from '../../shared-kernel/application';
+import { FetchHttpClient, InMemoryLiveEventBus, SystemClock, TimeoutScheduler } from '../../shared-kernel/infra';
 import type { AppConfig } from '../config/app-config';
 import { createQueryClient } from './create-query-client';
 
@@ -16,6 +19,9 @@ export type AppDependencies = {
   readonly delivery: DeliveryModule;
   readonly ordering: OrderingModule;
   readonly reporting: ReportingModule;
+  readonly realtime: RealtimeModule;
+  /** Canal dos eventos em tempo real entre os contextos. */
+  readonly liveEvents: LiveEventBus;
   readonly queryClient: QueryClient;
 };
 
@@ -23,6 +29,8 @@ export type AppDependenciesOptions = AppConfig & {
   readonly fetch?: typeof globalThis.fetch;
   readonly locks?: LockManager;
   readonly renewal?: SessionRenewalSchedulerOptions;
+  /** Substitui o WebSocket do navegador (testes). */
+  readonly realtimeSockets?: RealtimeSocketFactory;
 };
 
 /** Composition root do painel: monta cada contexto e liga o token do Identity ao cliente HTTP. */
@@ -43,8 +51,19 @@ export function createAppDependencies(options: AppDependenciesOptions): AppDepen
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 
+  const liveEvents = new InMemoryLiveEventBus();
+  const realtime = createRealtimeModule({
+    url: options.realtimeUrl,
+    tokens: identity.tokens,
+    events: liveEvents,
+    scheduler: new TimeoutScheduler(),
+    ...(options.realtimeSockets === undefined ? {} : { sockets: options.realtimeSockets }),
+  });
+
   return {
     identity,
+    realtime,
+    liveEvents,
     catalog: createCatalogModule(api),
     delivery: createDeliveryModule(api),
     ordering: createOrderingModule(api),

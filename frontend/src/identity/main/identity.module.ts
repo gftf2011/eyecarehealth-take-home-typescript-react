@@ -25,11 +25,20 @@ export type IdentityModuleOptions = {
   readonly renewal?: SessionRenewalSchedulerOptions;
 };
 
+/** Token da sessão para quem não fala HTTP (ex.: o WebSocket do tempo real). */
+export type SessionTokens = {
+  current(): Promise<string | null>;
+  renew(): Promise<string | null>;
+  subscribe(listener: (token: string | null) => void): () => void;
+};
+
 export type IdentityModule = {
   readonly services: IdentityServices;
   readonly sessions: SessionStore;
   /** Fornece o access token aos clientes HTTP dos outros contextos. */
   readonly accessTokens: AccessTokenProvider;
+  /** Token atual, renovação e mudanças (login, renovação, fim da sessão). */
+  readonly tokens: SessionTokens;
   /** Restaura a sessão pelo cookie e passa a renová-la antes de vencer. */
   start(): Promise<void>;
   stop(): void;
@@ -54,6 +63,11 @@ export function createIdentityModule(options: IdentityModuleOptions): IdentityMo
   const scheduler = new SessionRenewalScheduler(sessions, accessTokens, options.clock, options.renewal);
   const restoreSession = new RestoreSessionUseCase(gateway, sessions, lock);
 
+  const tokenOf = (): string | null => {
+    const state = sessions.state();
+    return state.status === 'authenticated' ? state.session.accessToken : null;
+  };
+
   return {
     services: {
       login: new LoginUseCase(gateway, sessions),
@@ -62,6 +76,19 @@ export function createIdentityModule(options: IdentityModuleOptions): IdentityMo
     },
     sessions,
     accessTokens,
+    tokens: {
+      current: () => accessTokens.currentToken(),
+      renew: () => accessTokens.renewNow(),
+      subscribe: (listener) => {
+        let last = tokenOf();
+        return sessions.subscribe(() => {
+          const token = tokenOf();
+          if (token === last) return;
+          last = token;
+          listener(token);
+        });
+      },
+    },
     async start() {
       scheduler.start();
       try {

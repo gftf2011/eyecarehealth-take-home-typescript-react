@@ -10,9 +10,9 @@ Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mes
 > - **Catalog**: tela de produtos (`/produtos`) com busca por nome enquanto digita, filtros de categoria e disponibilidade na URL, tabela paginada, criar/editar em modal com validação em tempo real (as mesmas regras e mensagens da API), alternar disponibilidade na linha com atualização otimista e exclusão com confirmação (o `409 PRODUCT_IN_USE` sugere desativar em vez de excluir).
 > - **Delivery**: tela de atribuição (`/atribuicao`, só para `orders:write`) com os pedidos prontos e os entregadores livres (sem GPS sinalizado), a sugestão do otimizador do backend (pares com distância, total em km, algoritmo e tempo de execução) e aceitar/rejeitar cada par ou aceitar todos. Aceitar despacha o pedido (`delivering`); uma sugestão desatualizada é marcada com o motivo da API sem afetar os outros pares.
 > - **Reporting**: relatórios (`/relatorios`) com período na URL (atalhos de 7 dias, 30 dias e mês atual; até 366 dias, dias de São Paulo), resumo (receita, pedidos entregues, ticket médio, tempo médio de entrega), receita por dia (área), top 10 produtos (barras), pedidos por status (rosca) e tempo de entrega por veículo. Cada relatório carrega e falha sozinho, e cada gráfico tem uma tabela equivalente para leitores de tela.
+> - **Realtime**: o painel fica conectado ao gateway WebSocket (selo "Ao vivo" no topo). Pedido criado ou alterado em qualquer lugar recarrega sozinho a lista de pedidos, o detalhe aberto e o quadro de atribuição. A conexão autentica pela primeira mensagem com o access token, reautentica quando o token renova, reconecta com backoff exponencial e aleatório (`4401` renova a sessão antes; `4403` desiste), descarta eventos repetidos e, ao voltar de uma queda, recarrega as telas.
 > - **Ordering**: painel de pedidos (`/pedidos`, a página inicial) com filtros por status, período e ordenação guardados na URL, lista paginada, detalhe em modal com link próprio e botões de status contextuais (só as transições válidas; cancelar pede confirmação; despachar sem entregador fica bloqueado com o motivo; perfil `viewer` não vê ações).
 >
-> A atualização em tempo real entra no próximo passo.
 
 ## Início rápido
 
@@ -58,7 +58,7 @@ No [`docker-compose.yml`](../docker-compose.yml) da raiz (único para o projeto 
 
 ### Contextos e camadas
 
-As pastas espelham os bounded contexts do backend (`identity`, `catalog`, `delivery`, `ordering` e `reporting`), mais o `shared-kernel` e a composição em `main/`:
+As pastas espelham os bounded contexts do backend (`identity`, `catalog`, `delivery`, `ordering`, `reporting` e `realtime`), mais o `shared-kernel` e a composição em `main/`:
 
 ```
 src/
@@ -71,6 +71,7 @@ src/
 ├── catalog/             cardápio: Value Objects do produto, formulário, casos de uso, tela de produtos
 ├── delivery/            atribuição: AssignmentPlan (decisões por par), ACL dos pedidos prontos, tela de atribuição
 ├── ordering/            painel de pedidos: OrderStatus (máquina de estados), Order, filtros, casos de uso, telas
+├── realtime/            tempo real: protocolo do gateway, LiveConnection (reauth, backoff, dedupe), selo "Ao vivo"
 ├── reporting/           relatórios: ReportPeriod (até 366 dias), casos de uso por relatório, gráficos
 ├── shared-kernel/       base comum: erros, validação, cliente HTTP, componentes de UI, tema
 ├── main/                entrypoint, roteador, layout, injeção das dependências
@@ -89,6 +90,7 @@ main → presentation → application → domain
 - **infra**: implementa os ports (HTTP com `fetch`, Web Locks API, `setTimeout`).
 - **presentation**: React. Chama os casos de uso por hooks (TanStack Query para estado de servidor) e nunca a infra.
 - Cada tela é carregada sob demanda (`React.lazy`): um chunk por rota no build, e o login não espera o código das outras telas.
+- Eventos em tempo real passam por um canal do shared kernel (`LiveEventBus`): o Realtime publica e cada contexto assina o tópico que lhe interessa e invalida o próprio cache. O Realtime não conhece as telas.
 - Contextos não se importam: as permissões da sessão chegam às telas de pedidos por um provider do shared kernel (`useCan`), montado em `main/` a partir do Identity.
 
 ### Sessão e segurança

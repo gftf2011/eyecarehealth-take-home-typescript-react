@@ -1,4 +1,6 @@
 export type { Clock } from './clock';
+export type { LiveEvent, LiveEventBus } from './live-events';
+export type { Scheduler } from './scheduler';
 export { BusinessRuleRejectedError } from './errors/business-rule-rejected.error';
 export { ForbiddenError } from './errors/forbidden.error';
 export { InputValidationError } from './errors/input-validation.error';

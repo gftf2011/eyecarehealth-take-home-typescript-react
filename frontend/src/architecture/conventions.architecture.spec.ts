@@ -13,7 +13,7 @@ import {
 const SHARED_KERNEL = ['src/shared-kernel/**'];
 
 /** Papéis permitidos dentro de `infra/` (um adapter por pasta de papel). */
-const INFRA_ROLES = ['gateways', 'http', 'session', 'locks', 'clock', 'mappers'];
+const INFRA_ROLES = ['gateways', 'http', 'session', 'locks', 'clock', 'mappers', 'events', 'socket'];
 
 /** Teto de tamanho de um arquivo de produção. */
 const MAX_PRODUCTION_LINES = 300;

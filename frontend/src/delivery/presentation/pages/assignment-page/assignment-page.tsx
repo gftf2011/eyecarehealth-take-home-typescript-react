@@ -4,6 +4,7 @@ import { AvailableCouriersPanel } from '../../components/available-couriers-pane
 import { ReadyOrdersPanel } from '../../components/ready-orders-panel/ready-orders-panel';
 import { useAssignmentPlan } from '../../hooks/use-assignment-plan';
 import { useDispatchBoard } from '../../hooks/use-dispatch-board';
+import { useDispatchBoardLiveUpdates } from '../../hooks/use-dispatch-board-live-updates';
 import styles from './assignment-page.module.css';
 
 /**
@@ -12,6 +13,7 @@ import styles from './assignment-page.module.css';
  */
 export function AssignmentPage() {
   const board = useDispatchBoard();
+  useDispatchBoardLiveUpdates();
   const assignment = useAssignmentPlan();
   const data = board.data;
   const nothingToAssign = data !== undefined && data.readyOrdersTotal === 0;

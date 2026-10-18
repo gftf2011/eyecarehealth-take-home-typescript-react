@@ -11,6 +11,7 @@ import { OrderFilters } from '../../components/order-filters/order-filters';
 import { OrderList } from '../../components/order-list/order-list';
 import { OrderListSkeleton } from '../../components/order-list-skeleton/order-list-skeleton';
 import { useOrderFilters } from '../../hooks/use-order-filters';
+import { useOrderLiveUpdates } from '../../hooks/use-order-live-updates';
 import { useOrders } from '../../hooks/use-orders';
 import styles from './orders-page.module.css';
 
@@ -18,6 +19,7 @@ import styles from './orders-page.module.css';
 export function OrdersPage() {
   const { filters, input, openOrderId, applyFilters, goToPage, openOrder, closeOrder } = useOrderFilters();
   const orders = useOrders(input);
+  useOrderLiveUpdates();
   const page = orders.data;
   const filtered = Object.values(filters).some((value) => value !== '');
 
