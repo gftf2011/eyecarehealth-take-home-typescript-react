@@ -19,11 +19,13 @@ const db = connectToTestDatabase<OutboxDatabase>();
 const NOW = new Date('2025-01-20T12:00:00Z');
 const TOPIC = 'ordering.order-updates';
 
-function message(n: number): OutboxMessage {
+const ORDER_ID = '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b';
+
+function message(n: number, aggregateId = ORDER_ID): OutboxMessage {
   return {
     id: randomUUID(),
     aggregateType: 'ordering.order',
-    aggregateId: '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b',
+    aggregateId,
     eventName: TOPIC,
     eventVersion: 1,
     payload: { type: 'order.placed', n },
@@ -42,12 +44,15 @@ async function givenPending(count: number): Promise<OutboxMessage[]> {
 class RecordingPublisher implements MessagePublisher {
   readonly published: PublishedMessage[] = [];
   readonly batches: number[] = [];
+  /** Demora de cada lote: deixa as transações de réplicas diferentes se sobreporem. */
+  delayMs = 0;
   failWhen: (message: PublishedMessage) => boolean = () => false;
   /** Como falha quando `failWhen` casa: por padrão, recusa da mensagem (permanente). */
-  failAs: 'rejected' | 'broker-unavailable' = 'rejected';
+  failAs: 'rejected' | 'broker-unavailable' | 'deferred' = 'rejected';
 
   async publishBatch(messages: readonly PublishedMessage[]): Promise<readonly PublishOutcome[]> {
     this.batches.push(messages.length);
+    if (this.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     return messages.map((message): PublishOutcome => {
       if (this.failWhen(message)) return { id: message.id, status: this.failAs, reason: 'payload recusado' };
       this.published.push(message);
@@ -181,6 +186,63 @@ describe('OutboxRelay', () => {
       { attempts: 0, dead_lettered_at: null },
       { attempts: 0, dead_lettered_at: null },
     ]);
+  });
+
+  describe('ordem FIFO', () => {
+    it('publica na ordem de inserção (sequence), mesmo com occurred_at fora de ordem', async () => {
+      // Relógios de transações diferentes podem empatar ou inverter.
+      const later = { ...message(0), occurredAt: new Date(NOW.getTime() + 60_000) };
+      const earlier = { ...message(1), occurredAt: NOW };
+      await new KyselyOutboxWriter(db).append([later]);
+      await new KyselyOutboxWriter(db).append([earlier]);
+      const publisher = new RecordingPublisher();
+
+      await new OutboxRelay(db, publisher, new FixedClock(NOW)).relayBatch(10);
+
+      expect(publisher.published.map((m) => m.id)).toEqual([later.id, earlier.id]);
+    });
+
+    it('mensagem adiada (anterior do mesmo pedido falhou) fica pendente sem contar tentativa', async () => {
+      await givenPending(2);
+      const publisher = new RecordingPublisher();
+      publisher.failWhen = (m) => m.payload['n'] === 1;
+      publisher.failAs = 'deferred';
+      const relay = new OutboxRelay(db, publisher, new FixedClock(NOW), { maxAttempts: 1 });
+
+      expect(await relay.relayBatch(10)).toEqual({ published: 1, failed: 1 });
+
+      const rows = await db.selectFrom('outbox_events').select(['attempts', 'dead_lettered_at']).where('published_at', 'is', null).execute();
+      expect(rows).toEqual([{ attempts: 0, dead_lettered_at: null }]);
+    });
+
+    it('duas réplicas nunca publicam o mesmo pedido ao mesmo tempo: a ordem de cada pedido se mantém', async () => {
+      const orders = [randomUUID(), randomUUID(), randomUUID()];
+      const messages = orders.flatMap((order, o) => Array.from({ length: 15 }, (_, n) => message(o * 100 + n, order)));
+      await new KyselyOutboxWriter(db).append(messages);
+      const publisher = new RecordingPublisher();
+      publisher.delayMs = 20;
+      const replicaDb = connectToTestDatabase<OutboxDatabase>();
+      const relays = [
+        new OutboxRelay(db, publisher, new FixedClock(NOW)),
+        new OutboxRelay(replicaDb, publisher, new FixedClock(NOW)),
+      ];
+
+      const drain = async (relay: OutboxRelay): Promise<void> => {
+        for (let idle = 0; idle < 3; ) {
+          const { published } = await relay.relayBatch(4);
+          idle = published === 0 ? idle + 1 : 0;
+        }
+      };
+      await Promise.all(relays.map(drain));
+      await replicaDb.destroy();
+
+      expect(publisher.published).toHaveLength(messages.length);
+      for (const order of orders) {
+        const sent = publisher.published.filter((m) => m.aggregateId === order).map((m) => m.payload['n']);
+        const expected = messages.filter((m) => m.aggregateId === order).map((m) => m.payload['n']);
+        expect(sent).toEqual(expected);
+      }
+    });
   });
 
   describe('fila morta', () => {

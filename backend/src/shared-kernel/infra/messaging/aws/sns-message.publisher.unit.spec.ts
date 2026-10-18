@@ -4,19 +4,20 @@ import { describe, expect, it } from 'vitest';
 import type { PublishedMessage } from '../../../application';
 import { SNS_MAX_BATCH_BYTES, SnsMessagePublisher } from './sns-message.publisher';
 
-function message(n: number, payload: PublishedMessage['payload'] = { n }): PublishedMessage {
+/** Mensagem `n` do pedido `order` (por padrão, cada mensagem num pedido próprio). */
+function message(n: number, payload: PublishedMessage['payload'] = { n }, order = `order-${n}`): PublishedMessage {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     topic: 'ordering.order-updates',
     version: 1,
     aggregateType: 'ordering.order',
-    aggregateId: '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b',
+    aggregateId: order,
     payload,
     occurredAt: new Date('2025-01-20T12:00:00Z'),
   };
 }
 
-type Batch = { ids: string[] };
+type Batch = { ids: string[]; groups: string[]; dedupIds: string[] };
 
 /** SNS falso: registra cada `PublishBatch` e responde como o teste mandar. */
 class FakeSns {
@@ -30,8 +31,13 @@ class FakeSns {
 
   async send(command: unknown): Promise<unknown> {
     if (!(command instanceof PublishBatchCommand)) throw new Error('comando inesperado');
-    const ids = (command.input.PublishBatchRequestEntries ?? []).map((entry) => entry.Id ?? '');
-    this.batches.push({ ids });
+    const entries = command.input.PublishBatchRequestEntries ?? [];
+    const ids = entries.map((entry) => entry.Id ?? '');
+    this.batches.push({
+      ids,
+      groups: entries.map((entry) => entry.MessageGroupId ?? ''),
+      dedupIds: entries.map((entry) => entry.MessageDeduplicationId ?? ''),
+    });
     this.inFlight += 1;
     this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
     try {
@@ -52,13 +58,23 @@ function publisherWith(sns: FakeSns, concurrency?: number): SnsMessagePublisher 
 const named = (error: string) => Object.assign(new Error(error), { name: error });
 
 describe('SnsMessagePublisher.publishBatch', () => {
-  it('divide em lotes de 10 e devolve um resultado por mensagem, na ordem', async () => {
+  it('cada mensagem leva o agregado como grupo FIFO e o id do outbox como deduplicação', async () => {
+    const sns = new FakeSns();
+
+    await publisherWith(sns).publishBatch([message(0)]);
+
+    expect(sns.batches).toEqual([
+      { ids: [message(0).id], groups: ['ordering.order:order-0'], dedupIds: [message(0).id] },
+    ]);
+  });
+
+  it('divide em lotes de até 10 e devolve um resultado por mensagem, na ordem', async () => {
     const sns = new FakeSns();
     const messages = Array.from({ length: 25 }, (_, n) => message(n));
 
-    const outcomes = await publisherWith(sns).publishBatch(messages);
+    const outcomes = await publisherWith(sns, 1).publishBatch(messages);
 
-    expect(sns.batches.map((batch) => batch.ids.length).sort()).toEqual([10, 10, 5]);
+    expect(sns.batches.map((batch) => batch.ids.length)).toEqual([10, 10, 5]);
     expect(outcomes.map((outcome) => outcome.id)).toEqual(messages.map((m) => m.id));
     expect(outcomes.every((outcome) => outcome.status === 'published')).toBe(true);
   });
@@ -67,7 +83,7 @@ describe('SnsMessagePublisher.publishBatch', () => {
     const sns = new FakeSns();
     const big = (n: number) => message(n, { blob: 'x'.repeat(100 * 1024) });
 
-    await publisherWith(sns).publishBatch([big(0), big(1), big(2)]);
+    await publisherWith(sns, 1).publishBatch([big(0), big(1), big(2)]);
 
     expect(sns.batches.map((batch) => batch.ids.length)).toEqual([2, 1]);
   });
@@ -81,7 +97,7 @@ describe('SnsMessagePublisher.publishBatch', () => {
     ]);
 
     expect(tooLarge).toMatchObject({ status: 'rejected', reason: expect.stringContaining('limite do SNS') });
-    expect(ok).toEqual({ id: message(1).id, status: 'published' });
+    expect(ok).toMatchObject({ id: message(1).id, status: 'published' });
     expect(sns.batches.map((batch) => batch.ids)).toEqual([[message(1).id]]);
   });
 
@@ -95,7 +111,7 @@ describe('SnsMessagePublisher.publishBatch', () => {
       ],
     });
 
-    const outcomes = await publisherWith(sns).publishBatch([message(0), message(1), message(2)]);
+    const outcomes = await publisherWith(sns, 1).publishBatch([message(0), message(1), message(2)]);
 
     expect(outcomes.map((outcome) => outcome.status)).toEqual(['published', 'rejected', 'broker-unavailable']);
     expect(outcomes[1]).toMatchObject({ reason: 'InvalidParameter: atributo inválido' });
@@ -119,19 +135,67 @@ describe('SnsMessagePublisher.publishBatch', () => {
       return { Successful: ids.map((Id) => ({ Id })), Failed: [] };
     };
 
-    const outcomes = await publisherWith(sns).publishBatch([message(0), message(1), message(2)]);
+    const outcomes = await publisherWith(sns, 1).publishBatch([message(0), message(1), message(2)]);
 
     expect(outcomes.map((outcome) => outcome.status)).toEqual(['published', 'rejected', 'published']);
     expect(sns.batches.map((batch) => batch.ids.length)).toEqual([3, 1, 1, 1]);
   });
 
-  it('envia vários lotes em paralelo, até o limite de concorrência', async () => {
+  it('envia várias faixas em paralelo, até o limite de concorrência', async () => {
     const sns = new FakeSns();
 
     await publisherWith(sns, 3).publishBatch(Array.from({ length: 100 }, (_, n) => message(n)));
 
-    expect(sns.batches).toHaveLength(10);
+    expect(sns.batches.flatMap((batch) => batch.ids)).toHaveLength(100);
     expect(sns.maxInFlight).toBe(3);
+  });
+
+  describe('ordem FIFO por agregado', () => {
+    const ofOrder = (order: string, ...ns: number[]) => ns.map((n) => message(n, { n }, order));
+
+    it('mensagens do mesmo pedido saem em chamadas separadas, na ordem, e nunca em paralelo', async () => {
+      const sns = new FakeSns();
+      const messages = [...ofOrder('A', 1, 2, 3), ...ofOrder('B', 4, 5)];
+
+      const outcomes = await publisherWith(sns, 5).publishBatch(messages);
+
+      expect(outcomes.every((outcome) => outcome.status === 'published')).toBe(true);
+      // Nenhum PublishBatch leva duas mensagens do mesmo pedido.
+      for (const batch of sns.batches) expect(new Set(batch.groups).size).toBe(batch.groups.length);
+      const sentOf = (group: string) =>
+        sns.batches.flatMap((batch) => batch.ids.filter((_, index) => batch.groups[index] === group));
+      expect(sentOf('ordering.order:A')).toEqual(ofOrder('A', 1, 2, 3).map((m) => m.id));
+      expect(sentOf('ordering.order:B')).toEqual(ofOrder('B', 4, 5).map((m) => m.id));
+    });
+
+    it('uma falha adia as seguintes do mesmo pedido, sem segurar os outros', async () => {
+      const sns = new FakeSns();
+      const [a1, a2, a3] = ofOrder('A', 1, 2, 3);
+      const [b1, b2] = ofOrder('B', 4, 5);
+      sns.respond = async (ids) => ({
+        Successful: ids.filter((id) => id !== a2?.id).map((Id) => ({ Id })),
+        Failed: ids.includes(a2?.id ?? '') ? [{ Id: a2?.id, Code: 'InvalidParameter', SenderFault: true }] : [],
+      });
+
+      const outcomes = await publisherWith(sns, 1).publishBatch([a1, a2, a3, b1, b2].filter((m) => m !== undefined));
+
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(['published', 'rejected', 'deferred', 'published', 'published']);
+      expect(sns.batches.flatMap((batch) => batch.ids)).not.toContain(a3?.id);
+    });
+
+    it('lote recusado inteiro: a culpada é recusada e as seguintes dela, adiadas', async () => {
+      const sns = new FakeSns();
+      const [a1, a2] = ofOrder('A', 1, 2);
+      const b1 = message(3, { n: 3 }, 'B');
+      sns.respond = async (ids) => {
+        if (ids.includes(a1?.id ?? '')) throw named('InvalidParameterException');
+        return { Successful: ids.map((Id) => ({ Id })), Failed: [] };
+      };
+
+      const outcomes = await publisherWith(sns, 1).publishBatch([a1, a2, b1].filter((m) => m !== undefined));
+
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'deferred', 'published']);
+    });
   });
 
   it('lote vazio não chama o SNS', async () => {

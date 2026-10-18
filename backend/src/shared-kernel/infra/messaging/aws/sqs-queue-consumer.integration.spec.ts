@@ -13,8 +13,16 @@ afterEach(async () => {
   consumer = null;
 });
 
-async function send(messaging: TestMessaging, body: string): Promise<void> {
-  await messaging.sqs.send(new SendMessageCommand({ QueueUrl: messaging.queue.url, MessageBody: body }));
+/** Envia à fila FIFO; por padrão, cada mensagem no próprio grupo. */
+async function send(messaging: TestMessaging, body: string, group = body): Promise<void> {
+  await messaging.sqs.send(
+    new SendMessageCommand({
+      QueueUrl: messaging.queue.url,
+      MessageBody: body,
+      MessageGroupId: group,
+      MessageDeduplicationId: crypto.randomUUID(),
+    }),
+  );
 }
 
 function consume(messaging: TestMessaging, handle: (message: QueueMessage) => Promise<void>, errors: unknown[] = []) {
@@ -85,6 +93,26 @@ describe('SqsQueueConsumer e fila morta (Floci)', () => {
 
     await expect.poll(() => handled, { timeout: 10_000 }).toEqual(['volta']);
     expect(await deadLetters.count()).toBe(0);
+  });
+
+  it('FIFO: falha no meio de um grupo segura as seguintes dele, não as de outros grupos', async () => {
+    const messaging = await createTestMessaging({ maxReceiveCount: 5 });
+    await send(messaging, 'A1', 'A');
+    await send(messaging, 'A2', 'A');
+    await send(messaging, 'B1', 'B');
+    const handled: string[] = [];
+    let failA1 = true;
+
+    consume(messaging, async (message) => {
+      if (message.body === 'A1' && failA1) {
+        failA1 = false;
+        handled.push('A1 falhou');
+        throw new Error('Redis fora');
+      }
+      handled.push(message.body);
+    });
+
+    await expect.poll(() => handled, { timeout: 10_000 }).toEqual(['A1 falhou', 'B1', 'A1', 'A2']);
   });
 
   it('stop interrompe a espera do long polling na hora', async () => {

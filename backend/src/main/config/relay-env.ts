@@ -11,7 +11,10 @@ const relayEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   ...awsEnvShape,
   /** Tópico SNS onde o relay publica (em dev, criado pelo `messaging-setup`). */
-  EVENTS_TOPIC_ARN: z.string().startsWith('arn:', 'Informe o ARN do tópico SNS'),
+  EVENTS_TOPIC_ARN: z
+    .string()
+    .startsWith('arn:', 'Informe o ARN do tópico SNS')
+    .endsWith('.fifo', 'O tópico precisa ser FIFO (ARN terminando em .fifo)'),
   /** Espera entre ciclos sem pendentes: é a latência máxima até o painel. */
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(500),
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(100),

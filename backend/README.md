@@ -58,10 +58,10 @@ O mesmo código (e a mesma imagem Docker) roda em três processos independentes:
                                                          (outbox-relay.ts)
                                                                   │ Publish
                                                                   ▼
-                                                    SNS fastmeals-events (atributo `topic`)
+                                                    SNS fastmeals-events.fifo (grupo = agregado)
                                                                   │ assinatura (filtro por tópico, entrega crua)
                                                                   ▼
-                                   SQS fastmeals-realtime ──5 recebimentos sem sucesso──► SQS fastmeals-realtime-dlq
+                         SQS fastmeals-realtime.fifo ──5 recebimentos sem sucesso──► SQS fastmeals-realtime-dlq.fifo
                                                                   │ long polling (uma réplica recebe)
                                                                   ▼
  painel <──WebSocket──  realtime :3002  ──PUBLISH/SUBSCRIBE──  Redis pub/sub (todas as réplicas recebem)
@@ -412,24 +412,37 @@ A entrega é **pelo menos uma vez**: o cliente descarta repetidos pelo `id` e, a
 
 ## Mensageria (SNS + SQS)
 
-O relay publica cada mensagem do outbox **uma vez**, no tópico SNS `fastmeals-events`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`) no atributo `topic`. Publica **em lote**: o lote do outbox (até 100 mensagens) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, com resultado por mensagem; uma que falha fica pendente sem segurar as outras. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
+O relay publica cada mensagem do outbox **uma vez**, no tópico SNS **FIFO** `fastmeals-events.fifo`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`) no atributo `topic`. Publica **em lote**: o lote do outbox (até 100 mensagens) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, com resultado por mensagem; uma que falha fica pendente e segura só as seguintes do mesmo agregado. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
 
 | Recurso | Nome | Papel |
 |---|---|---|
-| Tópico SNS | `fastmeals-events` | Recebe tudo o que sai do outbox |
-| Fila SQS | `fastmeals-realtime` | Assinada no tópico com filtro pelos tópicos do painel e entrega crua (o corpo é o envelope); visibility timeout de 30 s |
-| Fila morta | `fastmeals-realtime-dlq` | Recebe do SQS a mensagem que falhou 5 vezes; guarda por 14 dias |
+| Tópico SNS FIFO | `fastmeals-events.fifo` | Recebe tudo o que sai do outbox, com deduplicação explícita e vazão por grupo |
+| Fila SQS FIFO | `fastmeals-realtime.fifo` | Assinada no tópico com filtro pelos tópicos do painel e entrega crua (o corpo é o envelope); visibility timeout de 30 s |
+| Fila morta FIFO | `fastmeals-realtime-dlq.fifo` | Recebe do SQS a mensagem que falhou 5 vezes; guarda por 14 dias |
 
 Em desenvolvimento e nos testes, tudo roda no **[Floci](https://floci.io)** (emulador local da AWS, em `http://localhost:4566`), criado pelo job `messaging-setup` ([`messaging-setup.ts`](src/main/messaging-setup.ts)), que pode rodar de novo sem efeito. Em produção, o mesmo código fala com a AWS: basta não definir `AWS_ENDPOINT_URL` e declarar os recursos na infraestrutura como código.
 
 O gateway lê a fila com long polling e, para cada mensagem, publica o envelope no Redis e só então a apaga. Se não conseguir (Redis fora, envelope inválido), não apaga: a mensagem reaparece depois do visibility timeout e, no 5º recebimento, o próprio SQS a move para a fila morta. A fila entrega cada mensagem a uma réplica do gateway; o Redis a espalha para todas.
+
+### FIFO: ordem por agregado e deduplicação
+
+| Onde | Como |
+|---|---|
+| Outbox | Coluna `sequence` (identity): a ordem de inserção, confiável mesmo quando os relógios de duas transações empatam ou se invertem |
+| Relay | Advisory lock por agregado (`pg_try_advisory_xact_lock`): duas réplicas nunca publicam o mesmo pedido ao mesmo tempo; agregados diferentes continuam divididos |
+| SNS | `MessageGroupId` = agregado (`ordering.order:<id>`); `MessageDeduplicationId` = id do outbox, então uma republicação (commit que falhou depois do envio) é descartada em 5 minutos |
+| Publisher | Cada agregado numa faixa sequencial (as faixas correm em paralelo); no máximo uma mensagem por agregado em cada `PublishBatch`; uma falha adia (`deferred`) as seguintes do mesmo agregado |
+| SQS | Fila e fila morta FIFO, com `DeduplicationScope=messageGroup` e `FifoThroughputLimit=perMessageGroupId` (alta vazão) |
+| Gateway | Processa o lote em ordem; se uma mensagem falha, as seguintes do mesmo grupo no lote nem são processadas nem apagadas |
+
+Pedidos diferentes andam em paralelo. Um pedido com uma mensagem que sempre falha fica parado até ela ir para a fila morta (5 tentativas no relay ou 5 recebimentos no SQS); depois, o grupo destrava.
 
 ### Duas filas mortas
 
 | Onde falha | Fila morta | Listar | Devolver |
 |---|---|---|---|
 | **Publicar** (o SNS recusa a mensagem) | coluna `dead_lettered_at` do outbox | `npm run outbox:dead-letters` | `npm run outbox:redrive -- --all` |
-| **Consumir** (o gateway não consegue repassar) | SQS `fastmeals-realtime-dlq` | `npm run events:dead-letters` | `npm run events:redrive` |
+| **Consumir** (o gateway não consegue repassar) | SQS `fastmeals-realtime-dlq.fifo` | `npm run events:dead-letters` | `npm run events:redrive` |
 
 No Docker: `docker compose run --rm --no-deps outbox-relay node dist/outbox-redrive.js list` e `docker compose run --rm --no-deps realtime node dist/events-dead-letters.js list` (ou `redrive`).
 
@@ -475,9 +488,9 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `AWS_REGION` | relay, gateway, setup | `us-east-1` | Região AWS |
 | `AWS_ENDPOINT_URL` | relay, gateway, setup | vazio (AWS real) | Endpoint do emulador (`http://localhost:4566` com o Floci) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | relay, gateway, setup | cadeia padrão do SDK | Credenciais (`test` / `test` no Floci) |
-| `EVENTS_TOPIC_ARN` | relay | — | ARN do tópico SNS de eventos |
-| `EVENTS_TOPIC_NAME` | setup | `fastmeals-events` | Nome do tópico a criar |
-| `REALTIME_QUEUE_NAME` / `REALTIME_DLQ_NAME` | gateway, setup | `fastmeals-realtime` / `fastmeals-realtime-dlq` | Fila do tempo real e a fila morta dela |
+| `EVENTS_TOPIC_ARN` | relay | — | ARN do tópico SNS FIFO de eventos (termina em `.fifo`) |
+| `EVENTS_TOPIC_NAME` | setup | `fastmeals-events.fifo` | Nome do tópico FIFO a criar |
+| `REALTIME_QUEUE_NAME` / `REALTIME_DLQ_NAME` | gateway, setup | `fastmeals-realtime.fifo` / `fastmeals-realtime-dlq.fifo` | Fila FIFO do tempo real e a fila morta dela (ambas FIFO) |
 | `REALTIME_MAX_RECEIVE_COUNT` | setup | `5` | Recebimentos sem sucesso até a fila morta do SQS |
 | `REALTIME_VISIBILITY_TIMEOUT_SECONDS` | setup | `30` | Quanto a mensagem fica invisível enquanto é processada |
 | `REALTIME_PORT` | gateway | `3002` | Porta do WebSocket |

@@ -1,4 +1,4 @@
-import { ReceiveMessageCommand } from '@aws-sdk/client-sqs';
+import { DeleteMessageBatchCommand, ReceiveMessageCommand } from '@aws-sdk/client-sqs';
 import { describe, expect, it } from 'vitest';
 
 import type { PublishedMessage } from '../../../application';
@@ -6,19 +6,26 @@ import { createSnsClient } from './aws-clients';
 import { SnsMessagePublisher } from './sns-message.publisher';
 import { createTestMessaging, testAwsConfig, type TestMessaging } from './testing/test-aws';
 
-function message(topic: string, payload: PublishedMessage['payload'] = { type: 'order.placed' }): PublishedMessage {
+function message(
+  topic: string,
+  payload: PublishedMessage['payload'] = { type: 'order.placed' },
+  aggregateId: string = crypto.randomUUID(),
+): PublishedMessage {
   return {
     id: crypto.randomUUID(),
     topic,
     version: 1,
     aggregateType: 'ordering.order',
-    aggregateId: '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b',
+    aggregateId,
     payload,
     occurredAt: new Date('2025-01-20T12:00:00Z'),
   };
 }
 
-/** Lê a fila até ela parar de devolver mensagens. */
+/**
+ * Lê (e apaga) a fila até ela parar de devolver mensagens. Na FIFO, o grupo
+ * só libera as próximas depois que as anteriores são apagadas.
+ */
 async function drain(messaging: TestMessaging): Promise<string[]> {
   const bodies: string[] = [];
   for (;;) {
@@ -27,6 +34,12 @@ async function drain(messaging: TestMessaging): Promise<string[]> {
     );
     if (Messages.length === 0) return bodies;
     bodies.push(...Messages.map((received) => received.Body ?? ''));
+    await messaging.sqs.send(
+      new DeleteMessageBatchCommand({
+        QueueUrl: messaging.queue.url,
+        Entries: Messages.map((received, index) => ({ Id: String(index), ReceiptHandle: received.ReceiptHandle ?? '' })),
+      }),
+    );
   }
 }
 
@@ -62,6 +75,28 @@ describe('SnsMessagePublisher (Floci)', () => {
     expect(new Set(received)).toEqual(new Set(messages.map((m) => m.id)));
   });
 
+  it('FIFO: publicar duas vezes (o relay repete após um commit que falhou) entrega uma só', async () => {
+    const messaging = await createTestMessaging({ visibilityTimeoutSeconds: 30 });
+    const publisher = new SnsMessagePublisher(messaging.sns, messaging.topicArn);
+    const once = message('ordering.order-updates');
+
+    await publisher.publishBatch([once]);
+    await publisher.publishBatch([once]);
+
+    expect((await drain(messaging)).map((body) => (JSON.parse(body) as { id: string }).id)).toEqual([once.id]);
+  });
+
+  it('FIFO: as mensagens de um pedido chegam na ordem em que foram publicadas', async () => {
+    const messaging = await createTestMessaging({ visibilityTimeoutSeconds: 30 });
+    const order = crypto.randomUUID();
+    const messages = Array.from({ length: 12 }, (_, n) => message('ordering.order-updates', { n }, order));
+
+    await new SnsMessagePublisher(messaging.sns, messaging.topicArn).publishBatch(messages);
+
+    const received = (await drain(messaging)).map((body) => (JSON.parse(body) as { payload: { n: number } }).payload.n);
+    expect(received).toEqual(messages.map((_, n) => n));
+  });
+
   it('mensagens grandes são divididas pelo limite de bytes e todas saem', async () => {
     const messaging = await createTestMessaging({ visibilityTimeoutSeconds: 30 });
     const big = Array.from({ length: 3 }, () => message('ordering.order-updates', { blob: 'x'.repeat(100 * 1024) }));
@@ -75,6 +110,7 @@ describe('SnsMessagePublisher (Floci)', () => {
     const sns = createSnsClient({ ...testAwsConfig(), endpoint: 'http://127.0.0.1:1' });
     const publisher = new SnsMessagePublisher(sns, 'arn:aws:sns:us-east-1:000000000000:qualquer');
 
+    // Pedidos diferentes: nenhuma fica adiada atrás da outra.
     const outcomes = await publisher.publishBatch([message('ordering.order-updates'), message('ordering.order-updates')]);
 
     expect(outcomes.map((outcome) => outcome.status)).toEqual(['broker-unavailable', 'broker-unavailable']);

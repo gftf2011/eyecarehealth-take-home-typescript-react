@@ -28,17 +28,28 @@ const MESSAGE_REJECTIONS: ReadonlySet<string> = new Set([
 ]);
 
 export type SnsMessagePublisherOptions = {
-  /** Chamadas `PublishBatch` em paralelo. Padrão: 5 (50 mensagens por vez). */
+  /** Faixas em paralelo (cada uma envia em sequência). Padrão: 5. */
   readonly concurrency?: number;
 };
 
-type Entry = { readonly message: PublishedMessage; readonly request: PublishBatchRequestEntry; readonly bytes: number };
+type Entry = {
+  readonly message: PublishedMessage;
+  readonly group: string;
+  readonly request: PublishBatchRequestEntry;
+  readonly bytes: number;
+};
 
 /**
- * Publica no tópico SNS de eventos da aplicação, em lotes (`PublishBatch`):
- * um lote do outbox de 100 mensagens vira 10 chamadas em vez de 100, várias
- * em paralelo. Cada fila assinante recebe sua cópia, com retentativa e fila
- * morta próprias.
+ * Publica no tópico SNS **FIFO** de eventos, em lotes (`PublishBatch`):
+ * - `MessageGroupId` = agregado (pedido, produto): ordem garantida por
+ *   agregado, e agregados diferentes saem em paralelo;
+ * - `MessageDeduplicationId` = id do outbox: se o relay publicar de novo (o
+ *   commit falhou depois do envio), o SNS descarta a repetida em 5 minutos.
+ *
+ * Para a ordem valer também entre chamadas, cada agregado fica numa só
+ * **faixa** (enviada em sequência; as faixas correm em paralelo), cada
+ * `PublishBatch` leva no máximo uma mensagem por agregado, e uma falha adia
+ * (`deferred`) as seguintes do mesmo agregado.
  */
 export class SnsMessagePublisher implements MessagePublisher {
   readonly #concurrency: number;
@@ -53,35 +64,17 @@ export class SnsMessagePublisher implements MessagePublisher {
 
   async publishBatch(messages: readonly PublishedMessage[]): Promise<readonly PublishOutcome[]> {
     const outcomes = new Map<string, PublishOutcome>();
-    const entries: Entry[] = [];
+    const lanes = Array.from({ length: Math.max(1, this.#concurrency) }, () => new Map<string, Entry[]>());
     for (const message of messages) {
       const entry = toEntry(message);
-      // Sozinha já passa do limite: o SNS recusaria; nem adianta enviar.
-      if (entry.bytes > SNS_MAX_BATCH_BYTES) {
-        outcomes.set(message.id, { id: message.id, status: 'rejected', reason: `Mensagem de ${entry.bytes} bytes passa do limite do SNS (${SNS_MAX_BATCH_BYTES})` });
-      } else {
-        entries.push(entry);
-      }
+      const lane = lanes[laneOf(entry.group, lanes.length)];
+      const queue = lane?.get(entry.group);
+      if (queue === undefined) lane?.set(entry.group, [entry]);
+      else queue.push(entry);
     }
 
-    const chunks = chunk(entries);
-    let brokerDown: string | null = null;
-    let next = 0;
-    const worker = async (): Promise<void> => {
-      for (let index = next++; index < chunks.length; index = next++) {
-        const current = chunks[index] ?? [];
-        // Broker fora num lote: os que ainda não saíram nem tentam.
-        if (brokerDown !== null) {
-          for (const { message } of current) outcomes.set(message.id, { id: message.id, status: 'broker-unavailable', reason: brokerDown });
-          continue;
-        }
-        for (const outcome of await this.#send(current)) {
-          outcomes.set(outcome.id, outcome);
-          if (outcome.status === 'broker-unavailable') brokerDown = outcome.reason;
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(this.#concurrency, chunks.length) }, worker));
+    const state: { brokerDown: string | null } = { brokerDown: null };
+    await Promise.all(lanes.filter((lane) => lane.size > 0).map((lane) => this.#drain(lane, outcomes, state)));
 
     return messages.map(
       (message) => outcomes.get(message.id) ?? { id: message.id, status: 'broker-unavailable', reason: 'sem resposta' },
@@ -93,7 +86,77 @@ export class SnsMessagePublisher implements MessagePublisher {
     await this.sns.send(new GetTopicAttributesCommand({ TopicArn: this.topicArn }));
   }
 
-  /** Um `PublishBatch`; um lote recusado inteiro é reenviado mensagem a mensagem, para achar a culpada. */
+  /**
+   * Esvazia uma faixa: a cada rodada, a próxima mensagem de cada agregado
+   * (até 10 e 256 KiB) num `PublishBatch`. Um agregado que falha para ali, e
+   * as seguintes dele ficam adiadas (`deferred`).
+   */
+  async #drain(
+    lane: Map<string, Entry[]>,
+    outcomes: Map<string, PublishOutcome>,
+    state: { brokerDown: string | null },
+  ): Promise<void> {
+    const stopGroup = (group: string): void => {
+      for (const later of lane.get(group) ?? []) {
+        outcomes.set(later.message.id, {
+          id: later.message.id,
+          status: 'deferred',
+          reason: 'aguarda uma anterior do mesmo agregado',
+        });
+      }
+      lane.delete(group);
+    };
+
+    while (lane.size > 0) {
+      if (state.brokerDown !== null) {
+        for (const queue of lane.values()) {
+          for (const { message } of queue) {
+            outcomes.set(message.id, { id: message.id, status: 'broker-unavailable', reason: state.brokerDown });
+          }
+        }
+        lane.clear();
+        return;
+      }
+
+      const round: Entry[] = [];
+      let bytes = 0;
+      for (const [group, queue] of [...lane]) {
+        const head = queue[0];
+        if (head === undefined) {
+          lane.delete(group);
+          continue;
+        }
+        // Sozinha já passa do limite: o SNS recusaria; nem adianta enviar.
+        if (head.bytes > SNS_MAX_BATCH_BYTES) {
+          queue.shift();
+          outcomes.set(head.message.id, {
+            id: head.message.id,
+            status: 'rejected',
+            reason: `Mensagem de ${head.bytes} bytes passa do limite do SNS (${SNS_MAX_BATCH_BYTES})`,
+          });
+          stopGroup(group);
+          continue;
+        }
+        if (round.length === SNS_MAX_BATCH_ENTRIES || bytes + head.bytes > SNS_MAX_BATCH_BYTES) break;
+        queue.shift();
+        if (queue.length === 0) lane.delete(group);
+        round.push(head);
+        bytes += head.bytes;
+      }
+      if (round.length === 0) continue;
+
+      // `#send` devolve os resultados na ordem das entradas.
+      const results = await this.#send(round);
+      results.forEach((outcome, index) => {
+        outcomes.set(outcome.id, outcome);
+        if (outcome.status === 'broker-unavailable') state.brokerDown = outcome.reason;
+        const group = round[index]?.group;
+        if (outcome.status !== 'published' && group !== undefined) stopGroup(group);
+      });
+    }
+  }
+
+  /** Um `PublishBatch` (no máximo uma mensagem por agregado); recusado inteiro, reenvia uma a uma. */
   async #send(entries: readonly Entry[]): Promise<PublishOutcome[]> {
     try {
       const { Successful = [], Failed = [] } = await this.sns.send(
@@ -128,32 +191,25 @@ export class SnsMessagePublisher implements MessagePublisher {
 
 function toEntry(message: PublishedMessage): Entry {
   const body = JSON.stringify(toMessageEnvelope(message));
+  const group = `${message.aggregateType}:${message.aggregateId}`;
   const request: PublishBatchRequestEntry = {
     // O id do outbox (UUID) é único no lote e aceito pelo SNS como Id.
     Id: message.id,
     Message: body,
+    MessageGroupId: group,
+    MessageDeduplicationId: message.id,
     MessageAttributes: { [TOPIC_ATTRIBUTE]: { DataType: 'String', StringValue: message.topic } },
   };
   // O limite do SNS soma corpo e atributos (nome, tipo e valor).
   const bytes =
     Buffer.byteLength(body) + Buffer.byteLength(TOPIC_ATTRIBUTE) + Buffer.byteLength('String') + Buffer.byteLength(message.topic);
-  return { message, request, bytes };
+  return { message, group, request, bytes };
 }
 
-/** Lotes de até 10 mensagens e 256 KiB, na ordem original. */
-function chunk(entries: readonly Entry[]): Entry[][] {
-  const chunks: Entry[][] = [];
-  let current: Entry[] = [];
-  let bytes = 0;
-  for (const entry of entries) {
-    if (current.length === SNS_MAX_BATCH_ENTRIES || bytes + entry.bytes > SNS_MAX_BATCH_BYTES) {
-      chunks.push(current);
-      current = [];
-      bytes = 0;
-    }
-    current.push(entry);
-    bytes += entry.bytes;
-  }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
+/** Mesma faixa para o mesmo agregado, sempre. */
+function laneOf(group: string, lanes: number): number {
+  let hash = 0;
+  for (let index = 0; index < group.length; index += 1) hash = (hash * 31 + group.charCodeAt(index)) | 0;
+  return Math.abs(hash) % lanes;
 }
+

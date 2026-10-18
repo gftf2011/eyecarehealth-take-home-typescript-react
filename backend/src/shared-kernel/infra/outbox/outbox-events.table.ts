@@ -21,6 +21,8 @@ export interface OutboxEventsTable {
   /** Última falha de publicação, para investigar a mensagem morta. */
   last_error: ColumnType<string | null, string | null | undefined, string | null>;
   created_at: Generated<Date>;
+  /** Ordem de inserção dada pelo banco (`bigint`, lido como texto pelo `pg`). */
+  sequence: ColumnType<string, never, never>;
 }
 
 export type OutboxDatabase = {

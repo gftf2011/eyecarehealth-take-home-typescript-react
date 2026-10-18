@@ -26,7 +26,7 @@ export function testAwsConfig(): AwsClientConfig {
 export type TestMessaging = MessagingTopology & { readonly sns: SNSClient; readonly sqs: SQSClient };
 
 /**
- * Tópico, fila e fila morta com nomes únicos: cada teste fica isolado no
+ * Tópico, fila e fila morta FIFO com nomes únicos: cada teste fica isolado no
  * Floci compartilhado, sem precisar limpá-lo. Visibility timeout curto para
  * as retentativas caberem no teste.
  */
@@ -36,9 +36,9 @@ export async function createTestMessaging(overrides: Partial<MessagingTopologySp
   const sqs = createSqsClient(config);
   const suffix = randomUUID().slice(0, 8);
   const topology = await ensureMessagingTopology(sns, sqs, {
-    topicName: `test-events-${suffix}`,
-    queueName: `test-queue-${suffix}`,
-    deadLetterQueueName: `test-dlq-${suffix}`,
+    topicName: `test-events-${suffix}.fifo`,
+    queueName: `test-queue-${suffix}.fifo`,
+    deadLetterQueueName: `test-dlq-${suffix}.fifo`,
     maxReceiveCount: 2,
     visibilityTimeoutSeconds: 1,
     ...overrides,

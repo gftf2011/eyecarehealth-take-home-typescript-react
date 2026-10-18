@@ -11,10 +11,14 @@ export const awsEnvShape = {
   AWS_ENDPOINT_URL: z.url().optional(),
 };
 
+/** Tópico e filas são FIFO (ordem por agregado e deduplicação): a AWS exige o sufixo. */
+const fifoName = (fallback: string) =>
+  z.string().min(1).endsWith('.fifo', 'Precisa ser um recurso FIFO (terminar em .fifo)').default(fallback);
+
 /** Nomes da fila do tempo real e da fila morta dela. */
 export const realtimeQueueEnvShape = {
-  REALTIME_QUEUE_NAME: z.string().min(1).default('fastmeals-realtime'),
-  REALTIME_DLQ_NAME: z.string().min(1).default('fastmeals-realtime-dlq'),
+  REALTIME_QUEUE_NAME: fifoName('fastmeals-realtime.fifo'),
+  REALTIME_DLQ_NAME: fifoName('fastmeals-realtime-dlq.fifo'),
 };
 
 export function awsClientConfig(env: { AWS_REGION: string; AWS_ENDPOINT_URL?: string | undefined }): AwsClientConfig {
@@ -25,7 +29,7 @@ export function awsClientConfig(env: { AWS_REGION: string; AWS_ENDPOINT_URL?: st
 const messagingSetupEnvSchema = z.object({
   ...awsEnvShape,
   ...realtimeQueueEnvShape,
-  EVENTS_TOPIC_NAME: z.string().min(1).default('fastmeals-events'),
+  EVENTS_TOPIC_NAME: fifoName('fastmeals-events.fifo'),
   /** Recebimentos sem sucesso até a mensagem ir para a fila morta. */
   REALTIME_MAX_RECEIVE_COUNT: z.coerce.number().int().min(1).max(1_000).default(5),
   /** Quanto a mensagem some da fila enquanto é processada (e espera até reaparecer). */

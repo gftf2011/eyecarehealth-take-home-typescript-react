@@ -8,6 +8,8 @@ export type QueueMessage = {
   readonly body: string;
   /** Quantas vezes já foi recebida (1 na primeira). */
   readonly receiveCount: number;
+  /** Grupo FIFO (o agregado); `undefined` numa fila padrão. */
+  readonly groupId: string | undefined;
 };
 
 export type SqsQueueConsumerOptions = {
@@ -35,6 +37,10 @@ const BASE_BACKOFF_MS = 500;
  * vez** — a mensagem só é apagada depois de processada; se o processamento
  * falhar, ela reaparece após o visibility timeout, e o SQS a move para a fila
  * morta no `maxReceiveCount`. Várias réplicas dividem a fila entre si.
+ *
+ * Numa fila **FIFO**, mantém a ordem por grupo: o lote é processado em
+ * sequência e, se uma mensagem falhar, as seguintes do mesmo grupo no lote
+ * não são processadas nem apagadas — voltam com ela, na ordem.
  *
  * `stop()` interrompe a espera em andamento, aguarda o lote atual terminar e
  * só então resolve.
@@ -100,7 +106,7 @@ export class SqsQueueConsumer {
           QueueUrl: this.#options.queueUrl,
           MaxNumberOfMessages: this.#options.batchSize,
           WaitTimeSeconds: this.#options.waitTimeSeconds,
-          MessageSystemAttributeNames: ['ApproximateReceiveCount'],
+          MessageSystemAttributeNames: ['ApproximateReceiveCount', 'MessageGroupId'],
         }),
         { abortSignal: this.#abort.signal },
       );
@@ -117,20 +123,25 @@ export class SqsQueueConsumer {
     }
   }
 
-  /** Processa o lote e apaga de uma vez as que deram certo. */
+  /** Processa o lote em ordem e apaga de uma vez as que deram certo. */
   async #process(messages: readonly Message[]): Promise<void> {
     const done: { Id: string; ReceiptHandle: string }[] = [];
+    const failedGroups = new Set<string>();
     for (const [index, raw] of messages.entries()) {
       if (raw.ReceiptHandle === undefined) continue;
       const message: QueueMessage = {
         id: raw.MessageId ?? String(index),
         body: raw.Body ?? '',
         receiveCount: Number(raw.Attributes?.ApproximateReceiveCount ?? '1'),
+        groupId: raw.Attributes?.MessageGroupId,
       };
+      // Uma anterior do mesmo grupo falhou: processar esta inverteria a ordem.
+      if (message.groupId !== undefined && failedGroups.has(message.groupId)) continue;
       try {
         await this.#options.handle(message);
         done.push({ Id: String(index), ReceiptHandle: raw.ReceiptHandle });
       } catch (error) {
+        if (message.groupId !== undefined) failedGroups.add(message.groupId);
         this.#options.onError(error, message);
       }
     }

@@ -1,6 +1,7 @@
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 
 import type { Clock, MessagePublisher } from '../../application';
+import type { JsonObject } from '../../domain';
 import type { OutboxDatabase } from './outbox-events.table';
 
 export type RelayBatchResult = {
@@ -31,6 +32,18 @@ export type OutboxRelayOptions = {
   readonly onDeadLettered?: (message: DeadLetteredMessage) => void;
 };
 
+/** Linha pendente como a seleção do relay a lê. */
+type PendingRow = {
+  readonly id: string;
+  readonly aggregate_type: string;
+  readonly aggregate_id: string;
+  readonly event_name: string;
+  readonly event_version: number;
+  readonly payload: JsonObject;
+  readonly occurred_at: Date;
+  readonly attempts: number;
+};
+
 export const DEFAULT_OUTBOX_MAX_ATTEMPTS = 5;
 /** Teto do erro guardado na linha (a pilha inteira não ajuda a investigar). */
 const MAX_ERROR_LENGTH = 2_000;
@@ -55,35 +68,46 @@ export class OutboxRelay implements OutboxRelayCycle {
   }
 
   /**
-   * Publica até `limit` mensagens pendentes, das mais antigas para as mais
-   * novas (índice parcial `idx_outbox_events_pending`).
+   * Publica até `limit` mensagens pendentes, na ordem de inserção
+   * (`sequence`), para o SNS FIFO entregá-las em ordem por agregado.
    *
-   * - `FOR UPDATE SKIP LOCKED`: réplicas do relay pegam lotes disjuntos, sem
-   *   esperar umas pelas outras nem publicar a mesma mensagem duas vezes.
-   * - O lote inteiro vai ao publisher de uma vez (no SNS, `PublishBatch` de
-   *   10 em 10, em paralelo), e cada mensagem tem o próprio resultado: as
+   * - **Um agregado por réplica:** a transação pega um advisory lock por
+   *   agregado (`pg_try_advisory_xact_lock`) e só publica os agregados que
+   *   conseguiu travar. Duas réplicas nunca publicam mensagens do mesmo pedido
+   *   ao mesmo tempo (o que inverteria a ordem), e agregados diferentes
+   *   continuam divididos entre elas.
+   * - O lote inteiro vai ao publisher de uma vez (`PublishBatch` de 10 em 10,
+   *   uma faixa sequencial por grupo), com um resultado por mensagem: as
    *   entregues saem da fila, as que falharam ficam.
-   * - Broker fora (`broker-unavailable`): fica pendente sem contar tentativa.
+   * - Broker fora (`broker-unavailable`) ou esperando uma anterior do mesmo
+   *   agregado (`deferred`): fica pendente sem contar tentativa.
    * - Recusa da mensagem (`rejected`): soma uma tentativa. Na
-   *   `maxAttempts`-ésima, vai para a **fila morta** (`dead_lettered_at`):
-   *   uma mensagem defeituosa não trava as outras.
-   *
-   * Uma falha não segura as demais, então a ordem entre mensagens do mesmo
-   * agregado não é garantida — o painel só invalida e recarrega pela API.
+   *   `maxAttempts`-ésima, vai para a **fila morta** (`dead_lettered_at`) e o
+   *   agregado destrava: as seguintes dele voltam a sair.
    */
   async relayBatch(limit: number): Promise<RelayBatchResult> {
     const { result, deadLettered } = await this.db.transaction().execute(async (trx) => {
-      const pending = await trx
-        .selectFrom('outbox_events')
-        .select(['id', 'aggregate_type', 'aggregate_id', 'event_name', 'event_version', 'payload', 'occurred_at', 'attempts'])
-        .where('published_at', 'is', null)
-        .where('dead_lettered_at', 'is', null)
-        .orderBy('occurred_at')
-        .orderBy('id')
-        .limit(limit)
-        .forUpdate()
-        .skipLocked()
-        .execute();
+      const { rows: pending } = await sql<PendingRow>`
+        WITH heads AS (
+          SELECT aggregate_type, aggregate_id, min(sequence) AS first_sequence
+          FROM outbox_events
+          WHERE published_at IS NULL AND dead_lettered_at IS NULL
+          GROUP BY aggregate_type, aggregate_id
+          ORDER BY first_sequence
+          LIMIT ${limit}
+        ), owned AS MATERIALIZED (
+          SELECT aggregate_type, aggregate_id
+          FROM heads
+          WHERE pg_try_advisory_xact_lock(hashtextextended(aggregate_type || ':' || aggregate_id::text, 0))
+        )
+        SELECT e.id, e.aggregate_type, e.aggregate_id, e.event_name, e.event_version, e.payload, e.occurred_at, e.attempts
+        FROM outbox_events e
+        JOIN owned o ON o.aggregate_type = e.aggregate_type AND o.aggregate_id = e.aggregate_id
+        WHERE e.published_at IS NULL AND e.dead_lettered_at IS NULL
+        ORDER BY e.sequence
+        LIMIT ${limit}
+        FOR UPDATE OF e
+      `.execute(trx);
 
       const outcomes = await this.publisher.publishBatch(
         pending.map((row) => ({
@@ -107,6 +131,7 @@ export class OutboxRelay implements OutboxRelayCycle {
           publishedIds.push(row.id);
           continue;
         }
+        // broker-unavailable ou deferred: pendente, sem contar tentativa.
         if (outcome?.status !== 'rejected') {
           failed += 1;
           continue;

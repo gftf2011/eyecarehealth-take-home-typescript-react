@@ -37,9 +37,9 @@ x-aws-env: &aws-env
   AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://floci:4566}
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
-  EVENTS_TOPIC_NAME: ${EVENTS_TOPIC_NAME:-fastmeals-events}
-  REALTIME_QUEUE_NAME: ${REALTIME_QUEUE_NAME:-fastmeals-realtime}
-  REALTIME_DLQ_NAME: ${REALTIME_DLQ_NAME:-fastmeals-realtime-dlq}
+  EVENTS_TOPIC_NAME: ${EVENTS_TOPIC_NAME:-fastmeals-events.fifo}
+  REALTIME_QUEUE_NAME: ${REALTIME_QUEUE_NAME:-fastmeals-realtime.fifo}
+  REALTIME_DLQ_NAME: ${REALTIME_DLQ_NAME:-fastmeals-realtime-dlq.fifo}
 
 services:
   postgres:
@@ -163,7 +163,7 @@ services:
     environment:
       <<: [*backend-env, *aws-env]
       # O Floci usa a conta 000000000000; na AWS, o ARN do tópico real.
-      EVENTS_TOPIC_ARN: ${EVENTS_TOPIC_ARN:-arn:aws:sns:us-east-1:000000000000:fastmeals-events}
+      EVENTS_TOPIC_ARN: ${EVENTS_TOPIC_ARN:-arn:aws:sns:us-east-1:000000000000:fastmeals-events.fifo}
       RELAY_HEALTH_PORT: "3003"
       OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-500}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}

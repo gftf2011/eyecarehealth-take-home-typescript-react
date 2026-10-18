@@ -13,9 +13,9 @@ describe('ensureMessagingTopology (Floci)', () => {
   const sqs = createSqsClient(testAwsConfig());
   const suffix = randomUUID().slice(0, 8);
   const spec = {
-    topicName: `topology-events-${suffix}`,
-    queueName: `topology-queue-${suffix}`,
-    deadLetterQueueName: `topology-dlq-${suffix}`,
+    topicName: `topology-events-${suffix}.fifo`,
+    queueName: `topology-queue-${suffix}.fifo`,
+    deadLetterQueueName: `topology-dlq-${suffix}.fifo`,
     maxReceiveCount: 5,
     visibilityTimeoutSeconds: 30,
     topics: ['ordering.order-updates'],
@@ -33,16 +33,25 @@ describe('ensureMessagingTopology (Floci)', () => {
       new GetQueueAttributesCommand({ QueueUrl: first.queue.url, AttributeNames: ['All'] }),
     );
     expect(Attributes['VisibilityTimeout']).toBe('30');
+    expect(Attributes['FifoQueue']).toBe('true');
+    expect(Attributes['DeduplicationScope']).toBe('messageGroup');
+    expect(Attributes['FifoThroughputLimit']).toBe('perMessageGroupId');
     expect(JSON.parse(Attributes['RedrivePolicy'] ?? '{}')).toEqual({
       deadLetterTargetArn: first.deadLetterQueue.arn,
       maxReceiveCount: 5,
     });
   });
 
+  it('recusa nomes que não são FIFO, antes de criar qualquer coisa', async () => {
+    await expect(ensureMessagingTopology(sns, sqs, { ...spec, queueName: `padrao-${suffix}` })).rejects.toThrow(
+      /precisam ser FIFO/,
+    );
+  });
+
   it('findQueue resolve URL e ARN pelo nome, e falha se a fila não existir', async () => {
     const topology = await ensureMessagingTopology(sns, sqs, spec);
 
     expect(await findQueue(sqs, spec.queueName)).toEqual(topology.queue);
-    await expect(findQueue(sqs, `nao-existe-${suffix}`)).rejects.toThrow();
+    await expect(findQueue(sqs, `nao-existe-${suffix}.fifo`)).rejects.toThrow();
   });
 });
