@@ -33,9 +33,9 @@ flowchart LR
 
     pg[(PostgreSQL 17<br/>tabelas + outbox_events)]
     redis[(Redis 7<br/>rate limit + fan-out)]
-    sns[[SNS fastmeals-events]]
-    sqs[[SQS fastmeals-realtime]]
-    dlq[[SQS fastmeals-realtime-dlq]]
+    sns[[SNS FIFO fastmeals-events.fifo]]
+    sqs[[SQS FIFO fastmeals-realtime.fifo]]
+    dlq[[SQS FIFO fastmeals-realtime-dlq.fifo]]
 
     navegador -- HTTPS / WebSocket --> painel
     painel -- /api --> api
@@ -323,12 +323,12 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   4. O [relay](backend/src/shared-kernel/infra/outbox/outbox-relay.ts) lê o outbox em lotes e publica no tópico SNS de eventos ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
   5. **Fila morta no próprio outbox**, para o que o broker **recusa**. Queda do broker (`BrokerUnavailableError`: rede, throttling, 5xx) não conta tentativa: o relay espera e tenta de novo. Recusa da mensagem (`InvalidParameter`, por exemplo, grande demais) conta. Na `OUTBOX_MAX_ATTEMPTS`-ésima (padrão 5), a linha ganha `dead_lettered_at` e `last_error`, sai do índice de pendentes e o lote segue. A retenção não apaga mensagens mortas, e o [`outbox-redrive`](backend/src/main/outbox-redrive.ts) lista e devolve à fila depois de corrigida a causa.
 - **Alternativas.** *Publicar no Redis direto do caso de uso*: perde o evento se o processo cair depois do commit, ou publica um evento de uma transação que vai falhar. *Todo evento de domínio no outbox automaticamente*: expõe a estrutura interna do domínio como contrato público. *CDC (Debezium) ou broker (Kafka/RabbitMQ)*: robustos, mas infraestrutura demais para um painel. *Fila morta da publicação no SQS*: mover a mensagem recusada para outro sistema deixaria de ser atômico com a transação do outbox; no banco, marcar como morta é um `UPDATE` na mesma transação. O SQS tem a fila morta do **consumo** ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
-- **Consequências.** ➕ Consistência garantida pelo banco (o evento existe se, e só se, a mudança foi confirmada). ➕ O contrato público é separado do evento interno. ➕ Uma mensagem defeituosa não trava as outras, e nenhuma é perdida em silêncio. ➖ A ordem entre mensagens do mesmo agregado não é garantida: no lote, uma que falha fica para depois e as seguintes saem; a fila padrão do SQS também não ordena. Aceitável porque o painel só invalida e recarrega pela API. ➖ Entrega **pelo menos uma vez** com latência de polling (padrão: até 500 ms); o cliente descarta repetidos pelo `id`.
+- **Consequências.** ➕ Consistência garantida pelo banco (o evento existe se, e só se, a mudança foi confirmada). ➕ O contrato público é separado do evento interno. ➕ Uma mensagem defeituosa não trava as outras, e nenhuma é perdida em silêncio. ➕ Os eventos de um mesmo agregado saem na ordem em que aconteceram e sem repetição dentro de 5 minutos ([ADR-23](#adr-23--tópico-e-filas-fifo-ordem-por-agregado-e-deduplicação-pelo-id-do-outbox)). ➖ Entrega **pelo menos uma vez** com latência de polling (padrão: até 500 ms); o cliente descarta repetidos pelo `id`.
 
 ### ADR-05 — Três processos: API, outbox relay e gateway WebSocket
 
 - **Contexto.** Tempo real é diferencial no enunciado (polling de 30 s seria aceitável). Conexões WebSocket são longas e com estado; o relay é um laço contínuo.
-- **Decisão.** Três entrypoints do mesmo código e da mesma imagem. O relay pode ter várias réplicas (`FOR UPDATE SKIP LOCKED` dá lotes disjuntos) e publica em lote; uma mensagem que falha fica pendente sem segurar as outras ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)). O gateway pode ter várias réplicas: a fila SQS divide as mensagens entre elas, e o Redis pub/sub as leva a todas ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
+- **Decisão.** Três entrypoints do mesmo código e da mesma imagem. O relay pode ter várias réplicas (`FOR UPDATE SKIP LOCKED` dá lotes disjuntos) e publica em lote; uma mensagem que falha fica pendente e segura só as seguintes do mesmo agregado ([ADR-23](#adr-23--tópico-e-filas-fifo-ordem-por-agregado-e-deduplicação-pelo-id-do-outbox)). O gateway pode ter várias réplicas: a fila SQS divide as mensagens entre elas, e o Redis pub/sub as leva a todas ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
 - **Protocolo do gateway.** Autenticação pela **primeira mensagem** `{ type: "auth", accessToken }` em até 5 s. O navegador não envia `Authorization` em WebSocket, e token na URL vazaria em logs de proxy. Além disso: allowlist de `Origin` antes do upgrade, *heartbeat* ping/pong de 30 s, limite de 4 KB por mensagem, *backpressure* de 1 MB (cliente lento é desconectado com `1013`), reautenticação para estender a sessão e `1012` no shutdown para o cliente reconectar.
 - **Alternativas.** WebSocket dentro da API: mais simples, mas um deploy da API derrubaria todos os painéis, e conexões longas competiriam com requisições curtas. Relay dentro da API: com N réplicas da API seriam N relays, acoplados ao ciclo de vida do HTTP.
 - **Consequências.** ➕ Cada processo escala, reinicia e tem health check próprio. ➖ Mais serviços para operar; o pub/sub não guarda mensagens, então o cliente recarrega a lista pela API ao reconectar.
@@ -523,19 +523,47 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
 - **Contexto.** O relay publicava direto no Redis pub/sub: sem retentativa do lado de quem consome, sem fila morta e sem como acrescentar outro consumidor (e-mail, analytics) sem mexer no relay. Uma mensagem que o gateway não conseguisse repassar se perdia em silêncio.
 - **Decisão.**
-  1. O relay publica cada mensagem **uma vez** no tópico SNS `fastmeals-events` ([`SnsMessagePublisher`](backend/src/shared-kernel/infra/messaging/aws/sns-message.publisher.ts)), com o tópico lógico no atributo `topic`. **Em lote:** o lote do outbox (até 100) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, e a porta `MessagePublisher` devolve um resultado **por mensagem** (`published`, `broker-unavailable` ou `rejected`):
+  1. O relay publica cada mensagem **uma vez** no tópico SNS `fastmeals-events.fifo` ([`SnsMessagePublisher`](backend/src/shared-kernel/infra/messaging/aws/sns-message.publisher.ts)), com o tópico lógico no atributo `topic`. **Em lote:** o lote do outbox (até 100) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, e a porta `MessagePublisher` devolve um resultado **por mensagem** (`published`, `broker-unavailable` ou `rejected`):
      - as entregues saem da fila e as que falharam ficam, sem segurar as outras;
      - com o SNS fora, os lotes seguintes nem são enviados;
      - um lote recusado inteiro é reenviado mensagem a mensagem, para recusar só a culpada.
 
      No Floci, 500 mensagens saíram 15× mais rápido que uma por chamada (8.640 contra 561 por segundo). Na AWS, com dezenas de ms por chamada, a diferença tende a ser maior, e a transação que trava o lote do outbox fica aberta por um intervalo bem menor.
-  2. Cada consumidor tem a **própria fila SQS** assinada no tópico, com **filtro** por tópico lógico e **entrega crua** (o corpo é o envelope). Hoje há uma: `fastmeals-realtime`.
-  3. **Fila morta nativa do SQS:** `RedrivePolicy` com `maxReceiveCount=5` para `fastmeals-realtime-dlq` (retenção de 14 dias). O gateway ([`SqsQueueConsumer`](backend/src/shared-kernel/infra/messaging/aws/sqs-queue-consumer.ts)) só apaga a mensagem depois de repassá-la; se falhar, ela reaparece após o visibility timeout (30 s). Reprocessar é `StartMessageMoveTask` (`npm run events:redrive`).
+  2. Cada consumidor tem a **própria fila SQS** assinada no tópico, com **filtro** por tópico lógico e **entrega crua** (o corpo é o envelope). Hoje há uma: `fastmeals-realtime.fifo`. Tópico e filas são FIFO ([ADR-23](#adr-23--tópico-e-filas-fifo-ordem-por-agregado-e-deduplicação-pelo-id-do-outbox)).
+  3. **Fila morta nativa do SQS:** `RedrivePolicy` com `maxReceiveCount=5` para `fastmeals-realtime-dlq.fifo` (retenção de 14 dias). O gateway ([`SqsQueueConsumer`](backend/src/shared-kernel/infra/messaging/aws/sqs-queue-consumer.ts)) só apaga a mensagem depois de repassá-la; se falhar, ela reaparece após o visibility timeout (30 s). Reprocessar é `StartMessageMoveTask` (`npm run events:redrive`).
   4. **O Redis continua, só para o fan-out.** A fila entrega cada mensagem a **uma** réplica do gateway; essa réplica a publica no Redis ([`RealtimeFanoutForwarder`](backend/src/realtime/infra/realtime-fanout.forwarder.ts)), e **todas** a recebem. Sem o Redis, com duas réplicas, metade dos painéis perderia cada evento.
   5. **Duas filas mortas, uma por ponto de falha.** A do outbox ([ADR-04](#adr-04--eventos-de-domínio-com-mediator-em-memória-e-transactional-outbox)) guarda o que o SNS **recusa** (mensagem inválida); a do SQS, o que o gateway **não consegue consumir**. Queda do SNS (rede, throttling, 5xx, credenciais) é transitória: o relay espera sem contar tentativa.
   6. **Floci** ([floci.io](https://floci.io)), emulador local da AWS, roda SNS e SQS no Compose e nos testes (Testcontainers). O job `messaging-setup` cria tópico, filas, redrive, política da fila e assinatura; pode rodar de novo sem efeito. Em produção, o mesmo código fala com a AWS (sem `AWS_ENDPOINT_URL`), e os recursos viriam da infraestrutura como código.
-- **Alternativas.** *Só Redis pub/sub* (a versão anterior): mais simples, mas sem retentativa nem fila morta do lado do consumo. *SQS direto, sem SNS*: o relay teria que conhecer cada fila; o SNS desacopla quem publica de quem consome. *Fila por réplica do gateway* (cada uma assinada no tópico, sem Redis): elimina o Redis do caminho, mas filas efêmeras precisam ser criadas e removidas a cada deploy, e réplicas mortas deixam filas órfãs. *Kafka/RabbitMQ*: robustos, mas mais infraestrutura para operar do que dois serviços gerenciados. *FIFO*: ordem e deduplicação por grupo, mas o painel só invalida e recarrega, então a ordem não importa, e o cliente já descarta repetidos pelo `id`. *LocalStack*: a edição gratuita passou a exigir token; o Floci é MIT e cobre SNS/SQS com redrive.
+- **Alternativas.** *Só Redis pub/sub* (a versão anterior): mais simples, mas sem retentativa nem fila morta do lado do consumo. *SQS direto, sem SNS*: o relay teria que conhecer cada fila; o SNS desacopla quem publica de quem consome. *Fila por réplica do gateway* (cada uma assinada no tópico, sem Redis): elimina o Redis do caminho, mas filas efêmeras precisam ser criadas e removidas a cada deploy, e réplicas mortas deixam filas órfãs. *Kafka/RabbitMQ*: robustos, mas mais infraestrutura para operar do que dois serviços gerenciados. *FIFO*: adotado depois, para ordem por agregado e deduplicação ([ADR-23](#adr-23--tópico-e-filas-fifo-ordem-por-agregado-e-deduplicação-pelo-id-do-outbox)). *LocalStack*: a edição gratuita passou a exigir token; o Floci é MIT e cobre SNS/SQS com redrive.
 - **Consequências.** ➕ Uma mensagem que falha no consumo é retentada e, se não der, guardada e reprocessável, em vez de perdida. ➕ Novos consumidores entram sem mexer no relay. ➕ Alertas e métricas prontos na AWS (idade da mensagem mais antiga, tamanho da fila morta). ➖ Um salto a mais: a latência até o painel sobe de ~500 ms para algo entre 0,5 s e 1 s (polling do outbox + long polling). ➖ Mais um serviço no Compose e o SDK da AWS como dependência. ➖ Com o Redis fora por mais de ~2,5 min (5 × 30 s), eventos vão para a fila morta; aceitável, porque o painel recarrega tudo ao reconectar, e o que está lá já está vencido para o tempo real.
+
+### ADR-23 — Tópico e filas FIFO: ordem por agregado e deduplicação pelo id do outbox
+
+- **Contexto.** O outbox entrega "pelo menos uma vez": se o commit falhar depois de publicar, a mensagem sai de novo. Com tópico e fila padrão, a repetida chegava aos consumidores, e a ordem entre os eventos de um pedido não era garantida em nenhum ponto: lotes em paralelo, réplicas do relay com `SKIP LOCKED` e fila padrão. Para o painel, que só recarrega, isso era aceitável; para um consumidor que age sobre cada evento (uma notificação "saiu para entrega" que não pode chegar depois de "entregue"), não.
+- **Decisão.** FIFO de ponta a ponta, com o **agregado** como grupo:
+  1. **SNS FIFO** `fastmeals-events.fifo`:
+     - `MessageGroupId` = `aggregateType:aggregateId`;
+     - `MessageDeduplicationId` = id do outbox (o `eventId`): a republicação é descartada pelo próprio SNS em 5 minutos;
+     - `ContentBasedDeduplication` desligado: conteúdo igual pode ser evento legítimo;
+     - vazão por grupo (`FifoThroughputScope=MessageGroup`).
+  2. **SQS FIFO** `fastmeals-realtime.fifo`, com fila morta também FIFO (o SQS não aceita fila morta padrão para fila FIFO), `DeduplicationScope=messageGroup` e `FifoThroughputLimit=perMessageGroupId`. O redrive da fila morta (`StartMessageMoveTask`) mantém os grupos.
+  3. **Ordem no outbox:** coluna `sequence` (identity), dada pelo banco na inserção. `occurred_at` vem do relógio de cada transação e pode empatar ou se inverter; as transações de um mesmo agregado são serializadas pelo lock da linha, então a `sequence` dele sempre cresce na ordem dos eventos.
+  4. **Relay:** um advisory lock por agregado (`pg_try_advisory_xact_lock`) no lugar do `SKIP LOCKED` por linha. Duas réplicas nunca publicam o mesmo pedido ao mesmo tempo, e agregados diferentes continuam divididos entre elas.
+  5. **Publisher:** cada agregado vai para uma faixa fixa (hash do grupo), enviada em sequência; as faixas correm em paralelo. Cada `PublishBatch` leva no máximo uma mensagem por agregado, e uma falha adia (`deferred`, sem contar tentativa) as seguintes do mesmo agregado.
+  6. **Consumidor:** processa o lote em ordem; se uma mensagem falha, as seguintes do mesmo grupo no lote não são processadas nem apagadas e voltam com ela.
+  7. Nomes sem `.fifo` são recusados na configuração e na criação da topologia.
+- **Alternativas.**
+  - *Deduplicar só no consumidor* (o painel já descarta pelo `id`): cada consumidor novo teria que fazer o mesmo.
+  - *Grupo único por tópico*: ordem total, mas tudo em série.
+  - *Grupo por pedido sem o lock no relay*: duas réplicas inverteriam a ordem. O teste de duas réplicas pega a inversão quando o lock é removido.
+  - *Uma réplica só do relay*: ordem garantida sem lock, mas sem escalar nem tolerar a queda dela.
+- **Consequências.**
+  - ➕ Cada consumidor recebe cada evento uma vez, dentro da janela de 5 minutos.
+  - ➕ Os eventos de um pedido chegam na ordem em que aconteceram, e pedidos diferentes continuam em paralelo.
+  - ➖ Vazão do SNS FIFO: 300 publicações por segundo por tópico, ou mais em modo de alta vazão por grupo. Folgado para o painel, mas é um teto.
+  - ➖ Um pedido com uma mensagem "envenenada" fica parado até ela ir para a fila morta (5 tentativas no relay ou 5 recebimentos no SQS); depois, o grupo destrava com uma lacuna, como no SQS FIFO.
+  - ➖ O relay ficou mais complexo: advisory locks e faixas por grupo.
+  - ➖ Deduplicação só dentro de 5 minutos: uma republicação depois disso chega de novo, e o painel ainda descarta pelo `id`.
 
 ---
 
@@ -634,6 +662,10 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 22. **Healthcheck do Floci que nunca ficava saudável.** A imagem não tem `curl`, `wget` nem `grep`, e o primeiro healthcheck (HTTP/1.0 à mão pelo `/dev/tcp` do bash) derrubava o endpoint `/_floci/health` com `NullPointerException`: ele exige o cabeçalho `Host`. **Solução:** HTTP/1.1 com `Host` e a checagem do status só com bash (`[[ $status == *' 200 '* ]]`).
 
 23. **URLs de fila que outro contêiner não alcança.** O Floci devolve `QueueUrl` com o host dele (`localhost:4566`), e o cliente SQS usa essa URL como endpoint por padrão: do contêiner do gateway, `localhost` é ele mesmo. **Solução:** `FLOCI_HOSTNAME=floci` no Compose e, com endpoint próprio, `useQueueUrlAsEndpoint: false` no cliente, que passa a mandar tudo ao `AWS_ENDPOINT_URL`. Funciona igual nos testes, em que o endpoint é a porta mapeada pelo Testcontainers.
+
+24. **O Floci aceita o que a AWS recusa.** Nos testes de FIFO, o Floci publicou sem `MessageGroupId` num tópico FIFO, coisa que a AWS rejeita. Um teste que passasse só por isso esconderia um bug de produção. **Solução:** o publisher sempre manda grupo e id de deduplicação, um teste unitário confere os dois campos em cada entrada, e a topologia recusa nomes sem `.fifo` antes de criar qualquer coisa.
+
+25. **Teste de concorrência que passava sem a correção.** O teste de duas réplicas do relay depende de uma corrida: sem cuidado, ele passaria mesmo sem o advisory lock. **Solução:** um publisher falso lento (20 ms por lote), três pedidos e lotes pequenos para as transações se sobreporem, e uma verificação de mutação: removendo o lock, o teste pegou a inversão de ordem.
 
 ---
 
