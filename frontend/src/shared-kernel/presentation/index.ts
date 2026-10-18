@@ -8,11 +8,14 @@ export { RequirePermission } from './components/require-permission/require-permi
 export { SelectField, type SelectFieldProps, type SelectOption } from './components/select-field/select-field';
 export { Skeleton } from './components/skeleton/skeleton';
 export { Spinner, type SpinnerProps } from './components/spinner/spinner';
+export { Switch, type SwitchProps } from './components/switch/switch';
 export { SplashScreen } from './components/splash-screen/splash-screen';
+export { TextAreaField, type TextAreaFieldProps } from './components/text-area-field/text-area-field';
 export { TextField, type TextFieldProps } from './components/text-field/text-field';
 export { errorMessage } from './errors/error-message';
 export { formatCents, formatDate, formatDateTime } from './format/format';
 export { useCan } from './hooks/use-can';
+export { useDebouncedValue } from './hooks/use-debounced-value';
 export { usePermissions } from './hooks/use-permissions';
 export type { NavigationItem } from './navigation/navigation-item';
 export { PermissionsProvider } from './providers/permissions-provider';

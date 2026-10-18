@@ -149,7 +149,7 @@ describe('Convenções da apresentação', () => {
     const check = productionFiles('src/*/presentation/hooks/**', ['src/*/presentation/hooks/index.ts'])
       .should()
       .adhereTo(
-        (file) => /^use-[a-z0-9-]+\.ts$/.test(fileNameOf(file)) && /export function use[A-Z]\w*\(/.test(file.content),
+        (file) => /^use-[a-z0-9-]+\.ts$/.test(fileNameOf(file)) && /export function use[A-Z]\w*[<(]/.test(file.content),
         'Hook em hooks/use-<nome>.ts',
       );
 

@@ -7,9 +7,10 @@ Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mes
 
 > **Estado atual:**
 > - **Identity**: login, sessão, renovação de token, rotas protegidas por sessão e permissão, logout.
+> - **Catalog**: tela de produtos (`/produtos`) com busca por nome enquanto digita, filtros de categoria e disponibilidade na URL, tabela paginada, criar/editar em modal com validação em tempo real (as mesmas regras e mensagens da API), alternar disponibilidade na linha com atualização otimista e exclusão com confirmação (o `409 PRODUCT_IN_USE` sugere desativar em vez de excluir).
 > - **Ordering**: painel de pedidos (`/pedidos`, a página inicial) com filtros por status, período e ordenação guardados na URL, lista paginada, detalhe em modal com link próprio e botões de status contextuais (só as transições válidas; cancelar pede confirmação; despachar sem entregador fica bloqueado com o motivo; perfil `viewer` não vê ações).
 >
-> As telas de produtos, entregadores, atribuição, relatórios e a atualização em tempo real entram nos próximos passos.
+> As telas de entregadores, atribuição, relatórios e a atualização em tempo real entram nos próximos passos.
 
 ## Início rápido
 
@@ -31,7 +32,7 @@ O Vite encaminha `/api` para `http://localhost:3001` e `/realtime` para `ws://lo
 
 ### Contextos e camadas
 
-As pastas espelham os bounded contexts do backend (por enquanto, `identity` e `ordering`), mais o `shared-kernel` e a composição em `main/`:
+As pastas espelham os bounded contexts do backend (por enquanto, `identity`, `catalog` e `ordering`), mais o `shared-kernel` e a composição em `main/`:
 
 ```
 src/
@@ -41,6 +42,7 @@ src/
 │   ├── infra/           gateway HTTP, store da sessão, trava entre abas, agendador de renovação
 │   ├── presentation/    componentes, páginas, hooks, rotas (React)
 │   └── main/            composition root do contexto
+├── catalog/             cardápio: Value Objects do produto, formulário, casos de uso, tela de produtos
 ├── ordering/            painel de pedidos: OrderStatus (máquina de estados), Order, filtros, casos de uso, telas
 ├── shared-kernel/       base comum: erros, validação, cliente HTTP, componentes de UI, tema
 ├── main/                entrypoint, roteador, layout, injeção das dependências
@@ -76,6 +78,8 @@ main → presentation → application → domain
 O cliente HTTP traduz cada resposta de erro da API (`{ error: { code, message, details } }`) para a mesma categoria do backend: `InputValidationError` (400, com mensagens por campo), `UnauthenticatedError` (401), `ForbiddenError` (403), `ResourceNotFoundError` (404), `RequestConflictError` (409), `BusinessRuleRejectedError` (422), `RateLimitedError` (429, com `Retry-After`) e `ServiceUnavailableError` (rede, 5xx ou resposta fora do contrato, validada com Zod). As telas mostram a mensagem sem conhecer HTTP. Só falhas transitórias são repetidas automaticamente.
 
 ### Formulários
+
+Os Value Objects do produto são os mesmos do backend, e os testes deles foram copiados do backend sem nenhuma mudança: se as regras divergirem entre os dois lados, o mesmo teste falha em um deles.
 
 A validação em tempo real usa **as mesmas regras do caso de uso** (Value Objects): `loginInputErrors(values)` roda a cada digitação, e o erro de um campo aparece depois que ele é visitado ou numa tentativa de envio. Erros por campo vindos da API aparecem no próprio campo. Acessibilidade: `label` associado, `aria-invalid`, `aria-describedby` com a mensagem, foco no primeiro campo inválido e `role="alert"` nos erros.
 

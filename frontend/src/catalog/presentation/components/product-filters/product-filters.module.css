@@ -1,0 +1,22 @@
+.filters {
+  display: grid;
+  grid-template-columns: minmax(14rem, 2fr) repeat(3, minmax(9rem, 1fr)) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.actions {
+  display: flex;
+  align-items: flex-end;
+  min-height: calc(var(--control-height) + 1.5rem);
+}
+
+@media (max-width: 1024px) {
+  .filters {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
+}

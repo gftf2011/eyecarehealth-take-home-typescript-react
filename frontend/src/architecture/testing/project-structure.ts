@@ -6,7 +6,7 @@ import { projectFiles, type FileInfo, type PatternOptions } from 'archunit';
  * Bounded contexts do painel: os mesmos da API, cada um com as suas telas.
  * Um teste garante que toda pasta nova em `src/` está nesta lista.
  */
-export const BOUNDED_CONTEXTS = ['identity', 'ordering'] as const;
+export const BOUNDED_CONTEXTS = ['catalog', 'identity', 'ordering'] as const;
 
 export type BoundedContext = (typeof BOUNDED_CONTEXTS)[number];
 
