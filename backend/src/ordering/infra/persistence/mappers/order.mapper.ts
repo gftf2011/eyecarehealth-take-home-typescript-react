@@ -9,6 +9,10 @@ import {
 import {
   CustomerName,
   DeliveryAddress,
+  DeliveryIssue,
+  DeliveryIssueId,
+  DeliveryIssueNote,
+  DeliveryIssueReason,
   DeliveryPersonId,
   GeoLocation,
   Order,
@@ -22,6 +26,7 @@ import {
   StatusChange,
 } from '../../../domain';
 import type {
+  OrderDeliveryIssuesTable,
   OrderItemsTable,
   OrdersTable,
   OrderStatusHistoryTable,
@@ -34,6 +39,7 @@ export type OrderRows = {
   readonly order: Insertable<OrdersTable>;
   readonly items: readonly Insertable<OrderItemsTable>[];
   readonly history: readonly Insertable<OrderStatusHistoryTable>[];
+  readonly issues: readonly Insertable<OrderDeliveryIssuesTable>[];
 };
 
 /**
@@ -45,6 +51,7 @@ export function toOrder(
   row: Selectable<OrdersTable>,
   items: readonly Selectable<OrderItemsTable>[],
   history: readonly Selectable<OrderStatusHistoryTable>[],
+  issues: readonly Selectable<OrderDeliveryIssuesTable>[] = [],
 ): Order {
   return Order.reconstitute(OrderId.from(row.id), {
     customerName: CustomerName.create(row.customer_name),
@@ -64,6 +71,18 @@ export function toOrder(
     statusHistory: [...history]
       .sort((a, b) => a.position - b.position)
       .map((change) => StatusChange.record(change.from_status, change.to_status, change.changed_at, change.reason)),
+    deliveryIssues: [...issues]
+      .sort((a, b) => a.reported_at.getTime() - b.reported_at.getTime())
+      .map((issue) =>
+        DeliveryIssue.reconstitute(DeliveryIssueId.from(issue.id), {
+          reason: DeliveryIssueReason.create(issue.reason),
+          note: DeliveryIssueNote.createOptional(issue.note),
+          reportedBy: DeliveryPersonId.from(issue.reported_by),
+          reportedAt: issue.reported_at,
+          resolvedAt: issue.resolved_at,
+          resolution: issue.resolution,
+        }),
+      ),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -101,6 +120,16 @@ export function toOrderRows(order: Order): OrderRows {
       to_status: change.to,
       changed_at: change.changedAt,
       reason: change.reason,
+    })),
+    issues: order.deliveryIssues.map((issue) => ({
+      id: issue.id.value,
+      order_id: orderId,
+      reason: issue.reason.value,
+      note: issue.note?.value ?? null,
+      reported_by: issue.reportedBy.value,
+      reported_at: issue.reportedAt,
+      resolved_at: issue.resolvedAt,
+      resolution: issue.resolution,
     })),
   };
 }

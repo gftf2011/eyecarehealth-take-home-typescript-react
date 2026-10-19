@@ -161,6 +161,69 @@ describe('Painel de pedidos', () => {
     expect(within(await rowOf('Pedro Almeida')).getByText('Pronto')).toBeInTheDocument();
   });
 
+  describe('entrega com problema relatado pelo entregador', () => {
+    const withIssue = (reason: 'customer_absent' | 'refused' = 'customer_absent') =>
+      orderBody({
+        id: 'order-lucas',
+        customerName: 'Lucas Prado',
+        status: 'delivering',
+        deliveryPerson: { id: 'dp-1', name: 'Carlos Entregador' },
+        createdAt: '2026-10-17T13:30:00.000Z',
+        deliveryIssues: [
+          { id: 'issue-1', reason, note: 'Ninguém atende', reportedAt: '2026-10-17T14:00:00.000Z', resolvedAt: null, resolution: null },
+        ],
+        deliveryIssueDecisions: reason === 'refused' ? ['cancel'] : ['retry', 'return', 'cancel'],
+      });
+
+    it('aparece na lista com o selo e no detalhe com o motivo; "Tentar de novo" mantém a entrega', async () => {
+      orders.given(JOAO, MARIA, ANA, withIssue());
+      const view = open();
+
+      expect(await within(await rowOf('Lucas Prado')).findByText('Problema na entrega')).toBeInTheDocument();
+      await view.user.click(within(await rowOf('Lucas Prado')).getByRole('button', { name: 'Ver detalhes do pedido de Lucas Prado' }));
+      const details = await screen.findByRole('dialog', { name: 'Detalhes do pedido' });
+      const panel = await within(details).findByRole('region', { name: 'Problemas na entrega' });
+      expect(panel).toHaveTextContent('Problema na entrega: Cliente ausente');
+      expect(panel).toHaveTextContent('Ninguém atende');
+      // Com o problema aberto, a entrega não pode ser concluída pelo painel.
+      expect(within(details).getByRole('button', { name: 'Confirmar entrega' })).toBeDisabled();
+      expect(within(details).getByText('O entregador relatou um problema: decida antes de concluir a entrega.')).toBeInTheDocument();
+
+      await view.user.click(within(panel).getByRole('button', { name: 'Tentar de novo' }));
+
+      await waitFor(() => expect(within(details).queryByText('Problema na entrega: Cliente ausente')).not.toBeInTheDocument());
+      expect(orders.decisions).toEqual([{ id: 'order-lucas', decision: 'retry' }]);
+      expect(within(details).getByRole('list', { name: 'Tentativas anteriores' })).toHaveTextContent(
+        'Cliente ausente (Ninguém atende) → Nova tentativa',
+      );
+    });
+
+    it('cliente recusou: só "Cancelar entrega" (sem tentar de novo nem devolver)', async () => {
+      orders.given(JOAO, MARIA, ANA, withIssue('refused'));
+      open('/pedidos?order=order-lucas');
+      const details = await screen.findByRole('dialog', { name: 'Detalhes do pedido' });
+      const panel = await within(details).findByRole('region', { name: 'Problemas na entrega' });
+
+      expect(within(panel).getByRole('group', { name: 'Decisão sobre a entrega' })).toHaveTextContent(/^Cancelar entrega$/);
+      expect(panel).toHaveTextContent('O cliente recusou: a única saída é cancelar.');
+      expect(within(details).queryByRole('button', { name: 'Devolver para a atribuição' })).not.toBeInTheDocument();
+    });
+
+    it('"Cancelar entrega" pede confirmação e cancela o pedido', async () => {
+      orders.given(JOAO, MARIA, ANA, withIssue());
+      const view = open('/pedidos?order=order-lucas');
+      const details = await screen.findByRole('dialog', { name: 'Detalhes do pedido' });
+
+      await view.user.click(await within(details).findByRole('button', { name: 'Cancelar entrega' }));
+      await view.user.click(
+        within(screen.getByRole('alertdialog', { name: 'Cancelar a entrega?' })).getByRole('button', { name: 'Cancelar pedido' }),
+      );
+
+      expect(await within(details).findByText('Cancelado')).toBeInTheDocument();
+      expect(orders.decisions).toEqual([{ id: 'order-lucas', decision: 'cancel' }]);
+    });
+  });
+
   it('tela desatualizada: a recusa da API aparece e nada muda', async () => {
     const view = open();
     const joao = await rowOf('João Silva');

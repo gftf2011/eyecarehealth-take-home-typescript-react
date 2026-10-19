@@ -9,13 +9,17 @@ export {
   returnToAssignmentErrors,
   type ReturnToAssignmentFormInput,
 } from './inputs/return-to-assignment.input';
-export type { OrderGateway, RequestOptions } from './ports/order-gateway';
+export type { DeliveryIssueDecision, OrderGateway, RequestOptions } from './ports/order-gateway';
 export {
   ChangeOrderStatusUseCase,
   type ChangeOrderStatusInput,
 } from './usecases/change-order-status/change-order-status.usecase';
 export { GetOrderUseCase, type GetOrderInput } from './usecases/get-order/get-order.usecase';
 export { ListOrdersUseCase } from './usecases/list-orders/list-orders.usecase';
+export {
+  ResolveDeliveryIssueUseCase,
+  type ResolveDeliveryIssueInput,
+} from './usecases/resolve-delivery-issue/resolve-delivery-issue.usecase';
 export {
   ReturnOrderToAssignmentUseCase,
   type ReturnOrderToAssignmentInput,

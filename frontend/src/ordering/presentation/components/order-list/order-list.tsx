@@ -32,6 +32,7 @@ export function OrderList({ orders, onOpen }: OrderListProps) {
           </button>
           <span className={styles.status}>
             <OrderStatusBadge status={order.status} />
+            {order.openDeliveryIssue === null ? null : <span className={styles.issue}>Problema na entrega</span>}
           </span>
           <span className={styles.total}>{formatCents(order.totalCents)}</span>
           <time className={styles.date} dateTime={order.createdAt.toISOString()}>

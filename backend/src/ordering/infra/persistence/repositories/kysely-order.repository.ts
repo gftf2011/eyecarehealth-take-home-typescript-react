@@ -12,10 +12,8 @@ import type {
 } from '../../../domain';
 import { toOrder, toOrderRows } from '../mappers/order.mapper';
 import type {
-  OrderItemsTable,
   OrderingDatabase,
   OrdersTable,
-  OrderStatusHistoryTable,
 } from '../schema/ordering-database';
 
 const SORT_COLUMNS = {
@@ -105,6 +103,19 @@ export class KyselyOrderRepository implements OrderRepository {
         .onConflict((conflict) => conflict.columns(['order_id', 'position']).doNothing())
         .execute();
     }
+    // Um problema muda uma vez (ao ser resolvido): esses dois campos são atualizados.
+    if (rows.issues.length > 0) {
+      await this.trx
+        .insertInto('order_delivery_issues')
+        .values([...rows.issues])
+        .onConflict((conflict) =>
+          conflict.column('id').doUpdateSet((excluded) => ({
+            resolved_at: excluded.ref('excluded.resolved_at'),
+            resolution: excluded.ref('excluded.resolution'),
+          })),
+        )
+        .execute();
+    }
 
     this.events.collectFrom(order);
   }
@@ -136,20 +147,22 @@ export class KyselyOrderRepository implements OrderRepository {
     if (rows.length === 0) return [];
     const ids = rows.map((row) => row.id);
 
-    const [items, history] = await Promise.all([
+    const [items, history, issues] = await Promise.all([
       this.trx.selectFrom('order_items').selectAll().where('order_id', 'in', ids).execute(),
       this.trx.selectFrom('order_status_history').selectAll().where('order_id', 'in', ids).execute(),
+      this.trx.selectFrom('order_delivery_issues').selectAll().where('order_id', 'in', ids).execute(),
     ]);
 
     const itemsByOrder = groupByOrder(items);
     const historyByOrder = groupByOrder(history);
+    const issuesByOrder = groupByOrder(issues);
     return rows.map((row) =>
-      toOrder(row, itemsByOrder.get(row.id) ?? [], historyByOrder.get(row.id) ?? []),
+      toOrder(row, itemsByOrder.get(row.id) ?? [], historyByOrder.get(row.id) ?? [], issuesByOrder.get(row.id) ?? []),
     );
   }
 }
 
-function groupByOrder<TRow extends Selectable<OrderItemsTable> | Selectable<OrderStatusHistoryTable>>(
+function groupByOrder<TRow extends { readonly order_id: string }>(
   rows: readonly TRow[],
 ): Map<string, TRow[]> {
   const grouped = new Map<string, TRow[]>();

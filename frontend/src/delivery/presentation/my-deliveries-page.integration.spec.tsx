@@ -139,4 +139,30 @@ describe('Tela do entregador', () => {
 
     expect(await screen.findByRole('region', { name: 'Pedro Almeida' })).toBeInTheDocument();
   });
+
+  it('não conseguiu entregar: relata o motivo e a entrega mostra que espera o gestor', async () => {
+    const view = open('/minhas-entregas');
+
+    await view.user.click(await screen.findByRole('button', { name: 'Não consegui entregar' }));
+    const dialog = screen.getByRole('dialog', { name: 'Não conseguiu entregar?' });
+    await view.user.selectOptions(within(dialog).getByLabelText('Motivo'), 'other');
+    await view.user.click(within(dialog).getByRole('button', { name: 'Relatar problema' }));
+    expect(within(dialog).getByLabelText('Observação')).toHaveAccessibleDescription(
+      expect.stringContaining('Descreva o problema quando o motivo for "outro"'),
+    );
+    expect(mine.issues).toEqual([]);
+
+    await view.user.selectOptions(within(dialog).getByLabelText('Motivo'), 'customer_absent');
+    await view.user.type(within(dialog).getByLabelText('Observação (opcional)'), 'Ninguém atende');
+    await view.user.click(within(dialog).getByRole('button', { name: 'Relatar problema' }));
+
+    const current = screen.getByRole('region', { name: 'João Silva' });
+    expect(await within(current).findByText('Problema relatado: Cliente ausente')).toBeInTheDocument();
+    expect(current).toHaveTextContent('Ninguém atende');
+    // A entrega fica parada até o gestor decidir: nem confirmar, nem relatar de novo.
+    expect(within(current).queryByRole('button', { name: 'Não consegui entregar' })).not.toBeInTheDocument();
+    expect(within(current).queryByRole('button', { name: 'Confirmar entrega' })).not.toBeInTheDocument();
+    expect(current).toHaveTextContent('Aguardando a decisão do gestor');
+    expect(mine.issues).toEqual([{ orderId: 'o-current', reason: 'customer_absent', note: 'Ninguém atende' }]);
+  });
 });

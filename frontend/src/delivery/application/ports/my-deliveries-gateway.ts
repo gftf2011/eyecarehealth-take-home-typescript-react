@@ -1,4 +1,4 @@
-import type { GeoLocation, MyDeliveries } from '../../domain';
+import type { CourierIssueReason, GeoLocation, MyDeliveries } from '../../domain';
 import type { RequestOptions } from './dispatch-board-gateway';
 
 /**
@@ -10,4 +10,6 @@ export interface MyDeliveriesGateway {
   /** `delivering → delivered` do próprio pedido. */
   confirmDelivered(orderId: string): Promise<void>;
   updateLocation(location: GeoLocation): Promise<void>;
+  /** Não conseguiu entregar: o pedido segue com ele até o gestor decidir. */
+  reportIssue(orderId: string, issue: { readonly reason: CourierIssueReason; readonly note: string | null }): Promise<void>;
 }

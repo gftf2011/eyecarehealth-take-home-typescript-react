@@ -1,6 +1,6 @@
 import type { FetchHttpClient } from '../../../shared-kernel/infra';
 import type { MyDeliveriesGateway, RequestOptions } from '../../application';
-import type { GeoLocation, MyDeliveries } from '../../domain';
+import type { CourierIssueReason, GeoLocation, MyDeliveries } from '../../domain';
 import { myDeliveriesSchema, toMyDeliveries } from '../mappers/my-deliveries.mapper';
 
 /** `/api/me/...` com o cliente autenticado: o entregador vem do token. */
@@ -17,6 +17,14 @@ export class HttpMyDeliveriesGateway implements MyDeliveriesGateway {
 
   confirmDelivered(orderId: string): Promise<void> {
     return this.http.requestVoid({ method: 'POST', path: `/me/deliveries/${encodeURIComponent(orderId)}/delivered` });
+  }
+
+  reportIssue(orderId: string, issue: { readonly reason: CourierIssueReason; readonly note: string | null }): Promise<void> {
+    return this.http.requestVoid({
+      method: 'POST',
+      path: `/me/deliveries/${encodeURIComponent(orderId)}/issue`,
+      body: { reason: issue.reason, note: issue.note },
+    });
   }
 
   updateLocation(location: GeoLocation): Promise<void> {

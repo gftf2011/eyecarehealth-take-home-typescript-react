@@ -31,4 +31,29 @@ describe('Order', () => {
   it('conta as unidades de todos os itens', () => {
     expect(buildOrder().itemCount).toBe(3);
   });
+
+  describe('com problema relatado na entrega', () => {
+    const issue = (reason: 'customer_absent' | 'refused') => ({
+      id: 'issue-1',
+      reason,
+      note: null,
+      reportedAt: new Date('2026-10-17T16:00:00Z'),
+      resolvedAt: null,
+      resolution: null,
+    });
+
+    it('a entrega não pode ser concluída até o gestor decidir', () => {
+      const order = buildOrder({ status: 'delivering', deliveryIssues: [issue('customer_absent')], deliveryIssueDecisions: ['retry', 'return', 'cancel'] });
+
+      expect(order.transitions()).toEqual([{ to: 'delivered', blockedBy: 'DELIVERY_ISSUE_OPEN' }]);
+      expect(order.canReturnToAssignment).toBe(true);
+    });
+
+    it('cliente recusou: devolver para a atribuição não é oferecido', () => {
+      const order = buildOrder({ status: 'delivering', deliveryIssues: [issue('refused')], deliveryIssueDecisions: ['cancel'] });
+
+      expect(order.canReturnToAssignment).toBe(false);
+    });
+  });
 });
+

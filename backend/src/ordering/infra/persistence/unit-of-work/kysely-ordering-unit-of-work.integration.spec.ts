@@ -21,6 +21,9 @@ import {
   DeliveryPersonUnavailableError,
   InvalidStatusTransitionError,
   OrderStatus,
+  DeliveryIssueId,
+  DeliveryIssueNote,
+  DeliveryIssueReason,
   ProductId,
   Quantity,
   ReturnReason,
@@ -117,6 +120,46 @@ describe('KyselyOrderingUnitOfWork', () => {
       expect(reloaded?.status.value).toBe('ready');
       expect(reloaded?.deliveryPersonId).toBeNull();
       expect(reloaded?.statusHistory.map((change) => change.reason)).toEqual([null, null, null, null, 'Entregador sem contato']);
+    });
+
+    it('guarda as tentativas de entrega que falharam e a resolução de cada uma', async () => {
+      const order = buildOrderIn('delivering');
+      await save(order);
+      const report = (reason: string, note: string | null) =>
+        order.reportDeliveryIssue({
+          id: DeliveryIssueId.generate(),
+          reason: DeliveryIssueReason.create(reason),
+          note: DeliveryIssueNote.createOptional(note),
+          now: NOW,
+        });
+      report('customer_absent', 'Ninguém atende');
+      await save(order);
+      order.retryDelivery(NOW);
+      report('refused', null);
+      await save(order);
+      order.cancelFailedDelivery(NOW);
+      await save(order);
+
+      const reloaded = await find(order);
+      expect(reloaded?.status.value).toBe('cancelled');
+      expect(reloaded?.deliveryIssues.map((issue) => [issue.reason.value, issue.note?.value ?? null, issue.resolution])).toEqual([
+        ['customer_absent', 'Ninguém atende', 'retried'],
+        ['refused', null, 'cancelled'],
+      ]);
+      expect(reloaded?.statusHistory.at(-1)?.reason).toBe('Entrega não realizada (cliente recusou)');
+    });
+
+    it('o banco recusa dois problemas abertos no mesmo pedido', async () => {
+      const order = buildOrderIn('delivering');
+      await save(order);
+      const insert = () =>
+        sql`
+          INSERT INTO order_delivery_issues (id, order_id, reason, reported_by, reported_at)
+          VALUES (gen_random_uuid(), ${order.id.value}, 'refused', ${COURIER_ID}, now())
+        `.execute(raw);
+
+      await insert();
+      await expect(insert()).rejects.toThrow(/uq_order_delivery_issues_open/);
     });
 
     it('salvar de novo só acrescenta as transições novas (idempotente)', async () => {

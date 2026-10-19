@@ -15,6 +15,7 @@ const delivery = (orderId: string) => ({
   longitude: -46.6,
   items: [],
   totalCents: 1000,
+  openIssue: null,
   createdAt: new Date('2026-10-19T12:00:00Z'),
 });
 const current: MyDeliveries = { courier: { id: ME, name: 'Carlos Santos' }, inProgress: null, upcoming: [delivery('o-mine')] };
@@ -32,6 +33,7 @@ describe('myDeliveriesAffectedBy', () => {
     ['pedido atribuído a mim', orderEvent({ type: 'order.delivery-person-assigned', orderId: 'o-new', deliveryPersonId: ME }), true],
     ['pedido tirado de mim', orderEvent({ type: 'order.delivery-person-unassigned', orderId: 'o-x', previousDeliveryPersonId: ME }), true],
     ['um pedido que está na minha tela mudou', orderEvent({ type: 'order.status-changed', orderId: 'o-mine', status: 'cancelled', deliveryPersonId: null }), true],
+    ['o gestor decidiu sobre o meu problema', orderEvent({ type: 'order.delivery-issue-resolved', orderId: 'o-x', resolution: 'retried', deliveryPersonId: ME }), true],
     ['pedido de outro entregador', orderEvent({ type: 'order.status-changed', orderId: 'o-other', status: 'delivering', deliveryPersonId: 'courier-2' }), false],
     ['pedido novo de um cliente', orderEvent({ type: 'order.placed', orderId: 'o-new', status: 'pending' }), false],
   ])('%s → %s', (_, event, affected) => {

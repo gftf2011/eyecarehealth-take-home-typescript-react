@@ -14,6 +14,7 @@ export type CourierOrderBody = {
   totalAmount: number;
   deliveryPerson: { id: string; name: string } | null;
   items: { id: string; product: { id: string; name: string }; quantity: number; unitPrice: number }[];
+  deliveryIssues: { id: string; reason: string; note: string | null; reportedAt: string; resolvedAt: string | null; resolution: string | null }[];
   createdAt: string;
 };
 
@@ -29,6 +30,7 @@ export function courierOrder(overrides: Partial<CourierOrderBody> = {}): Courier
     totalAmount: 78.3,
     deliveryPerson: { id: 'courier-1', name: 'Carlos Santos' },
     items: [{ id: 'item-1', product: { id: 'p-burger', name: 'X-Burger Especial' }, quantity: 2, unitPrice: 32.9 }],
+    deliveryIssues: [],
     createdAt: '2026-10-19T12:00:00.000Z',
     ...overrides,
   };
@@ -43,6 +45,7 @@ export class FakeMyDeliveriesApi {
   orders: CourierOrderBody[] = [];
   readonly confirmations: string[] = [];
   readonly locations: { latitude: number; longitude: number }[] = [];
+  readonly issues: { orderId: string; reason: string; note: string | null }[] = [];
   loads = 0;
 
   given(...orders: CourierOrderBody[]): void {
@@ -74,6 +77,24 @@ export class FakeMyDeliveriesApi {
           );
         }
         order.status = 'delivered';
+        return HttpResponse.json(order);
+      }),
+
+      http.post(apiUrl('/me/deliveries/:id/issue'), async ({ params, request }) => {
+        const body = (await request.json()) as { reason: string; note: string | null };
+        const order = this.orders.find((candidate) => candidate.id === params.id);
+        this.issues.push({ orderId: String(params.id), ...body });
+        if (order === undefined) {
+          return HttpResponse.json({ error: { code: 'ORDER_NOT_FOUND', message: 'Pedido não encontrado' } }, { status: 404 });
+        }
+        order.deliveryIssues.push({
+          id: `issue-${this.issues.length}`,
+          reason: body.reason,
+          note: body.note,
+          reportedAt: new Date().toISOString(),
+          resolvedAt: null,
+          resolution: null,
+        });
         return HttpResponse.json(order);
       }),
 

@@ -19,6 +19,7 @@ export class FakeOrdersApi {
   readonly listQueries: URLSearchParams[] = [];
   readonly statusChanges: { id: string; status: string }[] = [];
   readonly returns: { id: string; reason: string }[] = [];
+  readonly decisions: { id: string; decision: string }[] = [];
 
   /** Pedidos iniciais (copiados: mudanças de status não vazam entre testes). */
   given(...orders: OrderBodyFixture[]): void {
@@ -73,6 +74,27 @@ export class FakeOrdersApi {
         }
         order.status = status;
         order.updatedAt = new Date().toISOString();
+        return HttpResponse.json(order);
+      }),
+
+      http.post(apiUrl('/orders/:id/delivery-issue/:decision'), ({ params }) => {
+        const order = this.orders.find((candidate) => candidate.id === params.id);
+        if (order === undefined) return apiError(404, 'ORDER_NOT_FOUND', 'Pedido não encontrado');
+        const decision = String(params.decision);
+        this.decisions.push({ id: order.id, decision });
+        const open = order.deliveryIssues.find((issue) => issue.resolvedAt === null);
+        if (open === undefined) return apiError(422, 'NO_OPEN_DELIVERY_ISSUE', 'Esta entrega não tem problema relatado pelo entregador');
+        const now = new Date().toISOString();
+        if (!order.deliveryIssueDecisions.includes(decision === 'cancel' ? 'cancel' : 'retry')) {
+          return apiError(422, 'DECISION_NOT_ALLOWED', 'Não é possível tentar de novo quando o cliente recusou o pedido');
+        }
+        Object.assign(open, { resolvedAt: now, resolution: decision === 'cancel' ? 'cancelled' : 'retried' });
+        order.deliveryIssueDecisions = [];
+        if (decision === 'cancel') {
+          order.statusHistory.push({ from: 'delivering', to: 'cancelled', changedAt: now, reason: 'Entrega não realizada' });
+          order.status = 'cancelled';
+        }
+        order.updatedAt = now;
         return HttpResponse.json(order);
       }),
 

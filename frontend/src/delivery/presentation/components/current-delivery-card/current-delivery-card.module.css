@@ -51,6 +51,12 @@
   font-weight: var(--font-weight-medium);
 }
 
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .confirm > button {
   min-height: 3.25rem;
   font-size: var(--font-size-md);

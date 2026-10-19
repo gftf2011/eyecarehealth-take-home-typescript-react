@@ -7,6 +7,7 @@ import type {
   ListOrdersInput,
   OrderDto,
   RequestOptions,
+  ResolveDeliveryIssueInput,
   ReturnOrderToAssignmentInput,
 } from '../../application';
 
@@ -16,6 +17,7 @@ export type OrderingServices = {
   readonly getOrder: UseCase<GetOrderInput, OrderDto>;
   readonly changeOrderStatus: UseCase<ChangeOrderStatusInput, OrderDto>;
   readonly returnOrderToAssignment: UseCase<ReturnOrderToAssignmentInput, OrderDto>;
+  readonly resolveDeliveryIssue: UseCase<ResolveDeliveryIssueInput, OrderDto>;
 };
 
 const OrderingContext = createContext<OrderingServices | null>(null);

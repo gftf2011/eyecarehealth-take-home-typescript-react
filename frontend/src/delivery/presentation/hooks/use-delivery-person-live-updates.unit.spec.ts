@@ -21,6 +21,8 @@ describe('deliveryPersonListAffectedBy (eventos de pedido)', () => {
     ['pedido novo', event({ type: 'order.placed', orderId: 'o1', status: 'pending' }), false],
     ['entregador atribuído a um pedido pronto', event({ type: 'order.delivery-person-assigned', orderId: 'o1' }), false],
     ['pedido pronto perdeu o entregador desativado', event({ type: 'order.delivery-person-unassigned', orderId: 'o1' }), false],
+    ['problema relatado na entrega', event({ type: 'order.delivery-issue-reported', orderId: 'o1', deliveryPersonId: 'c1' }), false],
+    ['problema resolvido (tentar de novo)', event({ type: 'order.delivery-issue-resolved', orderId: 'o1', resolution: 'retried' }), false],
     ['tipo desconhecido, na dúvida recarrega', event({ type: 'order.algo-novo', orderId: 'o1' }), true],
   ])('%s → %s', (_, liveEvent, affected) => {
     expect(deliveryPersonListAffectedBy(liveEvent)).toBe(affected);

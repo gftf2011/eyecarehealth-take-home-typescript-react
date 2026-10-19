@@ -9,6 +9,7 @@ import {
 import type { OrderDto } from '../../../application';
 import { useOrder } from '../../hooks/use-order';
 import { ORDER_STATUS_LABELS } from '../../labels/order-labels';
+import { DeliveryIssuePanel } from '../delivery-issue-panel/delivery-issue-panel';
 import { OrderActions } from '../order-actions/order-actions';
 import { OrderStatusBadge } from '../order-status-badge/order-status-badge';
 import styles from './order-details-dialog.module.css';
@@ -93,6 +94,8 @@ function OrderDetails({ order }: { readonly order: OrderDto }) {
           </tr>
         </tfoot>
       </table>
+
+      <DeliveryIssuePanel order={order} />
 
       <StatusHistory order={order} />
 

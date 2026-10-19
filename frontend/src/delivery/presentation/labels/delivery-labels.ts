@@ -1,4 +1,4 @@
-import type { CourierDeliveryStatus, UnassignedReason, VehicleTypeValue } from '../../domain';
+import type { CourierDeliveryStatus, CourierIssueReason, UnassignedReason, VehicleTypeValue } from '../../domain';
 
 export const VEHICLE_LABELS: Readonly<Record<VehicleTypeValue, string>> = {
   bicycle: 'Bicicleta',
@@ -32,3 +32,11 @@ export const COURIER_STATUS_LABELS: Readonly<Record<CourierDeliveryStatus, strin
 export function mapsUrl(latitude: number, longitude: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 }
+
+/** Motivos que o entregador escolhe quando não consegue entregar. */
+export const COURIER_ISSUE_REASON_LABELS: Readonly<Record<CourierIssueReason, string>> = {
+  customer_absent: 'Cliente ausente',
+  address_not_found: 'Endereço não encontrado',
+  refused: 'Cliente recusou',
+  other: 'Outro motivo',
+};

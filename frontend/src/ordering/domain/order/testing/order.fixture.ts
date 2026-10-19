@@ -16,6 +16,15 @@ export type OrderBodyFixture = {
   deliveryPerson: { id: string; name: string } | null;
   items: { id: string; product: { id: string; name: string }; quantity: number; unitPrice: number }[];
   statusHistory: { from: OrderStatusValue | null; to: OrderStatusValue; changedAt: string; reason: string | null }[];
+  deliveryIssues: {
+    id: string;
+    reason: 'customer_absent' | 'address_not_found' | 'refused' | 'other';
+    note: string | null;
+    reportedAt: string;
+    resolvedAt: string | null;
+    resolution: 'retried' | 'returned' | 'cancelled' | null;
+  }[];
+  deliveryIssueDecisions: ('retry' | 'return' | 'cancel')[];
   createdAt: string;
   updatedAt: string;
 };
@@ -36,6 +45,8 @@ export function orderBody(overrides: Partial<OrderBodyFixture> = {}): OrderBodyF
       { id: 'item-2', product: { id: 'p-juice', name: 'Suco de Laranja' }, quantity: 1, unitPrice: 12.5 },
     ],
     statusHistory: [{ from: null, to: 'pending', changedAt: CREATED_AT.toISOString(), reason: null }],
+    deliveryIssues: [],
+    deliveryIssueDecisions: [],
     createdAt: CREATED_AT.toISOString(),
     updatedAt: CREATED_AT.toISOString(),
     ...overrides,
@@ -58,6 +69,8 @@ export function buildOrder(
     totalAmount: Money.fromDecimal(78.3),
     deliveryPerson: null,
     statusHistory: [{ from: null, to: 'pending', changedAt: CREATED_AT, reason: null }],
+    deliveryIssues: [],
+    deliveryIssueDecisions: [],
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
     ...rest,

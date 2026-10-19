@@ -19,6 +19,9 @@ export function deliveryPersonListAffectedBy(event: LiveEvent): boolean {
     case 'order.placed':
     case 'order.delivery-person-assigned':
     case 'order.delivery-person-unassigned':
+    // Problema na entrega: o entregador continua com o pedido até o gestor decidir.
+    case 'order.delivery-issue-reported':
+    case 'order.delivery-issue-resolved':
       return false;
     case 'order.status-changed':
       return event.payload['status'] === 'delivering' || event.payload['previousStatus'] === 'delivering';

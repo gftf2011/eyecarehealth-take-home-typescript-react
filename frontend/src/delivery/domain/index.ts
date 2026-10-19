@@ -30,7 +30,10 @@ export {
 export { type AvailableCourier, type DispatchBoard, type ReadyOrder } from './dispatch-board/dispatch-board';
 export {
   COURIER_DELIVERY_STATUSES,
+  COURIER_ISSUE_REASONS,
   type CourierDelivery,
   type CourierDeliveryStatus,
+  type CourierIssueReason,
   type MyDeliveries,
+  type OpenCourierIssue,
 } from './my-deliveries/my-deliveries';

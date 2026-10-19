@@ -1,34 +1,45 @@
 import { AggregateRoot, Money } from '../../../shared-kernel/domain';
 import { OrderItemId } from './entities/order-item-id';
 import { OrderItem } from './entities/order-item';
+import type { DeliveryIssue, DeliveryIssueResolution } from './entities/delivery-issue';
+import type { DeliveryIssueId } from './entities/delivery-issue-id';
+import { DeliveryIssueLog } from './entities/delivery-issue-log';
 import {
+  DeliveryIssueOpenError,
+  DeliveryNotInProgressError,
   DeliveryPersonAssignmentNotAllowedError,
   DeliveryPersonUnavailableError,
   EmptyOrderError,
   InvalidStatusTransitionError,
   UnavailableProductError,
 } from './errors';
-import { DeliveryPersonAssigned, DeliveryPersonUnassigned, OrderPlaced, OrderStatusChanged } from './events';
+import {
+  DeliveryIssueReported,
+  DeliveryIssueResolved,
+  DeliveryPersonAssigned,
+  DeliveryPersonUnassigned,
+  OrderPlaced,
+  OrderStatusChanged,
+} from './events';
+import { mergeLinesByProduct, type PlaceOrderItem } from './order-lines';
 import type { OrderId } from './order-id';
 import type { CustomerName } from './value-objects/customer-name';
 import type { DeliveryAddress } from './value-objects/delivery-address';
+import type { DeliveryIssueNote } from './value-objects/delivery-issue-note';
+import type { DeliveryIssueDecision, DeliveryIssueReason } from './value-objects/delivery-issue-reason';
 import type { DeliveryPersonAvailability } from './value-objects/delivery-person-availability';
 import type { DeliveryPersonId } from './value-objects/delivery-person-id';
 import type { GeoLocation } from './value-objects/geo-location';
 import { OrderStatus, type OrderStatusValue } from './value-objects/order-status';
 import type { PhoneNumber } from './value-objects/phone-number';
-import type { ProductSnapshot } from './value-objects/product-snapshot';
-import type { Quantity } from './value-objects/quantity';
 import type { ReturnReason } from './value-objects/return-reason';
 import { StatusChange } from './value-objects/status-change';
+
 
 /** Status em que o entregador ainda pode ser definido ou trocado. */
 const ASSIGNABLE_STATUSES: readonly OrderStatusValue[] = ['pending', 'preparing', 'ready'];
 
-export type PlaceOrderItem = {
-  product: ProductSnapshot;
-  quantity: Quantity;
-};
+export type { PlaceOrderItem } from './order-lines';
 
 export type PlaceOrderParams = {
   id: OrderId;
@@ -49,6 +60,8 @@ export type OrderSnapshot = {
   status: OrderStatus;
   deliveryPersonId: DeliveryPersonId | null;
   statusHistory: readonly StatusChange[];
+  /** Tentativas de entrega que falharam (abertas ou resolvidas), na ordem. */
+  deliveryIssues: readonly DeliveryIssue[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -75,7 +88,7 @@ export class Order extends AggregateRoot<OrderId> {
   }
 
   static place(params: PlaceOrderParams): Order {
-    const lines = Order.mergeLinesByProduct(params.items);
+    const lines = mergeLinesByProduct(params.items);
     if (lines.length === 0) throw new EmptyOrderError();
 
     const unavailable = lines.filter((line) => !line.product.isAvailable);
@@ -93,6 +106,7 @@ export class Order extends AggregateRoot<OrderId> {
       status,
       deliveryPersonId: null,
       statusHistory: [StatusChange.record(null, status.value, params.now)],
+      deliveryIssues: [],
       createdAt: new Date(params.now.getTime()),
       updatedAt: new Date(params.now.getTime()),
     });
@@ -116,6 +130,7 @@ export class Order extends AggregateRoot<OrderId> {
       ...snapshot,
       items: [...snapshot.items],
       statusHistory: [...snapshot.statusHistory],
+      deliveryIssues: [...snapshot.deliveryIssues],
     });
   }
 
@@ -163,6 +178,18 @@ export class Order extends AggregateRoot<OrderId> {
     return this.#state.items.reduce((total, item) => total.add(item.subtotal), Money.zero());
   }
 
+  get deliveryIssues(): readonly DeliveryIssue[] {
+    return [...this.#state.deliveryIssues];
+  }
+  /** O problema relatado que espera o gestor, se houver (no máximo um). */
+  get openDeliveryIssue(): DeliveryIssue | null {
+    return DeliveryIssueLog.of(this.#state.deliveryIssues).open;
+  }
+  /** O que o gestor pode decidir agora (pelo motivo e pelo limite de tentativas). */
+  get deliveryIssueDecisions(): readonly DeliveryIssueDecision[] {
+    return DeliveryIssueLog.of(this.#state.deliveryIssues).decisions;
+  }
+
   /** Instante da transição para `delivered`, ou `null` se ainda não foi entregue. */
   get deliveredAt(): Date | null {
     const delivery = this.#state.statusHistory.find((change) => change.to === 'delivered');
@@ -174,6 +201,7 @@ export class Order extends AggregateRoot<OrderId> {
       ...this.#state,
       items: this.items,
       statusHistory: this.statusHistory,
+      deliveryIssues: this.deliveryIssues,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
@@ -198,6 +226,8 @@ export class Order extends AggregateRoot<OrderId> {
       );
     }
 
+    // Com problema relatado, a entrega só continua depois da decisão do gestor.
+    if (next.is('delivered') && this.openDeliveryIssue !== null) throw new DeliveryIssueOpenError();
     this.transitionTo(next, now);
   }
 
@@ -291,12 +321,9 @@ export class Order extends AggregateRoot<OrderId> {
   }
 
   /**
-   * Devolve uma entrega em andamento para a atribuição (`delivering → ready`):
-   * o entregador ficou sem contato, sofreu um acidente, o veículo quebrou. É
-   * uma decisão do gestor, com motivo, nunca automática: a comida está com o
-   * entregador, e despachar outro sem saber o que houve duplicaria a entrega.
-   * O pedido fica sem entregador (livre para outra entrega) e a transição,
-   * com o motivo, entra no histórico.
+   * Devolve a entrega em andamento para a atribuição (`delivering → ready`),
+   * sem entregador e com o motivo no histórico. Decisão do gestor, nunca
+   * automática: a comida está com o entregador (ADR-29).
    */
   returnToAssignment(reason: ReturnReason, now: Date): void {
     const { status, deliveryPersonId: previous } = this.#state;
@@ -309,6 +336,7 @@ export class Order extends AggregateRoot<OrderId> {
       );
     }
 
+    if (this.openDeliveryIssue !== null) this.resolveOpenIssue('returned', now);
     this.#state = { ...this.#state, deliveryPersonId: null };
     this.transitionTo(ready, now, reason.value);
     this.addDomainEvent(new DeliveryPersonUnassigned(this.id, now, { previousDeliveryPersonId: previous.value }));
@@ -330,19 +358,41 @@ export class Order extends AggregateRoot<OrderId> {
     this.addDomainEvent(new DeliveryPersonUnassigned(this.id, now, { previousDeliveryPersonId: previous.value }));
   }
 
-  /** O mesmo produto repetido vira uma única linha com as quantidades somadas. */
-  private static mergeLinesByProduct(items: readonly PlaceOrderItem[]): PlaceOrderItem[] {
-    const lines = new Map<string, PlaceOrderItem>();
-    for (const item of items) {
-      const key = item.product.productId.value;
-      const existing = lines.get(key);
-      lines.set(
-        key,
-        existing === undefined
-          ? item
-          : { product: existing.product, quantity: existing.quantity.add(item.quantity) },
-      );
-    }
-    return [...lines.values()];
+  /**
+   * O entregador não conseguiu entregar (cliente ausente, endereço não
+   * encontrado, recusa): relata o motivo e o gestor decide. O pedido segue
+   * `delivering`, com ele.
+   */
+  reportDeliveryIssue(params: { id: DeliveryIssueId; reason: DeliveryIssueReason; note: DeliveryIssueNote | null; now: Date }): void {
+    const courier = this.#state.deliveryPersonId;
+    if (!this.#state.status.is('delivering') || courier === null) throw new DeliveryNotInProgressError();
+
+    const { log, issue } = DeliveryIssueLog.of(this.#state.deliveryIssues).report({ ...params, reportedBy: courier });
+    this.#state = { ...this.#state, deliveryIssues: log.issues, updatedAt: new Date(params.now.getTime()) };
+    this.addDomainEvent(
+      new DeliveryIssueReported(this.id, params.now, { issueId: issue.id.value, reason: issue.reason.value, deliveryPersonId: courier.value }),
+    );
+  }
+
+  /** O gestor manda tentar de novo: o problema termina e o entregador segue com o pedido. */
+  retryDelivery(now: Date): void {
+    this.resolveOpenIssue('retried', now);
+    this.#state = { ...this.#state, updatedAt: new Date(now.getTime()) };
+  }
+
+  /** A única saída `delivering → cancelled`: o gestor cancela a entrega que falhou (com o motivo relatado). */
+  cancelFailedDelivery(now: Date): void {
+    const issue = this.resolveOpenIssue('cancelled', now);
+    const note = issue.note === null ? '' : `: ${issue.note.value}`;
+    this.transitionTo(OrderStatus.of('cancelled'), now, `Entrega não realizada (${issue.reason.description})${note}`);
+  }
+
+  private resolveOpenIssue(resolution: DeliveryIssueResolution, now: Date): DeliveryIssue {
+    const { log, issue } = DeliveryIssueLog.of(this.#state.deliveryIssues).resolveOpen(resolution, now);
+    this.#state = { ...this.#state, deliveryIssues: log.issues };
+    this.addDomainEvent(
+      new DeliveryIssueResolved(this.id, now, { issueId: issue.id.value, resolution, deliveryPersonId: issue.reportedBy.value }),
+    );
+    return issue;
   }
 }

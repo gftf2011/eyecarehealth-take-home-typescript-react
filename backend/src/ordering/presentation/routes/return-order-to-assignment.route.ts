@@ -18,7 +18,11 @@ export function returnOrderToAssignmentRoute(controller: Controller): Route {
       responses: {
         200: { description: 'Pedido de volta em `ready`, sem entregador', schema: orderSchema },
         404: { description: 'Pedido não encontrado (`ORDER_NOT_FOUND`)', schema: errorResponseSchema },
-        422: { description: 'O pedido não está em entrega (`INVALID_STATUS_TRANSITION`)', schema: errorResponseSchema },
+        422: {
+          description:
+            'O pedido não está em entrega (`INVALID_STATUS_TRANSITION`), ou o problema relatado não permite (cliente recusou: `DECISION_NOT_ALLOWED`)',
+          schema: errorResponseSchema,
+        },
       },
     },
   };

@@ -1,7 +1,14 @@
 export { InvalidOrderStatusError, InvalidReturnReasonError } from './order/errors';
 export {
+  DELIVERY_ISSUE_DECISIONS,
+  DELIVERY_ISSUE_REASONS,
+  DELIVERY_ISSUE_RESOLUTIONS,
   Order,
   type AssignedDeliveryPerson,
+  type DeliveryIssue,
+  type DeliveryIssueDecision,
+  type DeliveryIssueReason,
+  type DeliveryIssueResolution,
   type OrderItem,
   type OrderProps,
   type StatusChange,

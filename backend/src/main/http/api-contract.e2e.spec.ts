@@ -137,7 +137,7 @@ describe('Contratos da API: as respostas reais seguem o Swagger', () => {
     await expectContract('GET', '/api/orders', 200, { path: '/api/orders?status=delivered&sortBy=totalAmount' });
   });
 
-  it('entregador logado: minhas entregas, minha localização e confirmar a entrega', async () => {
+  it('entregador logado: minhas entregas, localização, problema na entrega, nova tentativa, entrega e cancelamento', async () => {
     const courierUser = await testApp.givenUser('entregador.contrato@fastmeals.com', 'Entregador@123', 'courier');
     await sql`UPDATE delivery_persons SET user_id = ${courierUser.id.value} WHERE id = ${ids.courier}`.execute(testApp.orderingDb);
     const placed = await expectContract('POST', '/api/orders', 201, {
@@ -165,15 +165,57 @@ describe('Contratos da API: as respostas reais seguem o Swagger', () => {
       url: '/api/auth/login',
       payload: { email: 'entregador.contrato@fastmeals.com', password: 'Entregador@123' },
     });
-    token = login.json().accessToken;
-    try {
+    const courierToken: string = login.json().accessToken;
+    const as = async (who: string, call: () => Promise<unknown>) => {
+      token = who;
+      try {
+        await call();
+      } finally {
+        token = adminToken;
+      }
+    };
+    const reportIssue = (id: string) =>
+      expectContract('POST', '/api/me/deliveries/:id/issue', 200, {
+        path: `/api/me/deliveries/${id}/issue`,
+        payload: { reason: 'customer_absent', note: 'Ninguém atende' },
+      });
+
+    await as(courierToken, async () => {
       const mine = await expectContract('GET', '/api/me/deliveries', 200);
       expect(mine.json().inProgress.id).toBe(orderId);
       await expectContract('PUT', '/api/me/location', 200, { payload: { latitude: -22.91, longitude: -43.18 } });
-      await expectContract('POST', '/api/me/deliveries/:id/delivered', 200, { path: `/api/me/deliveries/${orderId}/delivered` });
-    } finally {
-      token = adminToken;
+      await reportIssue(orderId);
+    });
+    // O gestor manda tentar de novo; o cliente atende e a entrega sai.
+    await expectContract('POST', '/api/orders/:id/delivery-issue/retry', 200, { path: `/api/orders/${orderId}/delivery-issue/retry` });
+    await as(courierToken, () =>
+      expectContract('POST', '/api/me/deliveries/:id/delivered', 200, { path: `/api/me/deliveries/${orderId}/delivered` }),
+    );
+
+    // Outra entrega falha e o gestor cancela.
+    const second = await expectContract('POST', '/api/orders', 201, {
+      payload: {
+        customerName: 'Cliente Ausente',
+        customerPhone: '(21) 98765-4321',
+        deliveryAddress: 'Av. Brasil, 456, Rio de Janeiro - RJ',
+        latitude: -22.9068,
+        longitude: -43.1729,
+        items: [{ productId: ids.product, quantity: 1 }],
+      },
+    });
+    const secondId: string = second.json().id;
+    for (const status of ['preparing', 'ready']) {
+      await expectContract('PATCH', '/api/orders/:id/status', 200, { path: `/api/orders/${secondId}/status`, payload: { status } });
     }
+    await expectContract('POST', '/api/orders/:id/dispatch', 200, {
+      path: `/api/orders/${secondId}/dispatch`,
+      payload: { deliveryPersonId: ids.courier },
+    });
+    await as(courierToken, () => reportIssue(secondId));
+    const cancelled = await expectContract('POST', '/api/orders/:id/delivery-issue/cancel', 200, {
+      path: `/api/orders/${secondId}/delivery-issue/cancel`,
+    });
+    expect(cancelled.json().status).toBe('cancelled');
   });
 
   it('relatórios: os quatro, com o pedido entregue', async () => {

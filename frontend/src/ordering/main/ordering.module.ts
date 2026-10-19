@@ -3,6 +3,7 @@ import {
   ChangeOrderStatusUseCase,
   GetOrderUseCase,
   ListOrdersUseCase,
+  ResolveDeliveryIssueUseCase,
   ReturnOrderToAssignmentUseCase,
 } from '../application';
 import { HttpOrderGateway } from '../infra';
@@ -21,6 +22,7 @@ export function createOrderingModule(api: FetchHttpClient): OrderingModule {
       getOrder: new GetOrderUseCase(orders),
       changeOrderStatus: new ChangeOrderStatusUseCase(orders),
       returnOrderToAssignment: new ReturnOrderToAssignmentUseCase(orders),
+      resolveDeliveryIssue: new ResolveDeliveryIssueUseCase(orders),
     },
   };
 }

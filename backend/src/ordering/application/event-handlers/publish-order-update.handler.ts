@@ -1,6 +1,8 @@
 import { toOutboxMessage, type DomainEventHandler, type EventHandlingScope } from '../../../shared-kernel/application';
 import { Money } from '../../../shared-kernel/domain';
 import {
+  DeliveryIssueReported,
+  DeliveryIssueResolved,
   DeliveryPersonAssigned,
   DeliveryPersonUnassigned,
   OrderPlaced,
@@ -64,6 +66,22 @@ function toOrderUpdate(event: OrderDomainEvent): OrderUpdateMessage {
       type: 'order.delivery-person-unassigned',
       ...base,
       previousDeliveryPersonId: event.payload.previousDeliveryPersonId,
+    };
+  }
+  if (event instanceof DeliveryIssueReported) {
+    return {
+      type: 'order.delivery-issue-reported',
+      ...base,
+      reason: event.payload.reason,
+      deliveryPersonId: event.payload.deliveryPersonId,
+    };
+  }
+  if (event instanceof DeliveryIssueResolved) {
+    return {
+      type: 'order.delivery-issue-resolved',
+      ...base,
+      resolution: event.payload.resolution,
+      deliveryPersonId: event.payload.deliveryPersonId,
     };
   }
   return assertNever(event);

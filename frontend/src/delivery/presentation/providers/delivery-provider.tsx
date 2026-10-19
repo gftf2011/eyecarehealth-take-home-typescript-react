@@ -8,6 +8,7 @@ import type {
   DeliveryPersonFormInput,
   ListDeliveryPersonsInput,
   RemoveDeliveryPersonInput,
+  ReportMyDeliveryIssueInput,
   RequestOptions,
   SetDeliveryPersonActivationInput,
   UpdateDeliveryPersonInput,
@@ -28,6 +29,7 @@ export type DeliveryServices = {
   readonly loadMyDeliveries: UseCase<RequestOptions, MyDeliveries>;
   readonly confirmMyDelivery: UseCase<ConfirmMyDeliveryInput, void>;
   readonly updateMyLocation: UseCase<UpdateMyLocationInput, void>;
+  readonly reportMyDeliveryIssue: UseCase<ReportMyDeliveryIssueInput, void>;
 };
 
 const DeliveryContext = createContext<DeliveryServices | null>(null);

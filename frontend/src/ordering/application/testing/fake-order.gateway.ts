@@ -1,7 +1,7 @@
 import type { Page } from '../../../shared-kernel/application';
 import type { Order, OrderListCriteria, OrderStatusValue, ReturnReason } from '../../domain';
 import { buildOrder } from '../../domain/order/testing/order.fixture';
-import type { OrderGateway } from '../ports/order-gateway';
+import type { DeliveryIssueDecision, OrderGateway } from '../ports/order-gateway';
 
 /** Gateway em memória: devolve os pedidos configurados e registra o que recebeu. */
 export class FakeOrderGateway implements OrderGateway {
@@ -9,6 +9,7 @@ export class FakeOrderGateway implements OrderGateway {
   readonly listCalls: OrderListCriteria[] = [];
   readonly statusChanges: { id: string; status: OrderStatusValue }[] = [];
   readonly returns: { id: string; reason: string }[] = [];
+  readonly decisions: { id: string; decision: DeliveryIssueDecision }[] = [];
   changeStatusAnswer: ((id: string, status: OrderStatusValue) => Promise<Order>) | null = null;
 
   list(criteria: OrderListCriteria): Promise<Page<Order>> {
@@ -28,6 +29,11 @@ export class FakeOrderGateway implements OrderGateway {
     this.statusChanges.push({ id, status });
     if (this.changeStatusAnswer !== null) return this.changeStatusAnswer(id, status);
     return Promise.resolve(buildOrder({ id, status }));
+  }
+
+  resolveDeliveryIssue(id: string, decision: DeliveryIssueDecision): Promise<Order> {
+    this.decisions.push({ id, decision });
+    return Promise.resolve(buildOrder({ id, status: decision === 'cancel' ? 'cancelled' : 'delivering' }));
   }
 
   returnToAssignment(id: string, reason: ReturnReason): Promise<Order> {

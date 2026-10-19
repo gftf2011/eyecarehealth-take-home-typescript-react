@@ -142,4 +142,104 @@ describe('Minhas entregas (/api/me/...)', () => {
 
     expect([courierOnOrders.statusCode, courierOnFleet.statusCode, adminOnMine.statusCode]).toEqual([403, 403, 403]);
   });
+
+  describe('problema na entrega', () => {
+    const reportIssue = (orderId: string, token: string, payload: object = { reason: 'customer_absent', note: 'Ninguém atende' }) =>
+      request('POST', `/api/me/deliveries/${orderId}/issue`, token, payload);
+
+    it('o entregador relata; o pedido segue com ele e o gestor vê o problema aberto', async () => {
+      const id = await orderFor(ME, 'delivering');
+
+      const reported = await reportIssue(id, tokens.me);
+      const asManager = await request('GET', `/api/orders/${id}`, tokens.admin);
+
+      expect(reported.statusCode).toBe(200);
+      expect(asManager.json()).toMatchObject({ status: 'delivering', deliveryPerson: { id: ME } });
+      expect(asManager.json().deliveryIssues).toEqual([
+        expect.objectContaining({ reason: 'customer_absent', note: 'Ninguém atende', resolvedAt: null, resolution: null }),
+      ]);
+    });
+
+    it('só na própria entrega em andamento, um problema por vez, e "outro" exige observação', async () => {
+      const mine = await orderFor(ME, 'delivering');
+      const others = await orderFor(OTHER, 'delivering');
+
+      const foreign = await reportIssue(others, tokens.me);
+      await reportIssue(mine, tokens.me);
+      const twice = await reportIssue(mine, tokens.me);
+      const noNote = await reportIssue(others, tokens.other, { reason: 'other' });
+
+      expect(foreign.statusCode).toBe(404);
+      expect(twice.statusCode).toBe(422);
+      expect(twice.json().error.code).toBe('DELIVERY_ISSUE_ALREADY_OPEN');
+      expect(noNote.statusCode).toBe(400);
+      expect(noNote.json().error.details).toEqual([{ field: 'note', message: 'Descreva o problema quando o motivo for "outro"' }]);
+    });
+
+    it('o gestor manda tentar de novo, e depois cancela a segunda tentativa: o entregador fica livre', async () => {
+      const id = await orderFor(ME, 'delivering');
+      await reportIssue(id, tokens.me);
+
+      const retried = await request('POST', `/api/orders/${id}/delivery-issue/retry`, tokens.admin);
+      await reportIssue(id, tokens.me, { reason: 'refused' });
+      const cancelled = await request('POST', `/api/orders/${id}/delivery-issue/cancel`, tokens.admin);
+
+      expect(retried.json()).toMatchObject({ status: 'delivering' });
+      expect(cancelled.json().status).toBe('cancelled');
+      expect(cancelled.json().deliveryIssues.map((issue: { resolution: string }) => issue.resolution)).toEqual(['retried', 'cancelled']);
+      // Livre: pode sair com outro pedido.
+      await orderFor(ME, 'delivering');
+    });
+
+    it('com problema aberto, ninguém conclui a entrega antes da decisão do gestor', async () => {
+      const id = await orderFor(ME, 'delivering');
+      await reportIssue(id, tokens.me);
+
+      const byCourier = await request('POST', `/api/me/deliveries/${id}/delivered`, tokens.me);
+      const byManager = await request('PATCH', `/api/orders/${id}/status`, tokens.admin, { status: 'delivered' });
+
+      expect([byCourier.statusCode, byManager.statusCode]).toEqual([422, 422]);
+      expect([byCourier.json().error.code, byManager.json().error.code]).toEqual(['DELIVERY_ISSUE_OPEN', 'DELIVERY_ISSUE_OPEN']);
+      await request('POST', `/api/orders/${id}/delivery-issue/retry`, tokens.admin);
+      expect((await request('POST', `/api/me/deliveries/${id}/delivered`, tokens.me)).statusCode).toBe(200);
+    });
+
+    it('cliente recusou: a ordem só oferece cancelar, e tentar de novo ou devolver são recusados', async () => {
+      const id = await orderFor(ME, 'delivering');
+
+      const reported = await reportIssue(id, tokens.me, { reason: 'refused' });
+      const retry = await request('POST', `/api/orders/${id}/delivery-issue/retry`, tokens.admin);
+      const back = await request('POST', `/api/orders/${id}/return-to-assignment`, tokens.admin, { reason: 'Redespachar' });
+
+      expect(reported.json().deliveryIssueDecisions).toEqual(['cancel']);
+      expect([retry.statusCode, back.statusCode]).toEqual([422, 422]);
+      expect([retry.json().error.code, back.json().error.code]).toEqual(['DECISION_NOT_ALLOWED', 'DECISION_NOT_ALLOWED']);
+    });
+
+    it('depois de 2 novas tentativas, o gestor só devolve ou cancela', async () => {
+      const id = await orderFor(ME, 'delivering');
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await reportIssue(id, tokens.me);
+        expect((await request('POST', `/api/orders/${id}/delivery-issue/retry`, tokens.admin)).statusCode).toBe(200);
+      }
+
+      const third = await reportIssue(id, tokens.me);
+      const retry = await request('POST', `/api/orders/${id}/delivery-issue/retry`, tokens.admin);
+
+      expect(third.json().deliveryIssueDecisions).toEqual(['return', 'cancel']);
+      expect(retry.statusCode).toBe(422);
+    });
+
+    it('sem problema aberto, o gestor não cancela a entrega (422); o entregador não decide (403)', async () => {
+      const id = await orderFor(ME, 'delivering');
+
+      const noIssue = await request('POST', `/api/orders/${id}/delivery-issue/cancel`, tokens.admin);
+      await reportIssue(id, tokens.me);
+      const courierDecides = await request('POST', `/api/orders/${id}/delivery-issue/cancel`, tokens.me);
+
+      expect(noIssue.statusCode).toBe(422);
+      expect(noIssue.json().error.code).toBe('NO_OPEN_DELIVERY_ISSUE');
+      expect(courierDecides.statusCode).toBe(403);
+    });
+  });
 });

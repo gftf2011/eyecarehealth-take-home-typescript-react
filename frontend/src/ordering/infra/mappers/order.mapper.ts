@@ -1,7 +1,14 @@
 import { z } from 'zod';
 
 import { Money } from '../../../shared-kernel/domain';
-import { Order, OrderStatus, type OrderProps } from '../../domain';
+import {
+  DELIVERY_ISSUE_DECISIONS,
+  DELIVERY_ISSUE_REASONS,
+  DELIVERY_ISSUE_RESOLUTIONS,
+  Order,
+  OrderStatus,
+  type OrderProps,
+} from '../../domain';
 
 const isoDate = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
 
@@ -30,6 +37,17 @@ export const orderSchema = z.object({
       reason: z.string().nullable(),
     }),
   ),
+  deliveryIssues: z.array(
+    z.object({
+      id: z.string(),
+      reason: z.enum(DELIVERY_ISSUE_REASONS),
+      note: z.string().nullable(),
+      reportedAt: isoDate,
+      resolvedAt: isoDate.nullable(),
+      resolution: z.enum(DELIVERY_ISSUE_RESOLUTIONS).nullable(),
+    }),
+  ),
+  deliveryIssueDecisions: z.array(z.enum(DELIVERY_ISSUE_DECISIONS)),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -69,6 +87,8 @@ export function toOrder(body: OrderBody): Order {
       changedAt: change.changedAt,
       reason: change.reason,
     })),
+    deliveryIssues: body.deliveryIssues,
+    deliveryIssueDecisions: body.deliveryIssueDecisions,
     createdAt: body.createdAt,
     updatedAt: body.updatedAt,
   };

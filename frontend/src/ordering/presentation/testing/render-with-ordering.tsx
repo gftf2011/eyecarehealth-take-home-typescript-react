@@ -9,6 +9,7 @@ import {
   ChangeOrderStatusUseCase,
   GetOrderUseCase,
   ListOrdersUseCase,
+  ResolveDeliveryIssueUseCase,
   ReturnOrderToAssignmentUseCase,
 } from '../../application';
 import { FakeOrderGateway } from '../../application/testing/fake-order.gateway';
@@ -26,6 +27,7 @@ export function renderWithOrdering(
     getOrder: new GetOrderUseCase(gateway),
     changeOrderStatus: new ChangeOrderStatusUseCase(gateway),
     returnOrderToAssignment: new ReturnOrderToAssignmentUseCase(gateway),
+    resolveDeliveryIssue: new ResolveDeliveryIssueUseCase(gateway),
   };
 
   const view = render(

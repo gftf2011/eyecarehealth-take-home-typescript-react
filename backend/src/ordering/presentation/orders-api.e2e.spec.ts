@@ -99,6 +99,8 @@ describe('API de pedidos (/api/orders)', () => {
           },
         ],
         statusHistory: [{ from: null, to: 'pending', changedAt: '2025-02-01T12:00:00.000Z', reason: null }],
+        deliveryIssues: [],
+        deliveryIssueDecisions: [],
         createdAt: '2025-02-01T12:00:00.000Z',
         updatedAt: '2025-02-01T12:00:00.000Z',
       });

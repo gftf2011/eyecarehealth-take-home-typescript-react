@@ -2,7 +2,14 @@ import type { InMemoryEventMediator } from '../../shared-kernel/infra/events/in-
 import { PublishOrderUpdateHandler } from '../application/event-handlers/publish-order-update.handler';
 import { RecordOrderMetricsHandler } from '../application/event-handlers/record-order-metrics.handler';
 import type { OrderingMetrics } from '../application/ports/ordering-metrics';
-import { DeliveryPersonAssigned, DeliveryPersonUnassigned, OrderPlaced, OrderStatusChanged } from '../domain';
+import {
+  DeliveryIssueReported,
+  DeliveryIssueResolved,
+  DeliveryPersonAssigned,
+  DeliveryPersonUnassigned,
+  OrderPlaced,
+  OrderStatusChanged,
+} from '../domain';
 
 /** Inscreve no mediador os handlers que reagem aos eventos do Ordering. */
 export function subscribeOrderingEventHandlers(mediator: InMemoryEventMediator, metrics: OrderingMetrics): void {
@@ -13,6 +20,8 @@ export function subscribeOrderingEventHandlers(mediator: InMemoryEventMediator, 
     .subscribe(OrderStatusChanged, publishOrderUpdate)
     .subscribe(DeliveryPersonAssigned, publishOrderUpdate)
     .subscribe(DeliveryPersonUnassigned, publishOrderUpdate)
+    .subscribe(DeliveryIssueReported, publishOrderUpdate)
+    .subscribe(DeliveryIssueResolved, publishOrderUpdate)
     .subscribe(OrderPlaced, recordMetrics)
     .subscribe(OrderStatusChanged, recordMetrics);
 }

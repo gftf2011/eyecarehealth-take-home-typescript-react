@@ -20,6 +20,9 @@ const BOARD_STATUSES: ReadonlySet<unknown> = new Set(['ready', 'delivering']);
 export function dispatchBoardAffectedBy(event: LiveEvent): boolean {
   switch (event.payload['type']) {
     case 'order.placed':
+    // Problema na entrega não muda prontos nem livres (cancelar ou devolver trocam o status).
+    case 'order.delivery-issue-reported':
+    case 'order.delivery-issue-resolved':
       return false;
     case 'order.status-changed':
       return BOARD_STATUSES.has(event.payload['status']) || BOARD_STATUSES.has(event.payload['previousStatus']);

@@ -70,6 +70,8 @@ describe('PlaceOrderUseCase', () => {
         },
       ],
       statusHistory: [{ from: null, to: 'pending', changedAt: PLACED_AT, reason: null }],
+      deliveryIssues: [],
+      deliveryIssueDecisions: [],
       createdAt: PLACED_AT,
       updatedAt: PLACED_AT,
     });

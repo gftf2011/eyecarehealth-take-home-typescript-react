@@ -1,4 +1,11 @@
-import type { DeliveryPersonId, Order, OrderStatusValue } from '../../domain';
+import type {
+  DeliveryIssueDecision,
+  DeliveryIssueReasonValue,
+  DeliveryIssueResolution,
+  DeliveryPersonId,
+  Order,
+  OrderStatusValue,
+} from '../../domain';
 import type { DeliveryPersonDirectory, DeliveryPersonSummary } from '../ports/delivery-person-directory';
 
 export type OrderItemDto = {
@@ -18,6 +25,16 @@ export type StatusChangeDto = {
   readonly reason: string | null;
 };
 
+export type DeliveryIssueDto = {
+  readonly id: string;
+  readonly reason: DeliveryIssueReasonValue;
+  readonly note: string | null;
+  readonly reportedAt: Date;
+  /** `null` enquanto espera a decisão do gestor. */
+  readonly resolvedAt: Date | null;
+  readonly resolution: DeliveryIssueResolution | null;
+};
+
 /** Representação de saída de um pedido: só tipos primitivos, sem VOs. */
 export type OrderDto = {
   readonly id: string;
@@ -33,6 +50,10 @@ export type OrderDto = {
   readonly items: readonly OrderItemDto[];
   /** Transições em ordem, da criação até o status atual. */
   readonly statusHistory: readonly StatusChangeDto[];
+  /** Tentativas de entrega que falharam; a aberta (no máximo uma) espera o gestor. */
+  readonly deliveryIssues: readonly DeliveryIssueDto[];
+  /** O que o gestor pode decidir sobre o problema aberto agora (vazio se não há). */
+  readonly deliveryIssueDecisions: readonly DeliveryIssueDecision[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
@@ -89,6 +110,15 @@ export function toOrderDto(order: Order, deliveryPersons: DeliveryPersonSummarie
       changedAt: change.changedAt,
       reason: change.reason,
     })),
+    deliveryIssues: order.deliveryIssues.map((issue) => ({
+      id: issue.id.value,
+      reason: issue.reason.value,
+      note: issue.note?.value ?? null,
+      reportedAt: issue.reportedAt,
+      resolvedAt: issue.resolvedAt,
+      resolution: issue.resolution,
+    })),
+    deliveryIssueDecisions: order.deliveryIssueDecisions,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };

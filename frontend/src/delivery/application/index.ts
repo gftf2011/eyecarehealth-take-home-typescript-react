@@ -1,4 +1,5 @@
 export { toDeliveryPersonDto, type DeliveryPersonDto } from './dtos/delivery-person.dto';
+export { InvalidCourierIssueError } from './errors/invalid-courier-issue.error';
 export { InvalidDeliveryPersonFilterError } from './errors/invalid-delivery-person-filter.error';
 export { LocationUnavailableError } from './errors/location-unavailable.error';
 export {
@@ -9,6 +10,11 @@ export {
   type DeliveryPersonFormField,
   type DeliveryPersonFormInput,
 } from './inputs/delivery-person-form.input';
+export {
+  courierIssueErrors,
+  parseCourierIssueInput,
+  type CourierIssueFormInput,
+} from './inputs/courier-issue.input';
 export {
   listDeliveryPersonsInputErrors,
   parseListDeliveryPersonsInput,
@@ -30,6 +36,10 @@ export { ListDeliveryPersonsUseCase } from './usecases/list-delivery-persons/lis
 export { LoadDispatchBoardUseCase } from './usecases/load-dispatch-board/load-dispatch-board.usecase';
 export { LoadMyDeliveriesUseCase } from './usecases/load-my-deliveries/load-my-deliveries.usecase';
 export { RegisterDeliveryPersonUseCase } from './usecases/register-delivery-person/register-delivery-person.usecase';
+export {
+  ReportMyDeliveryIssueUseCase,
+  type ReportMyDeliveryIssueInput,
+} from './usecases/report-my-delivery-issue/report-my-delivery-issue.usecase';
 export {
   RemoveDeliveryPersonUseCase,
   type RemoveDeliveryPersonInput,

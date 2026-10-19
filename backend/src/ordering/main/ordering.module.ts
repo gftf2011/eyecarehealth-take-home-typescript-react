@@ -5,32 +5,41 @@ import type { InMemoryEventMediator } from '../../shared-kernel/infra/events/in-
 import type { Route } from '../../shared-kernel/presentation';
 import { AssignDeliveryPersonUseCase } from '../application/usecases/assign-delivery-person/assign-delivery-person.usecase';
 import { ChangeOrderStatusUseCase } from '../application/usecases/change-order-status/change-order-status.usecase';
+import { CancelFailedDeliveryUseCase } from '../application/usecases/cancel-failed-delivery/cancel-failed-delivery.usecase';
 import { ConfirmMyDeliveryUseCase } from '../application/usecases/confirm-my-delivery/confirm-my-delivery.usecase';
 import { DispatchOrderUseCase } from '../application/usecases/dispatch-order/dispatch-order.usecase';
 import { GetMyDeliveriesUseCase } from '../application/usecases/get-my-deliveries/get-my-deliveries.usecase';
 import { GetOrderUseCase } from '../application/usecases/get-order/get-order.usecase';
 import { ListOrdersUseCase } from '../application/usecases/list-orders/list-orders.usecase';
 import { PlaceOrderUseCase } from '../application/usecases/place-order/place-order.usecase';
+import { ReportMyDeliveryIssueUseCase } from '../application/usecases/report-my-delivery-issue/report-my-delivery-issue.usecase';
+import { RetryDeliveryUseCase } from '../application/usecases/retry-delivery/retry-delivery.usecase';
 import { ReturnOrderToAssignmentUseCase } from '../application/usecases/return-order-to-assignment/return-order-to-assignment.usecase';
 import type { OrderingDatabase } from '../infra/persistence/schema/ordering-database';
 import { KyselyOrderingUnitOfWork } from '../infra/persistence/unit-of-work/kysely-ordering-unit-of-work';
 import { AssignDeliveryPersonController } from '../presentation/controllers/assign-delivery-person.controller';
 import { ChangeOrderStatusController } from '../presentation/controllers/change-order-status.controller';
+import { CancelFailedDeliveryController } from '../presentation/controllers/cancel-failed-delivery.controller';
 import { ConfirmMyDeliveryController } from '../presentation/controllers/confirm-my-delivery.controller';
 import { DispatchOrderController } from '../presentation/controllers/dispatch-order.controller';
 import { GetMyDeliveriesController } from '../presentation/controllers/get-my-deliveries.controller';
 import { GetOrderController } from '../presentation/controllers/get-order.controller';
 import { ListOrdersController } from '../presentation/controllers/list-orders.controller';
 import { PlaceOrderController } from '../presentation/controllers/place-order.controller';
+import { ReportMyDeliveryIssueController } from '../presentation/controllers/report-my-delivery-issue.controller';
+import { RetryDeliveryController } from '../presentation/controllers/retry-delivery.controller';
 import { ReturnOrderToAssignmentController } from '../presentation/controllers/return-order-to-assignment.controller';
 import { assignDeliveryPersonRoute } from '../presentation/routes/assign-delivery-person.route';
 import { changeOrderStatusRoute } from '../presentation/routes/change-order-status.route';
+import { cancelFailedDeliveryRoute } from '../presentation/routes/cancel-failed-delivery.route';
 import { confirmMyDeliveryRoute } from '../presentation/routes/confirm-my-delivery.route';
 import { dispatchOrderRoute } from '../presentation/routes/dispatch-order.route';
 import { getMyDeliveriesRoute } from '../presentation/routes/get-my-deliveries.route';
 import { getOrderRoute } from '../presentation/routes/get-order.route';
 import { listOrdersRoute } from '../presentation/routes/list-orders.route';
 import { placeOrderRoute } from '../presentation/routes/place-order.route';
+import { reportMyDeliveryIssueRoute } from '../presentation/routes/report-my-delivery-issue.route';
+import { retryDeliveryRoute } from '../presentation/routes/retry-delivery.route';
 import { returnOrderToAssignmentRoute } from '../presentation/routes/return-order-to-assignment.route';
 import { OtelOrderingMetrics } from '../infra/observability/otel-ordering-metrics';
 import { subscribeOrderingEventHandlers } from './ordering-event-handlers';
@@ -69,5 +78,10 @@ export function makeOrderingRoutes({ db, clock, events }: OrderingModuleDependen
     ),
     getMyDeliveriesRoute(new GetMyDeliveriesController(new GetMyDeliveriesUseCase(unitOfWork))),
     confirmMyDeliveryRoute(new ConfirmMyDeliveryController(new ConfirmMyDeliveryUseCase(unitOfWork, clock))),
+    reportMyDeliveryIssueRoute(
+      new ReportMyDeliveryIssueController(new ReportMyDeliveryIssueUseCase(unitOfWork, clock)),
+    ),
+    retryDeliveryRoute(new RetryDeliveryController(new RetryDeliveryUseCase(unitOfWork, clock))),
+    cancelFailedDeliveryRoute(new CancelFailedDeliveryController(new CancelFailedDeliveryUseCase(unitOfWork, clock))),
   ];
 }

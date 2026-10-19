@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 import { SORT_DIRECTIONS } from '../../../shared-kernel/domain';
 import { isoDateTime, optionalIntegerQuery, PAGE_DOC, pageOf, uuid } from '../../../shared-kernel/presentation';
-import { ORDER_SORT_FIELDS, ORDER_STATUSES } from '../../domain';
+import {
+  DELIVERY_ISSUE_DECISIONS,
+  DELIVERY_ISSUE_REASONS,
+  DELIVERY_ISSUE_RESOLUTIONS,
+  ORDER_SORT_FIELDS,
+  ORDER_STATUSES,
+} from '../../domain';
 
 /*
  * Schemas HTTP do Ordering: validam a forma nos controllers e geram a
@@ -55,6 +61,14 @@ export const returnToAssignmentBodySchema = z.object({
   }),
 });
 
+export const deliveryIssueBodySchema = z.object({
+  reason: z.string().meta({
+    enum: [...DELIVERY_ISSUE_REASONS],
+    description: '`customer_absent`, `address_not_found`, `refused` ou `other` (este exige `note`)',
+  }),
+  note: z.string().nullable().optional().meta({ maxLength: 150, examples: ['Portão fechado, ninguém atende'] }),
+});
+
 export const deliveryPersonIdBodySchema = z.object({
   deliveryPersonId: z.string().meta({ format: 'uuid', description: 'Entregador ativo e sem entrega em andamento' }),
 });
@@ -87,6 +101,22 @@ export const orderSchema = z.strictObject({
       }),
     )
     .meta({ description: 'Transições em ordem, da criação até o status atual' }),
+  deliveryIssues: z
+    .array(
+      z.strictObject({
+        id: uuid,
+        reason: z.enum(DELIVERY_ISSUE_REASONS),
+        note: z.string().nullable(),
+        reportedAt: isoDateTime,
+        resolvedAt: isoDateTime.nullable(),
+        resolution: z.enum(DELIVERY_ISSUE_RESOLUTIONS).nullable(),
+      }),
+    )
+    .meta({ description: 'Tentativas que falharam; a sem `resolvedAt` espera a decisão do gestor' }),
+  deliveryIssueDecisions: z.array(z.enum(DELIVERY_ISSUE_DECISIONS)).meta({
+    description:
+      'O que o gestor pode decidir agora sobre o problema aberto (vazio se não há). Cliente que recusou: só `cancel`; `retry` no máximo 2 vezes por pedido.',
+  }),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

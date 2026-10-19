@@ -1,4 +1,4 @@
-import type { OrderStatusValue } from '../../domain';
+import type { DeliveryIssueReasonValue, DeliveryIssueResolution, OrderStatusValue } from '../../domain';
 
 /**
  * Tópico público das atualizações de pedidos, consumido pelo painel em tempo
@@ -43,5 +43,21 @@ export type OrderUpdateMessage =
       readonly type: 'order.delivery-person-unassigned';
       readonly orderId: string;
       readonly previousDeliveryPersonId: string;
+      readonly occurredAt: string;
+    }
+  | {
+      /** O entregador não conseguiu entregar; o gestor decide (tentar de novo, devolver, cancelar). */
+      readonly type: 'order.delivery-issue-reported';
+      readonly orderId: string;
+      readonly reason: DeliveryIssueReasonValue;
+      readonly deliveryPersonId: string;
+      readonly occurredAt: string;
+    }
+  | {
+      readonly type: 'order.delivery-issue-resolved';
+      readonly orderId: string;
+      readonly resolution: DeliveryIssueResolution;
+      /** Quem relatou o problema. */
+      readonly deliveryPersonId: string;
       readonly occurredAt: string;
     };

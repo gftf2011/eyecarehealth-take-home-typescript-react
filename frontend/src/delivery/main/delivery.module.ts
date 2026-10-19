@@ -7,6 +7,7 @@ import {
   LoadMyDeliveriesUseCase,
   RegisterDeliveryPersonUseCase,
   RemoveDeliveryPersonUseCase,
+  ReportMyDeliveryIssueUseCase,
   SetDeliveryPersonActivationUseCase,
   SuggestAssignmentUseCase,
   UpdateDeliveryPersonUseCase,
@@ -42,6 +43,7 @@ export function createDeliveryModule(api: FetchHttpClient): DeliveryModule {
       loadMyDeliveries: new LoadMyDeliveriesUseCase(myDeliveries),
       confirmMyDelivery: new ConfirmMyDeliveryUseCase(myDeliveries),
       updateMyLocation: new UpdateMyLocationUseCase(myDeliveries),
+      reportMyDeliveryIssue: new ReportMyDeliveryIssueUseCase(myDeliveries),
     },
   };
 }

@@ -1,30 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { InputValidationError } from '../../../../shared-kernel/application';
-import type { GeoLocation, MyDeliveries } from '../../../domain';
-import type { MyDeliveriesGateway } from '../../ports/my-deliveries-gateway';
+import { FakeMyDeliveriesGateway } from '../../testing/fake-my-deliveries.gateway';
 import { UpdateMyLocationUseCase } from './update-my-location.usecase';
-
-class RecordingGateway implements MyDeliveriesGateway {
-  readonly locations: GeoLocation[] = [];
-
-  load(): Promise<MyDeliveries> {
-    return Promise.reject(new Error('não usado'));
-  }
-
-  confirmDelivered(): Promise<void> {
-    return Promise.resolve();
-  }
-
-  updateLocation(location: GeoLocation): Promise<void> {
-    this.locations.push(location);
-    return Promise.resolve();
-  }
-}
 
 describe('UpdateMyLocationUseCase', () => {
   it('envia a posição validada', async () => {
-    const gateway = new RecordingGateway();
+    const gateway = new FakeMyDeliveriesGateway();
 
     await new UpdateMyLocationUseCase(gateway).execute({ latitude: -23.5614, longitude: -46.6559 });
 
@@ -32,7 +14,7 @@ describe('UpdateMyLocationUseCase', () => {
   });
 
   it('posição fora da faixa não chega à API', async () => {
-    const gateway = new RecordingGateway();
+    const gateway = new FakeMyDeliveriesGateway();
 
     await expect(new UpdateMyLocationUseCase(gateway).execute({ latitude: 95, longitude: 0 })).rejects.toThrow(
       InputValidationError,

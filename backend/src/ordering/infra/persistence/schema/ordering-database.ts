@@ -1,6 +1,6 @@
 import type { NumericColumn } from '../../../../shared-kernel/infra/database/numeric';
 import type { OutboxDatabase } from '../../../../shared-kernel/infra/outbox/outbox-events.table';
-import type { OrderStatusValue } from '../../../domain';
+import type { DeliveryIssueReasonValue, DeliveryIssueResolution, OrderStatusValue } from '../../../domain';
 
 /** Linha da tabela `orders`. */
 export interface OrdersTable {
@@ -38,6 +38,18 @@ export interface OrderStatusHistoryTable {
   reason: string | null;
 }
 
+/** Linha da tabela `order_delivery_issues`. */
+export interface OrderDeliveryIssuesTable {
+  id: string;
+  order_id: string;
+  reason: DeliveryIssueReasonValue;
+  note: string | null;
+  reported_by: string;
+  reported_at: Date;
+  resolved_at: Date | null;
+  resolution: DeliveryIssueResolution | null;
+}
+
 /**
  * Visões somente leitura de tabelas de outros contextos, usadas apenas pelas
  * camadas anticorrupção. Declaram só as colunas que o Ordering consulta.
@@ -64,6 +76,7 @@ export type OrderingDatabase = OutboxDatabase & {
   orders: OrdersTable;
   order_items: OrderItemsTable;
   order_status_history: OrderStatusHistoryTable;
+  order_delivery_issues: OrderDeliveryIssuesTable;
   products: CatalogProductsView;
   delivery_persons: DeliveryPersonsView;
 };

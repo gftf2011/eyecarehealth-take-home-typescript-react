@@ -1,8 +1,18 @@
+import type { DeliveryIssueReported } from './delivery-issue-reported.event';
+import type { DeliveryIssueResolved } from './delivery-issue-resolved.event';
 import type { DeliveryPersonAssigned } from './delivery-person-assigned.event';
 import type { DeliveryPersonUnassigned } from './delivery-person-unassigned.event';
 import type { OrderPlaced } from './order-placed.event';
 import type { OrderStatusChanged } from './order-status-changed.event';
 
+export {
+  DeliveryIssueReported,
+  type DeliveryIssueReportedPayload,
+} from './delivery-issue-reported.event';
+export {
+  DeliveryIssueResolved,
+  type DeliveryIssueResolvedPayload,
+} from './delivery-issue-resolved.event';
 export {
   DeliveryPersonAssigned,
   type DeliveryPersonAssignedPayload,
@@ -26,4 +36,6 @@ export type OrderDomainEvent =
   | OrderPlaced
   | OrderStatusChanged
   | DeliveryPersonAssigned
-  | DeliveryPersonUnassigned;
+  | DeliveryPersonUnassigned
+  | DeliveryIssueReported
+  | DeliveryIssueResolved;

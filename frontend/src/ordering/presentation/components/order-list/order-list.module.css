@@ -107,3 +107,16 @@ button.open:hover .customer {
     justify-content: flex-start;
   }
 }
+
+/* Entrega com problema relatado: chama a atenção do gestor na lista. */
+.issue {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}

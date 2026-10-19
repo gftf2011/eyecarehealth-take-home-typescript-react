@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { Money } from '../../../shared-kernel/domain';
-import { COURIER_DELIVERY_STATUSES, type CourierDelivery, type MyDeliveries } from '../../domain';
+import { COURIER_DELIVERY_STATUSES, COURIER_ISSUE_REASONS, type CourierDelivery, type MyDeliveries } from '../../domain';
 
 /** Só os campos de pedido que a tela do entregador usa (ACL sobre o Ordering). */
 const courierOrderSchema = z.object({
@@ -14,6 +14,14 @@ const courierOrderSchema = z.object({
   longitude: z.number(),
   totalAmount: z.number(),
   items: z.array(z.object({ product: z.object({ name: z.string() }), quantity: z.number().int().positive() })),
+  deliveryIssues: z.array(
+    z.object({
+      reason: z.enum(COURIER_ISSUE_REASONS),
+      note: z.string().nullable(),
+      reportedAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),
+      resolvedAt: z.string().nullable(),
+    }),
+  ),
   createdAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),
 });
 
@@ -34,8 +42,14 @@ function toCourierDelivery(order: z.output<typeof courierOrderSchema>): CourierD
     longitude: order.longitude,
     items: order.items.map((item) => ({ productName: item.product.name, quantity: item.quantity })),
     totalCents: Money.fromDecimal(order.totalAmount, 'totalAmount').cents,
+    openIssue: openIssueOf(order.deliveryIssues),
     createdAt: order.createdAt,
   };
+}
+
+function openIssueOf(issues: z.output<typeof courierOrderSchema>['deliveryIssues']): CourierDelivery['openIssue'] {
+  const open = issues.find((issue) => issue.resolvedAt === null);
+  return open === undefined ? null : { reason: open.reason, note: open.note, reportedAt: open.reportedAt };
 }
 
 export function toMyDeliveries(body: z.output<typeof myDeliveriesSchema>): MyDeliveries {

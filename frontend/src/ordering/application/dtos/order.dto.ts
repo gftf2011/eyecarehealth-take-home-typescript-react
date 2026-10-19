@@ -1,4 +1,11 @@
-import type { Order, OrderStatusValue, StatusChange, StatusTransition } from '../../domain';
+import type {
+  DeliveryIssue,
+  DeliveryIssueDecision,
+  Order,
+  OrderStatusValue,
+  StatusChange,
+  StatusTransition,
+} from '../../domain';
 
 export type OrderItemDto = {
   readonly id: string;
@@ -28,6 +35,12 @@ export type OrderDto = {
   readonly canReturnToAssignment: boolean;
   /** Da criação até o status atual. */
   readonly statusHistory: readonly StatusChange[];
+  /** Tentativas de entrega que falharam, na ordem. */
+  readonly deliveryIssues: readonly DeliveryIssue[];
+  /** O problema que espera o gestor decidir (tentar de novo, devolver, cancelar). */
+  readonly openDeliveryIssue: DeliveryIssue | null;
+  /** O que o gestor pode decidir agora sobre o problema aberto. */
+  readonly deliveryIssueDecisions: readonly DeliveryIssueDecision[];
 };
 
 export function toOrderDto(order: Order): OrderDto {
@@ -52,5 +65,8 @@ export function toOrderDto(order: Order): OrderDto {
     transitions: order.transitions(),
     canReturnToAssignment: order.canReturnToAssignment,
     statusHistory: order.statusHistory,
+    deliveryIssues: order.deliveryIssues,
+    openDeliveryIssue: order.openDeliveryIssue,
+    deliveryIssueDecisions: order.deliveryIssueDecisions,
   };
 }

@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Alert, Button, ConfirmDialog, errorMessage, formatCents } from '../../../../shared-kernel/presentation';
 import type { CourierDelivery } from '../../../domain';
 import { useConfirmMyDelivery } from '../../hooks/use-confirm-my-delivery';
-import { mapsUrl } from '../../labels/delivery-labels';
+import { COURIER_ISSUE_REASON_LABELS, mapsUrl } from '../../labels/delivery-labels';
+import { ReportIssueDialog } from '../report-issue-dialog/report-issue-dialog';
 import styles from './current-delivery-card.module.css';
 
 /**
@@ -13,6 +14,8 @@ import styles from './current-delivery-card.module.css';
 export function CurrentDeliveryCard({ delivery }: { readonly delivery: CourierDelivery }) {
   const confirm = useConfirmMyDelivery();
   const [confirming, setConfirming] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const issue = delivery.openIssue;
 
   return (
     <section className={styles.card} aria-labelledby="current-delivery-title">
@@ -57,13 +60,27 @@ export function CurrentDeliveryCard({ delivery }: { readonly delivery: CourierDe
         </div>
       </dl>
 
+      {issue === null ? null : (
+        <Alert tone="warning" title={`Problema relatado: ${COURIER_ISSUE_REASON_LABELS[issue.reason]}`}>
+          {issue.note === null ? null : <p>{issue.note}</p>}
+          <p>Aguardando a decisão do gestor. A entrega só continua depois dela: se o cliente aparecer, avise o gestor.</p>
+        </Alert>
+      )}
+
       {confirm.error === null || confirming ? null : <Alert tone="error">{errorMessage(confirm.error)}</Alert>}
 
-      <div className={styles.confirm}>
-        <Button fullWidth onClick={() => setConfirming(true)} disabled={confirm.isPending}>
-          Confirmar entrega
-        </Button>
-      </div>
+      {issue === null ? (
+        <div className={styles.confirm}>
+          <Button fullWidth onClick={() => setConfirming(true)} disabled={confirm.isPending}>
+            Confirmar entrega
+          </Button>
+          <Button variant="secondary" fullWidth onClick={() => setReporting(true)}>
+            Não consegui entregar
+          </Button>
+        </div>
+      ) : null}
+
+      <ReportIssueDialog delivery={delivery} open={reporting} onClose={() => setReporting(false)} />
 
       <ConfirmDialog
         open={confirming}

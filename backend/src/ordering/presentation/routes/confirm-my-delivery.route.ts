@@ -20,7 +20,11 @@ export function confirmMyDeliveryRoute(controller: Controller): Route {
           description: 'Pedido inexistente ou de outro entregador (`ORDER_NOT_FOUND`), ou usuário sem entregador (`DELIVERY_PERSON_NOT_LINKED`)',
           schema: errorResponseSchema,
         },
-        422: { description: 'O pedido não está em entrega (`INVALID_STATUS_TRANSITION`)', schema: errorResponseSchema },
+        422: {
+          description:
+            'O pedido não está em entrega (`INVALID_STATUS_TRANSITION`) ou há problema relatado esperando o gestor (`DELIVERY_ISSUE_OPEN`)',
+          schema: errorResponseSchema,
+        },
       },
     },
   };

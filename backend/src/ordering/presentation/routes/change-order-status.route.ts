@@ -18,7 +18,8 @@ export function changeOrderStatusRoute(controller: Controller): Route {
         200: { description: 'Pedido com o novo status', schema: orderSchema },
         404: { description: 'Pedido não encontrado (`ORDER_NOT_FOUND`)', schema: errorResponseSchema },
         422: {
-          description: 'Transição inválida (`INVALID_STATUS_TRANSITION`) ou entregador indisponível no despacho (`DELIVERY_PERSON_UNAVAILABLE`)',
+          description:
+            'Transição inválida (`INVALID_STATUS_TRANSITION`), entregador indisponível no despacho (`DELIVERY_PERSON_UNAVAILABLE`) ou entrega com problema esperando decisão (`DELIVERY_ISSUE_OPEN`)',
           schema: errorResponseSchema,
         },
       },
