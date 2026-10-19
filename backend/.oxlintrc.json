@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Lint do backend (ADR-25). Política: a categoria "correctness" inteira e um
+  // conjunto escolhido de regras que pegam bugs; `--deny-warnings` no script.
+  "plugins": ["typescript", "oxc", "import", "node", "vitest", "unicorn"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "eqeqeq": "error",
+    "no-shadow": "error",
+    "no-unmodified-loop-condition": "error",
+    "typescript/no-explicit-any": "error",
+    // Promises de outbox, cache e WebSocket esquecidas ou passadas onde não cabem.
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/unbound-method": "error",
+    // `String(objeto)` vira "[object Object]".
+    "typescript/no-base-to-string": "error",
+    // `sort()` sem comparador ordena por texto (10 antes de 9).
+    "typescript/require-array-sort-compare": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "vitest/valid-expect": "error",
+    "vitest/no-standalone-expect": "error",
+    "vitest/no-conditional-expect": "error",
+    // O Húngaro aloca vetores de tamanho fixo de propósito.
+    "unicorn/no-new-array": "off"
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**"]
+}

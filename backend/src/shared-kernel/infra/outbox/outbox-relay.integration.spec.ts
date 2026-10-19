@@ -53,10 +53,10 @@ class RecordingPublisher implements MessagePublisher {
   async publishBatch(messages: readonly PublishedMessage[]): Promise<readonly PublishOutcome[]> {
     this.batches.push(messages.length);
     if (this.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
-    return messages.map((message): PublishOutcome => {
-      if (this.failWhen(message)) return { id: message.id, status: this.failAs, reason: 'payload recusado' };
-      this.published.push(message);
-      return { id: message.id, status: 'published' };
+    return messages.map((sent): PublishOutcome => {
+      if (this.failWhen(sent)) return { id: sent.id, status: this.failAs, reason: 'payload recusado' };
+      this.published.push(sent);
+      return { id: sent.id, status: 'published' };
     });
   }
 }
@@ -87,7 +87,7 @@ describe('OutboxRelay', () => {
         const { Messages = [] } = await messaging.sqs.send(
           new ReceiveMessageCommand({ QueueUrl: messaging.queue.url, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 }),
         );
-        received.push(...Messages.map((message) => JSON.parse(message.Body ?? '') as MessageEnvelope));
+        received.push(...Messages.map((sqsMessage) => JSON.parse(sqsMessage.Body ?? '') as MessageEnvelope));
         return received.length;
       })
       .toBe(3);
@@ -127,7 +127,7 @@ describe('OutboxRelay', () => {
     expect(await relay.relayBatch(10)).toEqual({ published: 3, failed: 1 });
     expect(publisher.batches).toEqual([4]);
     const attempts = await db.selectFrom('outbox_events').select(['payload', 'attempts']).execute();
-    expect(attempts.map((row) => [row.payload['n'], row.attempts]).sort()).toEqual([
+    expect(attempts.map((row) => [Number(row.payload['n']), row.attempts]).sort(([a], [b]) => (a ?? 0) - (b ?? 0))).toEqual([
       [0, 0],
       [1, 1],
       [2, 0],
@@ -253,7 +253,7 @@ describe('OutboxRelay', () => {
       publisher.failWhen = (m) => m.payload['n'] === 1;
       const relay = new OutboxRelay(db, publisher, new FixedClock(NOW), {
         maxAttempts: MAX_ATTEMPTS,
-        onDeadLettered: (message) => deadLettered.push(message),
+        onDeadLettered: (dead) => deadLettered.push(dead),
       });
       return { publisher, relay };
     }

@@ -8,6 +8,7 @@ import type { RealtimeAuthenticator } from '../application/ports/realtime-authen
 import { RealtimeHub } from '../application/realtime-hub';
 import { CLOSE_CODES } from '../application/realtime-protocol';
 import { RealtimeSession } from '../application/realtime-session';
+import { rawDataToText } from './raw-data-to-text';
 import { WebSocketConnection } from './websocket-connection';
 
 export const REALTIME_PATH = '/realtime';
@@ -105,7 +106,7 @@ export async function buildRealtimeApp(options: RealtimeAppOptions): Promise<Fas
       socket.on('pong', () => alive.set(socket, true));
       socket.on('message', (data, isBinary) => {
         // O protocolo é texto (JSON); binário é mensagem inválida.
-        void session.receive(isBinary ? '' : data.toString()).catch((error: unknown) => {
+        void session.receive(isBinary ? '' : rawDataToText(data)).catch((error: unknown) => {
           app.log.error({ err: error }, 'Erro ao tratar mensagem do cliente');
           socket.close(CLOSE_CODES.internalError, 'Erro interno');
         });

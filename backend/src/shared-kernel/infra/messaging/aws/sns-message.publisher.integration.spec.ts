@@ -121,6 +121,6 @@ describe('SnsMessagePublisher (Floci)', () => {
     const messaging = await createTestMessaging();
 
     await expect(new SnsMessagePublisher(messaging.sns, messaging.topicArn).ping()).resolves.toBeUndefined();
-    await expect(new SnsMessagePublisher(messaging.sns, `${messaging.topicArn}-inexistente`).ping()).rejects.toThrow();
+    await expect(new SnsMessagePublisher(messaging.sns, `${messaging.topicArn}-inexistente`).ping()).rejects.toThrow(/./);
   });
 });

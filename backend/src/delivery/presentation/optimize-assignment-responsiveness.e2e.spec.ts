@@ -52,11 +52,12 @@ describe('POST /api/orders/optimize-assignment com um problema grande', () => {
 
     // Enquanto o cálculo roda no worker, o health check responde normalmente.
     const healthLatencies: number[] = [];
-    let done = false;
+    // Objeto, não variável solta: o laço lê o valor que a promise muda depois.
+    const progress = { done: false };
     void suggestion.finally(() => {
-      done = true;
+      progress.done = true;
     });
-    while (!done) {
+    while (!progress.done) {
       const startedAt = performance.now();
       const health = await testApp.app.inject({ method: 'GET', url: '/api/health' });
       healthLatencies.push(performance.now() - startedAt);

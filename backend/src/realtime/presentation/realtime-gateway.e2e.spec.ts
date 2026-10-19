@@ -16,7 +16,6 @@ import type { RedisConnection } from '../../shared-kernel/infra/cache/redis/redi
 import { RedisSubscription } from '../../shared-kernel/infra/cache/redis/redis-subscription';
 import { SystemClock } from '../../shared-kernel/infra/clock/system-clock';
 import { resetDatabase } from '../../shared-kernel/infra/database/testing/test-database';
-import type { OutboxDatabase } from '../../shared-kernel/infra/outbox/outbox-events.table';
 import { SnsMessagePublisher } from '../../shared-kernel/infra/messaging/aws/sns-message.publisher';
 import { SqsQueueConsumer } from '../../shared-kernel/infra/messaging/aws/sqs-queue-consumer';
 import { createTestMessaging } from '../../shared-kernel/infra/messaging/aws/testing/test-aws';
@@ -25,6 +24,7 @@ import { RealtimeHub } from '../application/realtime-hub';
 import type { ServerMessage } from '../application/realtime-protocol';
 import { toRealtimeEvent } from '../infra/broker-envelope';
 import { RealtimeFanoutForwarder } from '../infra/realtime-fanout.forwarder';
+import { rawDataToText } from './raw-data-to-text';
 import { buildRealtimeApp, REALTIME_PATH } from './realtime-app';
 
 const BURGER_ID = '3f2b8c1e-6a4d-4e8f-9b1a-0c2d3e4f5a6b';
@@ -57,7 +57,7 @@ describe('Gateway de tempo real (API → outbox → relay → SNS → SQS → Re
     redis = await connectToTestRedis();
     const messaging = await createTestMessaging({ topics: [ORDER_UPDATES_TOPIC], visibilityTimeoutSeconds: 30 });
     relay = new OutboxRelay(
-      api.orderingDb as unknown as Kysely<OutboxDatabase>,
+      api.orderingDb,
       new SnsMessagePublisher(messaging.sns, messaging.topicArn),
       api.clock,
     );
@@ -123,7 +123,7 @@ describe('Gateway de tempo real (API → outbox → relay → SNS → SQS → Re
       const closed = new Promise<{ code: number; reason: string }>((onClose) =>
         socket.on('close', (code, reason) => onClose({ code, reason: reason.toString() })),
       );
-      socket.on('message', (data) => messages.push(JSON.parse(data.toString()) as ServerMessage));
+      socket.on('message', (data) => messages.push(JSON.parse(rawDataToText(data)) as ServerMessage));
       socket.once('open', () => resolve({ socket, messages, closed }));
       socket.once('unexpected-response', (_request, response) =>
         reject(new Error(`handshake recusado: ${response.statusCode}`)),

@@ -177,8 +177,8 @@ describe('KyselyOrderingUnitOfWork', () => {
 
       expect(
         snapshots
-          .map((snapshot) => [snapshot.name, snapshot.unitPrice.toDecimal(), snapshot.isAvailable])
-          .sort(),
+          .map((snapshot) => [snapshot.name, snapshot.unitPrice.toDecimal(), snapshot.isAvailable] as const)
+          .sort(([a], [b]) => a.localeCompare(b)),
       ).toEqual([
         ['Pudim', 9, false],
         ['X-Burger Especial', 32.9, true],
@@ -246,7 +246,7 @@ describe('KyselyOrderingUnitOfWork', () => {
 
       const page = await new ListOrdersUseCase(unitOfWork).execute({});
 
-      expect(page.data.map((order) => order.deliveryPerson).sort()).toEqual(
+      expect(page.data.map((order) => order.deliveryPerson)).toEqual(
         expect.arrayContaining([null, { id: COURIER_ID, name: 'Carlos Santos' }]),
       );
     });

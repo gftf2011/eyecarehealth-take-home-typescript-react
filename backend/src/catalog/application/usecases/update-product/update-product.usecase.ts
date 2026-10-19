@@ -40,12 +40,12 @@ export class UpdateProductUseCase implements UseCase<UpdateProductInput, Product
   async execute(input: UpdateProductInput): Promise<ProductDto> {
     const { productId, ...changes } = validateInput({
       productId: () => ProductId.from(input.id),
-      name: () => optional(input.name, ProductName.create),
-      description: () => optional(input.description, ProductDescription.create),
-      price: () => optional(input.price, ProductPrice.fromDecimal),
-      category: () => optional(input.category, ProductCategory.create),
+      name: () => optional(input.name, (raw) => ProductName.create(raw)),
+      description: () => optional(input.description, (raw) => ProductDescription.create(raw)),
+      price: () => optional(input.price, (raw) => ProductPrice.fromDecimal(raw)),
+      category: () => optional(input.category, (raw) => ProductCategory.create(raw)),
       imageUrl: () => parseImageUrlInput(input.imageUrl),
-      preparationTime: () => optional(input.preparationTime, PreparationTime.ofMinutes),
+      preparationTime: () => optional(input.preparationTime, (raw) => PreparationTime.ofMinutes(raw)),
     });
 
     return this.unitOfWork.transaction(async ({ products }) => {

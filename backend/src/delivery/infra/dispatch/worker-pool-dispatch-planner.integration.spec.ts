@@ -93,14 +93,14 @@ describe('WorkerPoolDispatchPlanner (worker_threads de verdade)', () => {
     const planner = await openPool({ size: 1, maxQueued: 2 });
     const running = planner.plan(orders, candidates);
     const queued = planner.plan(orders, candidates);
-    const failures = Promise.all([
-      expect(queued).rejects.toBeInstanceOf(DispatchPlannerBusyError),
-      expect(running).rejects.toBeInstanceOf(DispatchPlannerBusyError),
-    ]);
+    // Rejeições observadas antes do close: nenhuma fica sem tratamento.
+    const outcomes = Promise.allSettled([queued, running]);
 
     await planner.close();
 
-    await failures;
+    const [queuedOutcome, runningOutcome] = await outcomes;
+    expect(queuedOutcome).toMatchObject({ status: 'rejected', reason: expect.any(DispatchPlannerBusyError) });
+    expect(runningOutcome).toMatchObject({ status: 'rejected', reason: expect.any(DispatchPlannerBusyError) });
     await expect(planner.plan(orders, candidates)).rejects.toBeInstanceOf(DispatchPlannerBusyError);
   });
 });

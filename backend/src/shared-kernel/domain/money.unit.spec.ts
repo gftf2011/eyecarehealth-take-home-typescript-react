@@ -46,14 +46,15 @@ describe('Money', () => {
   });
 
   it('expõe o campo inválido nos detalhes do erro', () => {
+    let error: unknown;
     try {
       Money.fromDecimal(1.234, 'price');
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toBeInstanceOf(InvalidMoneyError);
-      expect((error as InvalidMoneyError).details).toEqual([
-        { field: 'price', message: 'O valor deve ter no máximo 2 casas decimais' },
-      ]);
+    } catch (caught) {
+      error = caught;
     }
+    expect(error).toBeInstanceOf(InvalidMoneyError);
+    expect(error instanceof InvalidMoneyError ? error.details : null).toEqual([
+      { field: 'price', message: 'O valor deve ter no máximo 2 casas decimais' },
+    ]);
   });
 });

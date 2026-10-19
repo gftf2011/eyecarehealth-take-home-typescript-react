@@ -207,6 +207,7 @@ npm run test:architecture  # regras de arquitetura (ArchUnitTS), sem Docker
 npm run test:integration   # adapters contra PostgreSQL, Redis e Floci reais
 npm run test:e2e           # API HTTP e WebSocket de ponta a ponta
 npm run typecheck          # tsc --noEmit (strict)
+npm run lint               # oxlint com regras de tipo (promises esquecidas, any, sort sem comparador…)
 ```
 
 > **Integração e e2e exigem Docker em execução.** O Vitest sobe PostgreSQL 17, Redis 7 e Floci (SNS/SQS) descartáveis com Testcontainers (uma vez por execução), aplica as migrations reais e destrói tudo ao final. Nada é configurado à mão.
@@ -217,7 +218,7 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 84 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 85 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 20 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 10 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
@@ -527,6 +528,7 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `npm start`, `start:relay`, `start:realtime`, `start:migrate`, `start:seed` | Rodam os bundles de `dist/` |
 | `npm test`, `test:unit`, `test:architecture`, `test:integration`, `test:e2e`, `test:watch` | Testes |
 | `npm run typecheck` | Verificação de tipos |
+| `npm run lint` | Oxlint com regras de tipo ([`.oxlintrc.json`](.oxlintrc.json)); falha em qualquer aviso |
 
 ---
 

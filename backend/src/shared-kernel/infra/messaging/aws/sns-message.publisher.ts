@@ -120,6 +120,8 @@ export class SnsMessagePublisher implements MessagePublisher {
 
       const round: Entry[] = [];
       let bytes = 0;
+      // Cópia de propósito: o laço remove agregados do mapa enquanto o percorre.
+      // oxlint-disable-next-line unicorn/no-useless-spread
       for (const [group, queue] of [...lane]) {
         const head = queue[0];
         if (head === undefined) {

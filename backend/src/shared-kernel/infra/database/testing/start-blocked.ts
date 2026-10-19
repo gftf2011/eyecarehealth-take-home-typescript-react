@@ -18,7 +18,7 @@ export async function startBlocked<T>(
   let settled = false;
   const outcome = Promise.allSettled([operation()]).then(([result]) => {
     settled = true;
-    return result as PromiseSettledResult<T>;
+    return result;
   });
   await new Promise((resolve) => setTimeout(resolve, LOCK_WAIT_MS));
   expect(settled).toBe(false);

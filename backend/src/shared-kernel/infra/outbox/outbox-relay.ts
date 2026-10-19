@@ -123,7 +123,7 @@ export class OutboxRelay implements OutboxRelayCycle {
       const outcomeOf = new Map(outcomes.map((outcome) => [outcome.id, outcome]));
 
       const publishedIds: string[] = [];
-      const deadLettered: DeadLetteredMessage[] = [];
+      const movedToDeadLetter: DeadLetteredMessage[] = [];
       let failed = 0;
       for (const row of pending) {
         const outcome = outcomeOf.get(row.id);
@@ -144,7 +144,7 @@ export class OutboxRelay implements OutboxRelayCycle {
           .set({ attempts, last_error: error, dead_lettered_at: dead ? this.clock.now() : null })
           .where('id', '=', row.id)
           .execute();
-        if (dead) deadLettered.push({ id: row.id, topic: row.event_name, aggregateId: row.aggregate_id, attempts, error });
+        if (dead) movedToDeadLetter.push({ id: row.id, topic: row.event_name, aggregateId: row.aggregate_id, attempts, error });
         else failed += 1;
       }
 
@@ -155,7 +155,7 @@ export class OutboxRelay implements OutboxRelayCycle {
           .where('id', 'in', publishedIds)
           .execute();
       }
-      return { result: { published: publishedIds.length, failed }, deadLettered };
+      return { result: { published: publishedIds.length, failed }, deadLettered: movedToDeadLetter };
     });
     // Só depois do commit: o aviso corresponde ao que de fato ficou gravado.
     for (const message of deadLettered) this.#onDeadLettered(message);

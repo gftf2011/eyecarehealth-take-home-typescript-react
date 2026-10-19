@@ -19,13 +19,11 @@ describe('parseRequest', () => {
       parseRequest(schema, { name: 10, price: '12', tags: ['ok', 1] }, 'body');
 
     expect(attempt).toThrow(InputValidationError);
-    try {
-      attempt();
-    } catch (error) {
-      const details = (error as InputValidationError).details;
-      expect(details.map((detail) => detail['field'])).toEqual(['name', 'price', 'tags.1']);
-      expect(String(details[0]?.['message'])).toMatch(/esperado|esperava/i);
-    }
+    const error = captureError(attempt);
+    expect(error).toBeInstanceOf(InputValidationError);
+    const details = error instanceof InputValidationError ? error.details : [];
+    expect(details.map((detail) => detail['field'])).toEqual(['name', 'price', 'tags.1']);
+    expect(String(details[0]?.['message'])).toMatch(/esperado|esperava/i);
   });
 
   it('usa a origem como campo quando o problema é o objeto inteiro', () => {
@@ -59,3 +57,13 @@ describe('helpers de query string', () => {
     );
   });
 });
+
+/** O erro lançado por `run` (falha o teste se nada for lançado). */
+function captureError(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('Era esperado um erro');
+}

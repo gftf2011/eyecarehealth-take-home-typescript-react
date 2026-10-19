@@ -16,8 +16,11 @@ class FakeCycle implements OutboxRelayCycle {
   readonly purges: Date[] = [];
   next: () => Promise<RelayBatchResult> = async () => ({ published: 0, failed: 0 });
 
+  /** Tamanhos de lote pedidos pelo loop (conferidos pelos testes). */
+  readonly limits: number[] = [];
+
   async relayBatch(limit: number): Promise<RelayBatchResult> {
-    expect(limit).toBe(BATCH);
+    this.limits.push(limit);
     this.batchCalls.push(Date.now());
     return this.next();
   }
@@ -69,6 +72,7 @@ describe('OutboxRelayRunner', () => {
     await vi.advanceTimersByTimeAsync(250);
 
     expect(offsets()).toEqual([0, 100, 200]);
+    expect(cycle.limits).toEqual([BATCH, BATCH, BATCH]);
   });
 
   it('com lote cheio, emenda o próximo sem esperar', async () => {

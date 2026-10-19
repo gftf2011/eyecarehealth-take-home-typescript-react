@@ -52,6 +52,6 @@ describe('ensureMessagingTopology (Floci)', () => {
     const topology = await ensureMessagingTopology(sns, sqs, spec);
 
     expect(await findQueue(sqs, spec.queueName)).toEqual(topology.queue);
-    await expect(findQueue(sqs, `nao-existe-${suffix}.fifo`)).rejects.toThrow();
+    await expect(findQueue(sqs, `nao-existe-${suffix}.fifo`)).rejects.toThrow(/./);
   });
 });

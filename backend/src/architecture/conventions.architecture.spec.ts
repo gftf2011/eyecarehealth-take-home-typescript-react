@@ -23,7 +23,7 @@ const rule = (description: string, condition: (file: FileInfo) => boolean) => ({
 describe('Convenções de código', () => {
   it('imports sem extensão .js e sem /index (moduleResolution Bundler)', async () => {
     const importsAreClean = (file: FileInfo): boolean =>
-      importSpecifiers(file).every((specifier) => !/\.js$/.test(specifier) && !/\/index$/.test(specifier));
+      importSpecifiers(file).every((specifier) => !specifier.endsWith('.js') && !specifier.endsWith('/index'));
 
     const check = projectFiles()
       .inPath('src/**/*.ts')
