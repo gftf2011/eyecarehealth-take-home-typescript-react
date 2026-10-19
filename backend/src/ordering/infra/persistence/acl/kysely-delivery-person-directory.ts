@@ -44,6 +44,16 @@ export class KyselyDeliveryPersonDirectory implements DeliveryPersonDirectory {
     });
   }
 
+  async deliveryPersonOfUser(userId: string): Promise<DeliveryPersonSummary | null> {
+    const person = await this.trx
+      .selectFrom('delivery_persons')
+      .select(['id', 'name'])
+      .where('user_id', '=', userId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return person ?? null;
+  }
+
   /** Uma consulta para todos os IDs, sem lock; inclui removidos. */
   async summariesOf(ids: readonly DeliveryPersonId[]): Promise<readonly DeliveryPersonSummary[]> {
     if (ids.length === 0) return [];

@@ -2,11 +2,12 @@ import { http, HttpResponse, type HttpHandler } from 'msw';
 
 import { apiUrl } from '../../../shared-kernel/infra/testing/test-api';
 
-type FakeUser = { id: string; email: string; password: string; role: 'admin' | 'viewer' };
+type FakeUser = { id: string; email: string; password: string; role: 'admin' | 'viewer' | 'courier' };
 
 export const SEED_USERS = {
   admin: { id: 'user-admin', email: 'admin@fastmeals.com', password: 'Admin@123', role: 'admin' },
   viewer: { id: 'user-viewer', email: 'viewer@fastmeals.com', password: 'Viewer@123', role: 'viewer' },
+  courier: { id: 'user-courier', email: 'entregador@fastmeals.com', password: 'Entregador@123', role: 'courier' },
 } as const satisfies Record<string, FakeUser>;
 
 function apiError(status: number, code: string, message: string) {

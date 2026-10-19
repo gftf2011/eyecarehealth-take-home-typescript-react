@@ -64,6 +64,18 @@ export class KyselyOrderRepository implements OrderRepository {
     return this.hydrate(rows);
   }
 
+  async listOpenAssignedTo(deliveryPersonId: DeliveryPersonId): Promise<Order[]> {
+    const rows = await this.trx
+      .selectFrom('orders')
+      .selectAll()
+      .where('delivery_person_id', '=', deliveryPersonId.value)
+      .where('status', 'in', [...UNDISPATCHED_STATUSES, 'delivering'])
+      .orderBy('created_at')
+      .orderBy('id')
+      .execute();
+    return this.hydrate(rows);
+  }
+
   /**
    * Upsert da raiz; itens e transições são imutáveis depois de gravados, então
    * só os novos entram (`ON CONFLICT DO NOTHING`). Salvar de novo o mesmo

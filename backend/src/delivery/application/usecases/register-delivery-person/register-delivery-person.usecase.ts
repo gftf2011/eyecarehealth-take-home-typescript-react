@@ -4,6 +4,7 @@ import {
   DeliveryPersonId,
   PersonName,
   PhoneNumber,
+  UserAccountId,
   VehicleType,
 } from '../../../domain';
 import { toDeliveryPersonDto, type DeliveryPersonDto } from '../../dtos/delivery-person.dto';
@@ -19,6 +20,11 @@ export type RegisterDeliveryPersonInput = {
   /** Latitude e longitude vêm juntas; ausentes ou nulas = posição desconhecida. */
   readonly currentLatitude?: number | null | undefined;
   readonly currentLongitude?: number | null | undefined;
+  /**
+   * Usuário (perfil `courier`) com que ele entra no sistema. Hoje só o seed
+   * informa: a rota HTTP de cadastro não expõe o vínculo.
+   */
+  readonly userId?: string | undefined;
 };
 
 /** Cadastra um entregador. */
@@ -36,6 +42,7 @@ export class RegisterDeliveryPersonUseCase
       phone: () => PhoneNumber.create(input.phone),
       vehicleType: () => VehicleType.create(input.vehicleType),
       location: () => parseLocationInput(input.currentLatitude, input.currentLongitude) ?? null,
+      userId: () => (input.userId === undefined ? null : UserAccountId.from(input.userId)),
     });
 
     const person = DeliveryPerson.register({

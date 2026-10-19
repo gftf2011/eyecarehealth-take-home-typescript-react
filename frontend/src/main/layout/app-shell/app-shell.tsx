@@ -9,7 +9,10 @@ import styles from './app-shell.module.css';
 /** Moldura das telas autenticadas: marca, menu filtrado pelo perfil e usuário logado. */
 export function AppShell({ navigation }: { readonly navigation: readonly NavigationItem[] }) {
   const permissions = usePermissions();
-  const seesLiveOrders = useCan('orders:read');
+  // O painel (pedidos) e o entregador (as próprias entregas) recebem o tempo real.
+  const seesOrders = useCan('orders:read');
+  const seesOwnDeliveries = useCan('my-deliveries:read');
+  const seesLiveUpdates = seesOrders || seesOwnDeliveries;
   const visible = navigation.filter((item) => permissions.includes(item.permission));
 
   return (
@@ -37,7 +40,7 @@ export function AppShell({ navigation }: { readonly navigation: readonly Navigat
         )}
 
         <div className={styles.end}>
-          {seesLiveOrders ? <LiveStatusIndicator /> : null}
+          {seesLiveUpdates ? <LiveStatusIndicator /> : null}
           <UserMenu />
         </div>
       </header>

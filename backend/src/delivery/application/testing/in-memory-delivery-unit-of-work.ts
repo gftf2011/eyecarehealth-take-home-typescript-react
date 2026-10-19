@@ -7,6 +7,7 @@ import {
   type DeliveryPersonRepository,
   type DeliveryPersonSnapshot,
   type DispatchableOrder,
+  type UserAccountId,
 } from '../../domain';
 import type { DeliveryInProgress, DispatchBoard } from '../ports/dispatch-board';
 import type { DeliveryRepositories, DeliveryUnitOfWork } from '../ports/delivery-unit-of-work';
@@ -110,6 +111,15 @@ class InMemoryDeliveryPersonRepository implements DeliveryPersonRepository {
   async findByIdForUpdate(id: DeliveryPersonId): Promise<DeliveryPerson | null> {
     this.lockedIds.push(id.value);
     return this.findById(id);
+  }
+
+  async findByUserIdForUpdate(userId: UserAccountId): Promise<DeliveryPerson | null> {
+    const found = [...new Map([...this.committed, ...this.staged])].find(
+      ([, snapshot]) => snapshot.removedAt === null && snapshot.userId?.equals(userId) === true,
+    );
+    if (found === undefined) return null;
+    this.lockedIds.push(found[0]);
+    return DeliveryPerson.reconstitute(DeliveryPersonId.from(found[0]), found[1]);
   }
 
   async save(person: DeliveryPerson): Promise<void> {

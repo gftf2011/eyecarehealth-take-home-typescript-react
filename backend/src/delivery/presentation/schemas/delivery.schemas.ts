@@ -44,6 +44,12 @@ export const deliveryPersonSchema = z.strictObject({
   updatedAt: isoDateTime,
 });
 
+/** O entregador informa onde está (as duas coordenadas, sempre juntas). */
+export const myLocationBodySchema = z.object({
+  latitude: z.number().meta({ minimum: -90, maximum: 90, examples: [-23.5614] }),
+  longitude: z.number().meta({ minimum: -180, maximum: 180, examples: [-46.6559] }),
+});
+
 export const deliveryPersonListSchema = z.strictObject({ data: z.array(deliveryPersonSchema) });
 
 export const assignmentSuggestionSchema = z.strictObject({

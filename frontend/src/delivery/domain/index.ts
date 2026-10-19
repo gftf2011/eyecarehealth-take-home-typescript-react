@@ -28,3 +28,9 @@ export {
   type VehicleTypeValue,
 } from './delivery-person/value-objects/vehicle-type';
 export { type AvailableCourier, type DispatchBoard, type ReadyOrder } from './dispatch-board/dispatch-board';
+export {
+  COURIER_DELIVERY_STATUSES,
+  type CourierDelivery,
+  type CourierDeliveryStatus,
+  type MyDeliveries,
+} from './my-deliveries/my-deliveries';

@@ -33,6 +33,8 @@ export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
   readonly deliveryPersons = new Map<string, DeliveryPersonAvailability>();
   /** Nome de exibição de cada entregador conhecido, removidos inclusive. */
   readonly deliveryPersonNames = new Map<string, string>();
+  /** Login de cada entregador: id do usuário → id do entregador. */
+  readonly deliveryPersonUsers = new Map<string, string>();
   /** IDs consultados (e travados) com `availabilityOf`, na ordem das chamadas. */
   readonly deliveryPersonLookups: string[] = [];
   /** IDs pedidos em cada chamada de `summariesOf`. */
@@ -53,6 +55,11 @@ export class InMemoryOrderingUnitOfWork implements OrderingUnitOfWork {
       this.deliveryPersons.set(id, availability);
       if (!this.deliveryPersonNames.has(id)) this.deliveryPersonNames.set(id, `Entregador ${id.slice(0, 8)}`);
     }
+  }
+
+  /** O entregador `deliveryPersonId` entra no sistema com o usuário `userId`. */
+  linkDeliveryPersonToUser(deliveryPersonId: string, userId: string): void {
+    this.deliveryPersonUsers.set(userId, deliveryPersonId);
   }
 
   /** Define o nome de exibição de um entregador. */
@@ -146,6 +153,17 @@ class InMemoryOrderRepository implements OrderRepository {
     return found;
   }
 
+  async listOpenAssignedTo(deliveryPersonId: DeliveryPersonId): Promise<Order[]> {
+    return [...new Map([...this.committed, ...this.staged])]
+      .map(([id, snapshot]) => Order.reconstitute(OrderId.from(id), snapshot))
+      .filter(
+        (order) =>
+          order.deliveryPersonId?.equals(deliveryPersonId) === true &&
+          (['pending', 'preparing', 'ready', 'delivering'] as const).some((status) => order.status.is(status)),
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.value.localeCompare(b.id.value));
+  }
+
   async save(order: Order): Promise<void> {
     this.staged.set(order.id.value, order.snapshot());
     this.stagedEvents.push(...order.pullDomainEvents());
@@ -217,5 +235,11 @@ class InMemoryDeliveryPersonDirectory implements DeliveryPersonDirectory {
       const name = this.state.deliveryPersonNames.get(id.value);
       return name === undefined ? [] : [{ id: id.value, name }];
     });
+  }
+
+  async deliveryPersonOfUser(userId: string): Promise<DeliveryPersonSummary | null> {
+    const id = this.state.deliveryPersonUsers.get(userId);
+    const name = id === undefined ? undefined : this.state.deliveryPersonNames.get(id);
+    return id === undefined || name === undefined ? null : { id, name };
   }
 }

@@ -50,14 +50,14 @@ describe('seed com seed/data.json', () => {
 
     expect(result).toEqual({
       status: 'seeded',
-      summary: { users: 2, products: 15, deliveryPersons: 6, orders: 12 },
+      summary: { users: 3, products: 15, deliveryPersons: 6, orders: 12 },
     });
     expect([
       await count('users'),
       await count('products'),
       await count('delivery_persons'),
       await count('orders'),
-    ]).toEqual([2, 15, 6, 12]);
+    ]).toEqual([3, 15, 6, 12]);
   });
 
   it('cada pedido termina no status do arquivo, com o entregador indicado e histórico completo', async () => {
@@ -122,6 +122,24 @@ describe('seed com seed/data.json', () => {
     expect(Number(future.rows[0]?.total)).toBe(0);
   });
 
+  it('o usuário courier entra como o entregador indicado no arquivo', async () => {
+    await seed();
+
+    const { rows } = await sql<{ email: string; role: string; courier: string }>`
+      SELECT u.email, u.role, d.name AS courier
+      FROM delivery_persons d JOIN users u ON u.id = d.user_id
+    `.execute(db);
+
+    const linked = data.users.filter((user) => user.deliveryPersonIndex !== undefined);
+    expect(rows).toEqual(
+      linked.map((user) => ({
+        email: user.email,
+        role: 'courier',
+        courier: data.deliveryPersons[user.deliveryPersonIndex ?? -1]?.name,
+      })),
+    );
+  });
+
   it('é idempotente: com dados presentes, não altera nada; --reset recria', async () => {
     await seed();
 
@@ -129,7 +147,7 @@ describe('seed com seed/data.json', () => {
     expect(await count('orders')).toBe(12);
 
     expect((await seed(true)).status).toBe('seeded');
-    expect([await count('users'), await count('orders')]).toEqual([2, 12]);
+    expect([await count('users'), await count('orders')]).toEqual([3, 12]);
   });
 });
 

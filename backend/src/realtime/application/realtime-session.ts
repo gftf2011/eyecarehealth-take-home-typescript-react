@@ -8,8 +8,8 @@ import { CLOSE_CODES, type RealtimeConnection, type RealtimeEvent } from './real
 export type RealtimeSessionOptions = {
   /** Prazo para a mensagem de autenticação depois de conectar. */
   readonly authTimeoutMs: number;
-  /** Permissão exigida para receber os eventos deste canal. */
-  readonly requiredPermission: Permission;
+  /** Basta uma destas permissões para receber os eventos deste canal. */
+  readonly requiredPermissions: readonly Permission[];
   readonly clock: Clock;
 };
 
@@ -97,7 +97,7 @@ export class RealtimeSession {
     // A conexão pode ter fechado enquanto o token era verificado.
     if (this.#state.kind === 'closed') return;
 
-    if (!principal.permissions.includes(this.options.requiredPermission)) {
+    if (!this.options.requiredPermissions.some((permission) => principal.permissions.includes(permission))) {
       this.#close(CLOSE_CODES.forbidden, 'Permissão insuficiente para este canal');
       return;
     }

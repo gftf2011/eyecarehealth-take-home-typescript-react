@@ -1,24 +1,27 @@
-import { PERMISSIONS, ValueObject, type Permission } from '../../../../shared-kernel/domain';
+import { COURIER_PERMISSIONS, PERMISSIONS, ValueObject, type Permission } from '../../../../shared-kernel/domain';
 import { InvalidRoleError } from '../errors';
 
-export const ROLES = ['admin', 'viewer'] as const;
+export const ROLES = ['admin', 'viewer', 'courier'] as const;
 
 export type RoleValue = (typeof ROLES)[number];
 
 /**
  * A mesma matriz de autorização da API (o painel só esconde o que o perfil
  * não pode usar; a API continua recusando com `403`):
- * - admin: acesso total.
+ * - admin: acesso total ao painel.
  * - viewer: somente leitura de pedidos, produtos e relatórios.
+ * - courier: o entregador, só as próprias entregas e a própria localização.
  */
 const ROLE_PERMISSIONS: Readonly<Record<RoleValue, ReadonlySet<Permission>>> = {
-  admin: new Set(PERMISSIONS),
+  admin: new Set(PERMISSIONS.filter((permission) => !COURIER_PERMISSIONS.includes(permission))),
   viewer: new Set<Permission>(['products:read', 'orders:read', 'reports:read']),
+  courier: new Set<Permission>(COURIER_PERMISSIONS),
 };
 
 const ROLE_LABELS: Readonly<Record<RoleValue, string>> = {
   admin: 'Administrador',
   viewer: 'Somente leitura',
+  courier: 'Entregador',
 };
 
 export class Role extends ValueObject<{ value: RoleValue }> {

@@ -58,7 +58,7 @@ describe('RegisterUserUseCase', () => {
       details: [
         { field: 'email' },
         { field: 'password', message: 'A senha deve ter pelo menos 8 caracteres e no máximo 72 bytes' },
-        { field: 'role', message: 'O perfil deve ser um de: admin, viewer' },
+        { field: 'role', message: 'O perfil deve ser um de: admin, viewer, courier' },
       ],
     });
     expect(unitOfWork.commits + unitOfWork.rollbacks).toBe(0);

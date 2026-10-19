@@ -92,3 +92,10 @@ export const orderSchema = z.strictObject({
 });
 
 export const orderPageSchema = pageOf(orderSchema);
+
+/** A tela do entregador logado: só os pedidos dele. */
+export const myDeliveriesSchema = z.strictObject({
+  deliveryPerson: z.strictObject({ id: uuid, name: z.string() }),
+  inProgress: orderSchema.nullable().meta({ description: 'O pedido `delivering` dele, se houver' }),
+  upcoming: z.array(orderSchema).meta({ description: 'Atribuídos a ele e ainda não despachados, mais antigos primeiro' }),
+});

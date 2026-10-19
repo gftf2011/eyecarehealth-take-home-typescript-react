@@ -1,6 +1,7 @@
 import type { Repository } from '../../../../shared-kernel/domain';
 import type { DeliveryPerson } from '../delivery-person';
 import type { DeliveryPersonId } from '../delivery-person-id';
+import type { UserAccountId } from '../value-objects/user-account-id';
 import type { DeliveryPersonListCriteria } from './delivery-person-list-criteria';
 
 /**
@@ -19,6 +20,9 @@ export interface DeliveryPersonRepository extends Repository<DeliveryPerson> {
    * existente deve usar este método.
    */
   findByIdForUpdate(id: DeliveryPersonId): Promise<DeliveryPerson | null>;
+
+  /** O entregador (não removido) que entra com este usuário, travado como em `findByIdForUpdate`. */
+  findByUserIdForUpdate(userId: UserAccountId): Promise<DeliveryPerson | null>;
 
   /**
    * Entregadores que atendem aos critérios, ordenados por nome. Sem paginação:

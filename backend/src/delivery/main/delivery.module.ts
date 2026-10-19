@@ -9,6 +9,7 @@ import { RemoveDeliveryPersonUseCase } from '../application/usecases/remove-deli
 import { SuggestAssignmentUseCase } from '../application/usecases/suggest-assignment/suggest-assignment.usecase';
 import type { DispatchPlanner } from '../application/ports/dispatch-planner';
 import { UpdateDeliveryPersonUseCase } from '../application/usecases/update-delivery-person/update-delivery-person.usecase';
+import { UpdateMyLocationUseCase } from '../application/usecases/update-my-location/update-my-location.usecase';
 import type { DeliveryDatabase } from '../infra/persistence/schema/delivery-database';
 import { KyselyDeliveryUnitOfWork } from '../infra/persistence/unit-of-work/kysely-delivery-unit-of-work';
 import { ListDeliveryPersonsController } from '../presentation/controllers/list-delivery-persons.controller';
@@ -17,11 +18,13 @@ import { RemoveDeliveryPersonController } from '../presentation/controllers/remo
 import { SuggestAssignmentController } from '../presentation/controllers/suggest-assignment.controller';
 import { subscribeDeliveryEventHandlers } from './delivery-event-handlers';
 import { UpdateDeliveryPersonController } from '../presentation/controllers/update-delivery-person.controller';
+import { UpdateMyLocationController } from '../presentation/controllers/update-my-location.controller';
 import { listDeliveryPersonsRoute } from '../presentation/routes/list-delivery-persons.route';
 import { registerDeliveryPersonRoute } from '../presentation/routes/register-delivery-person.route';
 import { removeDeliveryPersonRoute } from '../presentation/routes/remove-delivery-person.route';
 import { suggestAssignmentRoute } from '../presentation/routes/suggest-assignment.route';
 import { updateDeliveryPersonRoute } from '../presentation/routes/update-delivery-person.route';
+import { updateMyLocationRoute } from '../presentation/routes/update-my-location.route';
 
 export type DeliveryModuleDependencies = {
   readonly db: Kysely<DeliveryDatabase>;
@@ -51,6 +54,7 @@ export function makeDeliveryRoutes({ db, clock, events, planner }: DeliveryModul
     removeDeliveryPersonRoute(
       new RemoveDeliveryPersonController(new RemoveDeliveryPersonUseCase(unitOfWork, clock)),
     ),
+    updateMyLocationRoute(new UpdateMyLocationController(new UpdateMyLocationUseCase(unitOfWork, clock))),
     suggestAssignmentRoute(
       new SuggestAssignmentController(
         new SuggestAssignmentUseCase(unitOfWork, planner),

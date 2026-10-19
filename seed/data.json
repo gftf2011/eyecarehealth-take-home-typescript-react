@@ -9,6 +9,12 @@
       "email": "viewer@fastmeals.com",
       "password": "Viewer@123",
       "role": "viewer"
+    },
+    {
+      "email": "entregador@fastmeals.com",
+      "password": "Entregador@123",
+      "role": "courier",
+      "deliveryPersonIndex": 0
     }
   ],
   "products": [

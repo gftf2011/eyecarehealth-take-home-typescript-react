@@ -13,6 +13,7 @@ export type { DeliveryPersonListCriteria } from './delivery-person/repositories/
 export type { DeliveryPersonRepository } from './delivery-person/repositories/delivery-person.repository';
 export { PersonName } from './delivery-person/value-objects/person-name';
 export { PhoneNumber } from './delivery-person/value-objects/phone-number';
+export { UserAccountId } from './delivery-person/value-objects/user-account-id';
 export {
   VEHICLE_TYPES,
   VehicleType,

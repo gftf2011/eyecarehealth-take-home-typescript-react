@@ -13,6 +13,7 @@ import {
 } from './events';
 import type { PersonName } from './value-objects/person-name';
 import type { PhoneNumber } from './value-objects/phone-number';
+import type { UserAccountId } from './value-objects/user-account-id';
 import type { VehicleType } from './value-objects/vehicle-type';
 
 export type DeliveryPersonDetails = {
@@ -27,12 +28,15 @@ export type RegisterDeliveryPersonParams = DeliveryPersonDetails & {
   id: DeliveryPersonId;
   isActive?: boolean;
   location?: GeoPoint | null;
+  /** Usuário (perfil `courier`) com que ele entra no sistema, se houver. */
+  userId?: UserAccountId | null;
   now: Date;
 };
 
 export type DeliveryPersonSnapshot = DeliveryPersonDetails & {
   isActive: boolean;
   location: GeoPoint | null;
+  userId: UserAccountId | null;
   createdAt: Date;
   updatedAt: Date;
   removedAt: Date | null;
@@ -66,12 +70,14 @@ export class DeliveryPerson extends AggregateRoot<DeliveryPersonId> {
     now,
     isActive = true,
     location = null,
+    userId = null,
     ...details
   }: RegisterDeliveryPersonParams): DeliveryPerson {
     const deliveryPerson = new DeliveryPerson(id, {
       ...details,
       isActive,
       location,
+      userId,
       createdAt: new Date(now.getTime()),
       updatedAt: new Date(now.getTime()),
       removedAt: null,
@@ -110,6 +116,10 @@ export class DeliveryPerson extends AggregateRoot<DeliveryPersonId> {
 
   get location(): GeoPoint | null {
     return this.#state.location;
+  }
+
+  get userId(): UserAccountId | null {
+    return this.#state.userId;
   }
 
   get createdAt(): Date {

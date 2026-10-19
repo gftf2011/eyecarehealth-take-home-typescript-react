@@ -8,7 +8,17 @@ import { z } from 'zod';
  */
 const seedDataSchema = z
   .object({
-    users: z.array(z.object({ email: z.string(), password: z.string(), role: z.string() })).min(1),
+    users: z
+      .array(
+        z.object({
+          email: z.string(),
+          password: z.string(),
+          role: z.string(),
+          /** Só para `courier`: o entregador da frota com que este usuário entra. */
+          deliveryPersonIndex: z.number().int().nonnegative().optional(),
+        }),
+      )
+      .min(1),
     products: z.array(
       z.object({
         name: z.string(),
@@ -46,6 +56,29 @@ const seedDataSchema = z
     ),
   })
   .superRefine((data, context) => {
+    const linked = new Set<number>();
+    data.users.forEach((user, userIndex) => {
+      const path = ['users', userIndex, 'deliveryPersonIndex'];
+      if (user.role === 'courier' && user.deliveryPersonIndex === undefined) {
+        context.addIssue({ code: 'custom', path, message: 'Usuário courier precisa de deliveryPersonIndex' });
+      }
+      if (user.deliveryPersonIndex === undefined) return;
+      if (user.role !== 'courier') {
+        context.addIssue({ code: 'custom', path, message: 'Só usuários courier são vinculados a um entregador' });
+      }
+      if (user.deliveryPersonIndex >= data.deliveryPersons.length) {
+        context.addIssue({
+          code: 'custom',
+          path,
+          message: `Entregador ${user.deliveryPersonIndex} não existe (há ${data.deliveryPersons.length})`,
+        });
+      }
+      if (linked.has(user.deliveryPersonIndex)) {
+        context.addIssue({ code: 'custom', path, message: `Entregador ${user.deliveryPersonIndex} já tem um usuário` });
+      }
+      linked.add(user.deliveryPersonIndex);
+    });
+
     data.orders.forEach((order, orderIndex) => {
       order.items.forEach((item, itemIndex) => {
         if (item.productIndex >= data.products.length) {

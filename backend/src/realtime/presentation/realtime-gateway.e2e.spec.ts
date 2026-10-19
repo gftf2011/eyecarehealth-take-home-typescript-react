@@ -88,7 +88,7 @@ describe('Gateway de tempo real (API → outbox → relay → SNS → SQS → Re
       // Mesmo relógio da API: os tokens são emitidos no "agora" do teste.
       authenticator: makeTokenAuthenticator(TEST_SECRETS.accessToken, api.clock),
       clock: api.clock,
-      requiredPermission: 'orders:read',
+      requiredPermissions: ['orders:read'],
       allowedOrigins: [ALLOWED_ORIGIN],
       healthChecks: { redis: () => subscription.isReady, queue: () => consumer.isAlive(60_000) },
       authTimeoutMs: 300,
@@ -199,7 +199,7 @@ describe('Gateway de tempo real (API → outbox → relay → SNS → SQS → Re
       hub: new RealtimeHub(),
       authenticator: makeTokenAuthenticator(TEST_SECRETS.accessToken, api.clock),
       clock: api.clock,
-      requiredPermission: 'orders:read',
+      requiredPermissions: ['orders:read'],
       allowedOrigins: [ALLOWED_ORIGIN],
       healthChecks: {},
     });

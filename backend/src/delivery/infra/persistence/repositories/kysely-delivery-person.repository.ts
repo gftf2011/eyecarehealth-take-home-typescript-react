@@ -6,6 +6,7 @@ import type {
   DeliveryPersonId,
   DeliveryPersonListCriteria,
   DeliveryPersonRepository,
+  UserAccountId,
 } from '../../../domain';
 import { toDeliveryPerson, toDeliveryPersonRow } from '../mappers/delivery-person.mapper';
 import type { DeliveryDatabase } from '../schema/delivery-database';
@@ -36,6 +37,17 @@ export class KyselyDeliveryPersonRepository implements DeliveryPersonRepository 
       .selectFrom('delivery_persons')
       .selectAll()
       .where('id', '=', id.value)
+      .where('deleted_at', 'is', null)
+      .forUpdate()
+      .executeTakeFirst();
+    return row === undefined ? null : toDeliveryPerson(row);
+  }
+
+  async findByUserIdForUpdate(userId: UserAccountId): Promise<DeliveryPerson | null> {
+    const row = await this.trx
+      .selectFrom('delivery_persons')
+      .selectAll()
+      .where('user_id', '=', userId.value)
       .where('deleted_at', 'is', null)
       .forUpdate()
       .executeTakeFirst();

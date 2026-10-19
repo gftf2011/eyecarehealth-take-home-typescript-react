@@ -11,6 +11,8 @@ export interface DeliveryPersonsTable {
   is_active: boolean;
   current_latitude: NumericColumn | null;
   current_longitude: NumericColumn | null;
+  /** Usuário (perfil `courier`) com que o entregador entra no sistema. */
+  user_id: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;

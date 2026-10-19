@@ -27,4 +27,10 @@ export interface DeliveryPersonDirectory {
    * quem os entregou.
    */
   summariesOf(ids: readonly DeliveryPersonId[]): Promise<readonly DeliveryPersonSummary[]>;
+
+  /**
+   * O entregador (não removido) que entra no sistema com este usuário, ou
+   * `null` se o usuário não é o login de nenhum. Sem lock: é só "quem sou eu".
+   */
+  deliveryPersonOfUser(userId: string): Promise<DeliveryPersonSummary | null>;
 }

@@ -55,9 +55,12 @@ export async function runSeedScenario(
   let setupStep = 0;
   const atSetup = (): void => clock.setTo(new Date(setupAt.getTime() + setupStep++ * MINUTE));
 
-  for (const user of data.users) {
+  /** Índice do entregador → usuário com que ele entra (perfil `courier`). */
+  const userOfDeliveryPerson = new Map<number, string>();
+  for (const { deliveryPersonIndex, ...user } of data.users) {
     atSetup();
-    await useCases.registerUser.execute(user);
+    const { id } = await useCases.registerUser.execute(user);
+    if (deliveryPersonIndex !== undefined) userOfDeliveryPerson.set(deliveryPersonIndex, id);
   }
 
   // Todos nascem disponíveis: pedido não aceita produto indisponível. Os
@@ -69,9 +72,12 @@ export async function runSeedScenario(
   }
 
   const deliveryPersonIds: string[] = [];
-  for (const person of data.deliveryPersons) {
+  for (const [index, person] of data.deliveryPersons.entries()) {
     atSetup();
-    deliveryPersonIds.push((await useCases.registerDeliveryPerson.execute(person)).id);
+    const userId = userOfDeliveryPerson.get(index);
+    deliveryPersonIds.push(
+      (await useCases.registerDeliveryPerson.execute({ ...person, ...(userId !== undefined && { userId }) })).id,
+    );
   }
 
   for (const order of data.orders) {

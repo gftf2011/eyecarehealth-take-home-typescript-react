@@ -17,8 +17,8 @@ export type RealtimeAppOptions = {
   readonly hub: RealtimeHub;
   readonly authenticator: RealtimeAuthenticator;
   readonly clock: Clock;
-  /** Permissão exigida para assinar os eventos (painel de pedidos). */
-  readonly requiredPermission: Permission;
+  /** Basta uma destas para assinar os eventos (o painel de pedidos ou o entregador). */
+  readonly requiredPermissions: readonly Permission[];
   /**
    * Origens de navegador aceitas no handshake (proteção contra Cross-Site
    * WebSocket Hijacking). Clientes sem `Origin` (não navegadores) passam e
@@ -44,7 +44,7 @@ export async function buildRealtimeApp(options: RealtimeAppOptions): Promise<Fas
     hub,
     authenticator,
     clock,
-    requiredPermission,
+    requiredPermissions,
     authTimeoutMs = 5_000,
     heartbeatIntervalMs = 30_000,
     maxBufferedBytes = 1024 * 1024,
@@ -96,7 +96,7 @@ export async function buildRealtimeApp(options: RealtimeAppOptions): Promise<Fas
     (socket) => {
       const session = new RealtimeSession(new WebSocketConnection(socket, maxBufferedBytes), authenticator, {
         authTimeoutMs,
-        requiredPermission,
+        requiredPermissions,
         clock,
       });
       hub.add(session);

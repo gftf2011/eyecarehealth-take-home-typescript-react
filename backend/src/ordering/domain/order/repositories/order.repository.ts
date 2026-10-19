@@ -30,6 +30,12 @@ export interface OrderRepository extends Repository<Order> {
    */
   findUndispatchedAssignedToForUpdate(deliveryPersonId: DeliveryPersonId): Promise<Order[]>;
 
+  /**
+   * Os pedidos do entregador que ainda não terminaram (`pending`, `preparing`,
+   * `ready` e `delivering`), mais antigos primeiro. Sem lock: é a tela dele.
+   */
+  listOpenAssignedTo(deliveryPersonId: DeliveryPersonId): Promise<Order[]>;
+
   /** Página de pedidos que atendem aos critérios, com o total geral. */
   list(criteria: OrderListCriteria): Promise<Slice<Order>>;
 }

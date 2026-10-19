@@ -1,4 +1,4 @@
-import type { UnassignedReason, VehicleTypeValue } from '../../domain';
+import type { CourierDeliveryStatus, UnassignedReason, VehicleTypeValue } from '../../domain';
 
 export const VEHICLE_LABELS: Readonly<Record<VehicleTypeValue, string>> = {
   bicycle: 'Bicicleta',
@@ -18,4 +18,17 @@ export function formatKm(km: number): string {
 /** Coordenada em graus decimais no formato brasileiro (`-23,5489`). */
 export function formatCoordinate(value: number): string {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 6 });
+}
+
+/** Como o entregador vê o status dos pedidos dele. */
+export const COURIER_STATUS_LABELS: Readonly<Record<CourierDeliveryStatus, string>> = {
+  pending: 'Aguardando preparo',
+  preparing: 'Em preparo',
+  ready: 'Pronto para retirar',
+  delivering: 'Em entrega',
+};
+
+/** Link para abrir o destino no aplicativo de mapas do celular. */
+export function mapsUrl(latitude: number, longitude: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 }

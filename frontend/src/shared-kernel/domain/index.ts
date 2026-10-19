@@ -17,6 +17,6 @@ export { InvalidDatePeriodError } from './errors/invalid-date-period.error';
 export { InvalidLocalDateError } from './errors/invalid-local-date.error';
 export { InvalidMoneyError } from './errors/invalid-money.error';
 export { Money } from './money';
-export { PERMISSIONS, type Permission } from './permission';
+export { COURIER_PERMISSIONS, PERMISSIONS, type Permission } from './permission';
 export { SORT_DIRECTIONS, type Sort, type SortDirection } from './sort';
 export { ValueObject } from './value-object';

@@ -4,6 +4,8 @@ import { expect, test as base, type APIRequestContext, type Page } from '@playwr
 export const USERS = {
   admin: { email: 'admin@fastmeals.com', password: 'Admin@123' },
   viewer: { email: 'viewer@fastmeals.com', password: 'Viewer@123' },
+  /** Entregador Carlos Santos (perfil `courier`). */
+  courier: { email: 'entregador@fastmeals.com', password: 'Entregador@123' },
 } as const;
 
 export type SeedUser = (typeof USERS)[keyof typeof USERS];
@@ -114,6 +116,16 @@ export class FastMealsApi {
     });
     expect(response.status(), `cadastrar entregador ${name}`).toBe(201);
     return (await response.json()) as CreatedDeliveryPerson;
+  }
+
+  /** Id de um entregador da frota pelo nome (ex.: os do seed). */
+  async deliveryPersonId(name: string): Promise<string> {
+    const response = await this.request.get('/api/delivery-persons', { headers: this.#auth() });
+    expect(response.ok(), 'listar entregadores').toBe(true);
+    const { data } = (await response.json()) as { data: { id: string; name: string }[] };
+    const person = data.find((candidate) => candidate.name === name);
+    if (person === undefined) throw new Error(`entregador ${name} não encontrado`);
+    return person.id;
   }
 
   async removeDeliveryPerson(id: string): Promise<void> {

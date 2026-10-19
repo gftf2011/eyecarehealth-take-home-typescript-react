@@ -3,6 +3,7 @@ import { createContext, use, type ReactNode } from 'react';
 import type { UseCase } from '../../../shared-kernel/application';
 import type {
   AcceptAssignmentInput,
+  ConfirmMyDeliveryInput,
   DeliveryPersonDto,
   DeliveryPersonFormInput,
   ListDeliveryPersonsInput,
@@ -10,10 +11,11 @@ import type {
   RequestOptions,
   SetDeliveryPersonActivationInput,
   UpdateDeliveryPersonInput,
+  UpdateMyLocationInput,
 } from '../../application';
-import type { AssignmentPlan, DispatchBoard } from '../../domain';
+import type { AssignmentPlan, DispatchBoard, MyDeliveries } from '../../domain';
 
-/** Casos de uso das telas de atribuição e de entregadores. */
+/** Casos de uso das telas de atribuição, de entregadores e do próprio entregador. */
 export type DeliveryServices = {
   readonly loadDispatchBoard: UseCase<RequestOptions, DispatchBoard>;
   readonly suggestAssignment: UseCase<void, AssignmentPlan>;
@@ -23,6 +25,9 @@ export type DeliveryServices = {
   readonly updateDeliveryPerson: UseCase<UpdateDeliveryPersonInput, DeliveryPersonDto>;
   readonly setDeliveryPersonActivation: UseCase<SetDeliveryPersonActivationInput, DeliveryPersonDto>;
   readonly removeDeliveryPerson: UseCase<RemoveDeliveryPersonInput, void>;
+  readonly loadMyDeliveries: UseCase<RequestOptions, MyDeliveries>;
+  readonly confirmMyDelivery: UseCase<ConfirmMyDeliveryInput, void>;
+  readonly updateMyLocation: UseCase<UpdateMyLocationInput, void>;
 };
 
 const DeliveryContext = createContext<DeliveryServices | null>(null);

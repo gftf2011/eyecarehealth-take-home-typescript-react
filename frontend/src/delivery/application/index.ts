@@ -1,5 +1,6 @@
 export { toDeliveryPersonDto, type DeliveryPersonDto } from './dtos/delivery-person.dto';
 export { InvalidDeliveryPersonFilterError } from './errors/invalid-delivery-person-filter.error';
+export { LocationUnavailableError } from './errors/location-unavailable.error';
 export {
   EMPTY_DELIVERY_PERSON_FORM,
   deliveryPersonFormErrors,
@@ -16,12 +17,18 @@ export {
 export type { AssignmentGateway } from './ports/assignment-gateway';
 export type { DeliveryPersonGateway } from './ports/delivery-person-gateway';
 export type { DispatchBoardGateway, RequestOptions } from './ports/dispatch-board-gateway';
+export type { MyDeliveriesGateway } from './ports/my-deliveries-gateway';
 export {
   AcceptAssignmentUseCase,
   type AcceptAssignmentInput,
 } from './usecases/accept-assignment/accept-assignment.usecase';
+export {
+  ConfirmMyDeliveryUseCase,
+  type ConfirmMyDeliveryInput,
+} from './usecases/confirm-my-delivery/confirm-my-delivery.usecase';
 export { ListDeliveryPersonsUseCase } from './usecases/list-delivery-persons/list-delivery-persons.usecase';
 export { LoadDispatchBoardUseCase } from './usecases/load-dispatch-board/load-dispatch-board.usecase';
+export { LoadMyDeliveriesUseCase } from './usecases/load-my-deliveries/load-my-deliveries.usecase';
 export { RegisterDeliveryPersonUseCase } from './usecases/register-delivery-person/register-delivery-person.usecase';
 export {
   RemoveDeliveryPersonUseCase,
@@ -36,3 +43,7 @@ export {
   UpdateDeliveryPersonUseCase,
   type UpdateDeliveryPersonInput,
 } from './usecases/update-delivery-person/update-delivery-person.usecase';
+export {
+  UpdateMyLocationUseCase,
+  type UpdateMyLocationInput,
+} from './usecases/update-my-location/update-my-location.usecase';

@@ -54,6 +54,8 @@ export interface DeliveryPersonsView {
   id: string;
   name: string;
   is_active: boolean;
+  /** Login do entregador (perfil `courier`), para as rotas `/api/me/...`. */
+  user_id: string | null;
   deleted_at: Date | null;
 }
 

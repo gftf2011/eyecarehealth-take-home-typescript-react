@@ -4,8 +4,15 @@ import { PERMISSIONS, type Permission } from '../../../../shared-kernel/domain';
 import { InvalidRoleError, Role } from '../..';
 
 describe('Role', () => {
-  it('admin tem todas as permissões', () => {
-    expect(Role.of('admin').permissions).toEqual(PERMISSIONS);
+  it('admin tem todas as permissões do painel, nenhuma de entregador', () => {
+    expect(Role.of('admin').permissions).toEqual(
+      PERMISSIONS.filter((permission) => !permission.startsWith('my-deliveries:')),
+    );
+  });
+
+  it('o entregador só tem as próprias entregas (mesma matriz da API)', () => {
+    expect(Role.of('courier').permissions).toEqual(['my-deliveries:read', 'my-deliveries:write']);
+    expect(Role.of('courier').label).toBe('Entregador');
   });
 
   it.each<[Permission, boolean]>([
@@ -16,6 +23,7 @@ describe('Role', () => {
     ['orders:write', false],
     ['delivery-persons:read', false],
     ['delivery-persons:write', false],
+    ['my-deliveries:read', false],
   ])('viewer → %s: %s', (permission, allowed) => {
     expect(Role.of('viewer').can(permission)).toBe(allowed);
   });

@@ -1,4 +1,4 @@
-import { PERMISSIONS, type Permission } from '../../domain';
+import { COURIER_PERMISSIONS, PERMISSIONS, type Permission } from '../../domain';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import type { Authenticator } from '../auth/authenticator';
 import { InvalidTokenError, TokenExpiredError } from '../errors/http-errors';
@@ -8,9 +8,11 @@ export const VIEWER_TOKEN = 'test-viewer-token';
 export const EXPIRED_TOKEN = 'test-expired-token';
 
 const VIEWER_PERMISSIONS: readonly Permission[] = ['products:read', 'orders:read', 'reports:read'];
+/** Como o perfil real: tudo do painel, nada das entregas do próprio entregador. */
+const ADMIN_PERMISSIONS = PERMISSIONS.filter((permission) => !COURIER_PERMISSIONS.includes(permission));
 
 const USERS: ReadonlyMap<string, AuthenticatedUser> = new Map([
-  [ADMIN_TOKEN, { id: 'admin-id', role: 'admin', permissions: PERMISSIONS }],
+  [ADMIN_TOKEN, { id: 'admin-id', role: 'admin', permissions: ADMIN_PERMISSIONS }],
   [VIEWER_TOKEN, { id: 'viewer-id', role: 'viewer', permissions: VIEWER_PERMISSIONS }],
 ]);
 

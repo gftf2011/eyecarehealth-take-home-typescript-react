@@ -29,17 +29,20 @@ export async function insertDeliveryPerson(
     vehicleType = 'motorcycle',
     isActive = true,
     removed = false,
+    userId = null,
   }: {
     id: string;
     name?: string;
     vehicleType?: 'bicycle' | 'motorcycle' | 'car';
     isActive?: boolean;
     removed?: boolean;
+    /** Login do entregador (perfil `courier`). */
+    userId?: string | null;
   },
 ): Promise<void> {
   await sql`
-    INSERT INTO delivery_persons (id, name, phone, vehicle_type, is_active, current_latitude, current_longitude, deleted_at)
-    VALUES (${id}, ${name}, '(11) 91234-5678', ${vehicleType}, ${isActive}, -23.5489, -46.6388,
+    INSERT INTO delivery_persons (id, name, phone, vehicle_type, is_active, current_latitude, current_longitude, user_id, deleted_at)
+    VALUES (${id}, ${name}, '(11) 91234-5678', ${vehicleType}, ${isActive}, -23.5489, -46.6388, ${userId},
             ${removed ? sql`now()` : null})
   `.execute(db);
 }

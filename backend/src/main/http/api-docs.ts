@@ -28,6 +28,7 @@ const TAGS = [
   { name: 'Atribuição', description: 'Sugestão otimizada pedido → entregador (algoritmo Húngaro)' },
   { name: 'Entregadores', description: 'Cadastro e disponibilidade (Delivery)' },
   { name: 'Relatórios', description: 'Métricas agregadas (Reporting)' },
+  { name: 'Minhas entregas', description: 'O entregador logado (perfil `courier`): só as próprias entregas e a própria localização' },
   { name: 'Saúde', description: 'Health check para o orquestrador' },
 ];
 

@@ -60,7 +60,7 @@ describe('RealtimeSession', () => {
     authenticator = new FakeAuthenticator();
     session = new RealtimeSession(connection, authenticator, {
       authTimeoutMs: 5_000,
-      requiredPermission: 'orders:read',
+      requiredPermissions: ['orders:read'],
       clock,
     });
     session.start();
@@ -153,7 +153,7 @@ describe('RealtimeHub', () => {
     vi.useFakeTimers();
     const hub = new RealtimeHub();
     const authenticator = new FakeAuthenticator();
-    const options = { authTimeoutMs: 5_000, requiredPermission: 'orders:read' as const, clock };
+    const options = { authTimeoutMs: 5_000, requiredPermissions: ['orders:read'] as const, clock };
     const [readyConnection, pendingConnection] = [new FakeConnection(), new FakeConnection()];
     const ready = new RealtimeSession(readyConnection, authenticator, options);
     const pending = new RealtimeSession(pendingConnection, authenticator, options);
@@ -176,7 +176,7 @@ describe('RealtimeHub', () => {
     const hub = new RealtimeHub();
     const session = new RealtimeSession(new FakeConnection(), new FakeAuthenticator(), {
       authTimeoutMs: 5_000,
-      requiredPermission: 'orders:read',
+      requiredPermissions: ['orders:read'],
       clock,
     });
     hub.add(session);

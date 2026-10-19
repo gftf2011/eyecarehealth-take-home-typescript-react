@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
@@ -134,6 +135,45 @@ describe('Contratos da API: as respostas reais seguem o Swagger', () => {
     await expectContract('POST', '/api/orders/:id/dispatch', 200, { ...order('/dispatch'), payload: { deliveryPersonId: ids.courier } });
     await expectContract('PATCH', '/api/orders/:id/status', 200, { ...order('/status'), payload: { status: 'delivered' } });
     await expectContract('GET', '/api/orders', 200, { path: '/api/orders?status=delivered&sortBy=totalAmount' });
+  });
+
+  it('entregador logado: minhas entregas, minha localização e confirmar a entrega', async () => {
+    const courierUser = await testApp.givenUser('entregador.contrato@fastmeals.com', 'Entregador@123', 'courier');
+    await sql`UPDATE delivery_persons SET user_id = ${courierUser.id.value} WHERE id = ${ids.courier}`.execute(testApp.orderingDb);
+    const placed = await expectContract('POST', '/api/orders', 201, {
+      payload: {
+        customerName: 'Cliente do Entregador',
+        customerPhone: '(21) 98765-4321',
+        deliveryAddress: 'Av. Brasil, 456, Rio de Janeiro - RJ',
+        latitude: -22.9068,
+        longitude: -43.1729,
+        items: [{ productId: ids.product, quantity: 1 }],
+      },
+    });
+    const orderId: string = placed.json().id;
+    for (const status of ['preparing', 'ready']) {
+      await expectContract('PATCH', '/api/orders/:id/status', 200, { path: `/api/orders/${orderId}/status`, payload: { status } });
+    }
+    await expectContract('POST', '/api/orders/:id/dispatch', 200, {
+      path: `/api/orders/${orderId}/dispatch`,
+      payload: { deliveryPersonId: ids.courier },
+    });
+
+    const adminToken = token;
+    const login = await testApp.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'entregador.contrato@fastmeals.com', password: 'Entregador@123' },
+    });
+    token = login.json().accessToken;
+    try {
+      const mine = await expectContract('GET', '/api/me/deliveries', 200);
+      expect(mine.json().inProgress.id).toBe(orderId);
+      await expectContract('PUT', '/api/me/location', 200, { payload: { latitude: -22.91, longitude: -43.18 } });
+      await expectContract('POST', '/api/me/deliveries/:id/delivered', 200, { path: `/api/me/deliveries/${orderId}/delivered` });
+    } finally {
+      token = adminToken;
+    }
   });
 
   it('relatórios: os quatro, com o pedido entregue', async () => {

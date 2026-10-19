@@ -7,6 +7,7 @@ import {
   GeoPoint,
   PersonName,
   PhoneNumber,
+  UserAccountId,
   VehicleType,
 } from '../../../domain';
 import type { DeliveryPersonsTable } from '../schema/delivery-database';
@@ -25,6 +26,7 @@ export function toDeliveryPerson(row: Selectable<DeliveryPersonsTable>): Deliver
       row.current_latitude === null || row.current_longitude === null
         ? null
         : GeoPoint.create(toCoordinate(row.current_latitude), toCoordinate(row.current_longitude)),
+    userId: row.user_id === null ? null : UserAccountId.from(row.user_id),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     removedAt: row.deleted_at,
@@ -41,6 +43,7 @@ export function toDeliveryPersonRow(person: DeliveryPerson): Insertable<Delivery
     is_active: person.isActive,
     current_latitude: person.location?.latitude.toFixed(COORDINATE_SCALE) ?? null,
     current_longitude: person.location?.longitude.toFixed(COORDINATE_SCALE) ?? null,
+    user_id: person.userId?.value ?? null,
     created_at: person.createdAt,
     updated_at: person.updatedAt,
     deleted_at: person.removedAt,

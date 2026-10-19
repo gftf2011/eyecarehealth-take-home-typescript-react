@@ -82,7 +82,9 @@ async function main(): Promise<void> {
     hub,
     authenticator: makeTokenAuthenticator(env.JWT_SECRET, clock),
     clock,
-    requiredPermission: 'orders:read',
+    // Quem acompanha os pedidos (painel) ou as próprias entregas (entregador). As mensagens
+    // só levam ids e status, nunca dados pessoais: os detalhes vêm pela API, que confere o dono.
+    requiredPermissions: ['orders:read', 'my-deliveries:read'],
     allowedOrigins: env.REALTIME_ALLOWED_ORIGINS,
     healthChecks: {
       redis: () => subscription.isReady && redis.isReady,
