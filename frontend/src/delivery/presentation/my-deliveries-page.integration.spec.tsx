@@ -67,6 +67,12 @@ describe('Tela do entregador', () => {
     const upcoming = screen.getByRole('list', { name: 'Próximas entregas' });
     expect(upcoming).toHaveTextContent('Maria Santos');
     expect(upcoming).toHaveTextContent('Pronto para retirar');
+    // Só a entrega em andamento tem ações; as próximas ainda não saíram (a API recusaria).
+    expect(within(upcoming).queryAllByRole('button')).toEqual([]);
+    expect(within(current).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Confirmar entrega',
+      'Não consegui entregar',
+    ]);
   });
 
   it('confirma a entrega depois de "Entreguei"; a tela recarrega sem ela', async () => {

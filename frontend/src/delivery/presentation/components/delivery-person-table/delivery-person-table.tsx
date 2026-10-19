@@ -90,7 +90,15 @@ export function DeliveryPersonTable({ persons, onEdit, onRemove }: DeliveryPerso
                       <Button variant="secondary" size="sm" onClick={() => onEdit(person)} aria-label={`Editar ${person.name}`}>
                         Editar
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => onRemove(person)} aria-label={`Excluir ${person.name}`}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onRemove(person)}
+                        aria-label={`Excluir ${person.name}`}
+                        // Com entrega em andamento, a API recusa a exclusão (409): o motivo vem junto.
+                        disabled={person.isOnDelivery}
+                        title={person.isOnDelivery ? 'Em entrega: espere terminar ou desative-o' : undefined}
+                      >
                         Excluir
                       </Button>
                     </div>

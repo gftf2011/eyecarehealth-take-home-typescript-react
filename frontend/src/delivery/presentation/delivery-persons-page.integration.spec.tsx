@@ -177,17 +177,28 @@ describe('Tela de entregadores', () => {
     expect(couriers.writes.at(-1)).toEqual({ method: 'PUT', id: 'c-ana', body: { isActive: false } });
   });
 
-  it('exclusão de quem está em entrega mostra o 409 e sugere desativar', async () => {
-    const view = open();
+  it('quem está em entrega não pode ser excluído: o botão fica desabilitado, com o motivo', async () => {
+    open();
 
-    await view.user.click(within(await rowOf('Carlos Santos')).getByRole('button', { name: 'Excluir Carlos Santos' }));
+    const remove = within(await rowOf('Carlos Santos')).getByRole('button', { name: 'Excluir Carlos Santos' });
+
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute('title', 'Em entrega: espere terminar ou desative-o');
+    expect(within(await rowOf('Ana Ferreira')).getByRole('button', { name: 'Excluir Ana Ferreira' })).toBeEnabled();
+  });
+
+  it('se a entrega começar depois de a tela carregar, a API recusa (409) e o painel explica', async () => {
+    const view = open();
+    await view.user.click(within(await rowOf('Ana Ferreira')).getByRole('button', { name: 'Excluir Ana Ferreira' }));
+    const ana = couriers.persons.find((person) => person.id === 'c-ana');
+    if (ana !== undefined) ana.currentOrderId = 'order-2';
+
     const dialog = screen.getByRole('alertdialog', { name: 'Excluir entregador?' });
     await view.user.click(within(dialog).getByRole('button', { name: 'Excluir entregador' }));
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       "atribuído a um pedido com status 'delivering'. Espere a entrega terminar ou desative-o",
     );
-    expect(await rowOf('Carlos Santos')).toBeInTheDocument();
   });
 
   it('exclui depois de confirmar', async () => {

@@ -40,7 +40,7 @@ test.describe('Entregadores', () => {
     await expect(row).toHaveCount(0);
   });
 
-  test('quem está em entrega não pode ser excluído: o painel explica', async ({ page, api }) => {
+  test('quem está em entrega não pode ser excluído: o botão fica desabilitado, com o motivo', async ({ page, api }) => {
     const courier = await api.registerDeliveryPerson(unique('Entregador Ocupado'));
     const order = await api.placeOrder(unique('Cliente Entrega'));
     await api.changeStatus(order.id, 'preparing');
@@ -51,11 +51,9 @@ test.describe('Entregadores', () => {
 
     const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: new RegExp(courier.name) }) });
     await expect(row).toContainText('Em entrega');
-    await row.getByRole('button', { name: `Excluir ${courier.name}` }).click();
-    const dialog = page.getByRole('alertdialog', { name: 'Excluir entregador?' });
-    await dialog.getByRole('button', { name: 'Excluir entregador' }).click();
-
-    await expect(dialog.getByRole('alert')).toContainText('Espere a entrega terminar ou desative-o');
+    const remove = row.getByRole('button', { name: `Excluir ${courier.name}` });
+    await expect(remove).toBeDisabled();
+    await expect(remove).toHaveAttribute('title', 'Em entrega: espere terminar ou desative-o');
 
     await api.changeStatus(order.id, 'delivered');
     await api.removeDeliveryPerson(courier.id);
