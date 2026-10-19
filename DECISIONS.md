@@ -395,9 +395,9 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 82 | Domínio e casos de uso com fakes em memória |
-  | `*.integration.spec.ts` | 19 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
-  | `*.e2e.spec.ts` | 9 | API HTTP (`app.inject`) e clientes WebSocket reais |
+  | `*.unit.spec.ts` | 84 | Domínio e casos de uso com fakes em memória |
+  | `*.integration.spec.ts` | 20 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
+  | `*.e2e.spec.ts` | 10 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
 
   Os testes de performance (listagens < 200 ms com 10 mil registros, com `EXPLAIN` confirmando o índice; otimização < 2 s) e de concorrência são automatizados.
@@ -511,8 +511,8 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
-  | `*.unit.spec.ts(x)` | 50 | 330 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 8 | 59 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
+  | `*.unit.spec.ts(x)` | 50 | 333 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 8 | 62 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
@@ -564,6 +564,36 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➖ Um pedido com uma mensagem "envenenada" fica parado até ela ir para a fila morta (5 tentativas no relay ou 5 recebimentos no SQS); depois, o grupo destrava com uma lacuna, como no SQS FIFO.
   - ➖ O relay ficou mais complexo: advisory locks e faixas por grupo.
   - ➖ Deduplicação só dentro de 5 minutos: uma republicação depois disso chega de novo, e o painel ainda descarta pelo `id`.
+
+### ADR-24 — Otimizador de atribuição fora da thread da API
+
+- **Contexto.** O Húngaro roda em O(k²·K): milissegundos com dezenas de pedidos, mas segundos com centenas de pedidos e entregadores (800 × 800 levou ~2,5 s nos testes). O Node atende tudo numa thread só, então durante o cálculo a API inteira parava: login, listagens e o health check. No teste com o cálculo forçado na thread da API, o health devolveu **503**, porque as verificações do banco e do Redis estouraram o tempo com o event loop travado; um orquestrador teria reiniciado a API no meio do cálculo.
+- **Decisão.**
+  1. Uma porta na aplicação ([`DispatchPlanner`](backend/src/delivery/application/ports/dispatch-planner.ts)). O caso de uso não sabe onde o cálculo roda; o algoritmo (`DispatchOptimizer`) continua puro no domínio, sem nenhuma mudança.
+  2. [`RoutingDispatchPlanner`](backend/src/delivery/infra/dispatch/routing-dispatch-planner.ts):
+     - até 10.000 células (pedidos × entregadores), calcula na própria thread: o caso comum, em que o worker custaria mais que o cálculo;
+     - acima disso, manda para o pool;
+     - pedidos simultâneos com a mesma entrada dividem um cálculo (o otimizador é determinístico), sem cache depois que ele termina.
+  3. [`WorkerPoolDispatchPlanner`](backend/src/delivery/infra/dispatch/worker-pool-dispatch-planner.ts): `worker_threads` (núcleos − 1, no máximo 2), com:
+     - **fila limitada**, que devolve `503 OPTIMIZER_BUSY` na hora em vez de empilhar trabalho de CPU;
+     - **tempo limite**: `503 OPTIMIZER_TIMEOUT`, e o worker é derrubado e recriado, porque código síncrono não se interrompe de outro jeito;
+     - **recriação** de worker que morre;
+     - **prontidão**: só recebe cálculo depois de carregar, e o tempo limite não conta o boot;
+     - **trava de segurança**: 3 falhas seguidas no boot param o pool e derrubam a API no início, em vez de girar em loop.
+  4. As entradas atravessam a thread como dados simples ([`dispatch-wire`](backend/src/delivery/infra/dispatch/dispatch-wire.ts)), porque Value Objects (classes com campos privados) não sobrevivem ao *structured clone*, e são remontadas e validadas de novo do outro lado.
+  5. Nova categoria de erro no shared kernel, `TemporarilyUnavailableError` → **503**. O painel mostra a mensagem da API nesse caso ("Tente novamente em instantes"), e não a genérica de erro no servidor.
+- **Alternativas.**
+  - *Serviço separado com fila* (um worker consumindo pedidos de cálculo): escala para outras máquinas, mas é infraestrutura demais para um cálculo de segundos, e a resposta deixaria de ser síncrona.
+  - *WASM/Rust*: o cálculo ficaria várias vezes mais rápido, mas continuaria bloqueando a thread.
+  - *Dividir por região* ou limitar os candidatos aos mais próximos: diminui o problema, mas não tira o cálculo da thread. Continua como próximo passo para escala maior.
+  - *Piscina pronta (Piscina, workerpool)*: resolve o pool, mas tempo limite com recriação, fila limitada com 503 e prontidão teriam que ser montados por cima do mesmo jeito.
+- **Consequências.**
+  - ➕ A API continua respondendo durante o cálculo. No e2e com 800 × 800 (~2,5 s), o health respondeu em 1–4 ms; só a primeira chamada sobe para algumas dezenas de ms, porque divide a thread com a leitura do quadro no banco.
+  - ➕ O contrato da rota não mudou.
+  - ➖ Mais um entrypoint no build (`dist/dispatch-planner.worker.js`).
+  - ➖ Ao rodar do código-fonte, o worker carrega pelo loader do tsx (~100 ms no boot).
+  - ➖ Cálculos acima de 2 ao mesmo tempo esperam ou recebem 503.
+  - ➖ A cópia das entradas entre threads custa milissegundos, desprezível perto do cálculo grande, e é por isso que os pequenos não vão para o pool.
 
 ---
 
@@ -667,6 +697,10 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 25. **Teste de concorrência que passava sem a correção.** O teste de duas réplicas do relay depende de uma corrida: sem cuidado, ele passaria mesmo sem o advisory lock. **Solução:** um publisher falso lento (20 ms por lote), três pedidos e lotes pequenos para as transações se sobreporem, e uma verificação de mutação: removendo o lock, o teste pegou a inversão de ordem.
 
+26. **Um teste de "API responsiva" que media o pico errado.** O primeiro e2e exigia que *toda* chamada ao health respondesse em menos de 100 ms durante o cálculo, e falhou com 187 ms. A distribuição mostrou que só a primeira chamada era lenta: ela divide a thread com a leitura do quadro no banco, antes de o cálculo ir para o worker; as outras respondiam em 1–4 ms. **Solução:** medir o percentil 90 (< 50 ms) e um teto para o máximo (metade do tempo do cálculo). Uma verificação de mutação, com o cálculo forçado na thread, fez o teste falhar com o health em 503.
+
+27. **Timeout que contava o boot do worker.** Depois de um tempo limite, o worker recriado recebia o próximo cálculo antes de terminar de carregar (o loader do tsx leva ~100 ms), e o cálculo também estourava o tempo. **Solução:** o worker avisa quando está pronto e só então recebe trabalho, e uma trava para o pool depois de 3 falhas seguidas no boot, em vez de recriar o worker para sempre.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
@@ -676,7 +710,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
-- **Escala do otimizador.** O(k²·K) responde em milissegundos até centenas de pedidos, mas chega a ~2 s com 1000 × 1000. Nessa escala, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
+- **Escala do otimizador.** O cálculo grande não trava mais a API ([ADR-24](#adr-24--otimizador-de-atribuição-fora-da-thread-da-api)), mas continua O(k²·K): ~2 s com 1000 × 1000, e no máximo 2 ao mesmo tempo por instância. Para escalas maiores, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
 - **Tempo real sem histórico.** A fila SQS segura o evento até uma réplica do gateway repassá-lo, mas o Redis pub/sub não guarda mensagens: o painel que estava desconectado recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams ou guardar os últimos eventos por tópico.
 - **Floci não é a AWS.** Retentativas de entrega do SNS, latências e limites são aproximações locais. Antes de produção, os mesmos testes de integração deveriam rodar contra uma conta AWS de teste, e a topologia ir para o Terraform (com alarmes na idade da mensagem mais antiga e no tamanho da fila morta).
 - **Revogação imediata de access token.** Hoje vale até expirar (15 min). Se for necessária, uma denylist curta no Redis resolveria.
