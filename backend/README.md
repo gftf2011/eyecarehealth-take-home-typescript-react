@@ -44,9 +44,9 @@ Pronto: API em http://localhost:3001/api (documentação Swagger em http://local
 
 ## Arquitetura
 
-### Três processos, um código
+### Quatro processos, um código
 
-O mesmo código (e a mesma imagem Docker) roda em três processos independentes:
+O mesmo código (e a mesma imagem Docker) roda em quatro processos independentes:
 
 ```
                          ┌─────────────────────────── PostgreSQL ───────────────────────────┐
@@ -68,6 +68,11 @@ O mesmo código (e a mesma imagem Docker) roda em três processos independentes:
                                                                   ▼
  painel <──WebSocket──  realtime :3002  ──PUBLISH/SUBSCRIBE──  Redis pub/sub (todas as réplicas recebem)
                         (realtime-gateway.ts)
+
+   SNS ── assinatura (só delivery.delivery-person-updates) ──► SQS fastmeals-ordering.fifo (+ fastmeals-ordering-dlq.fifo)
+                                                                  │ long polling
+                                                                  ▼
+                           event-consumers (event-consumers.ts) ── caso de uso do Ordering ──► PostgreSQL
 ```
 
 | Processo | Entrypoint | Responsabilidade | Depende de |
@@ -75,10 +80,11 @@ O mesmo código (e a mesma imagem Docker) roda em três processos independentes:
 | **API** | `src/main/server.ts` | REST, autenticação, regras de negócio; grava eventos de integração no outbox | PostgreSQL, Redis (rate limit), segredos JWT |
 | **Outbox relay** | `src/main/outbox-relay.ts` | Publica as mensagens confirmadas do outbox no tópico SNS; retentativa com backoff; fila morta do outbox; limpeza após 7 dias | PostgreSQL, SNS |
 | **Realtime gateway** | `src/main/realtime-gateway.ts` | Consome a fila SQS do tempo real, espalha cada evento pelo Redis entre as réplicas e o repassa aos painéis por WebSocket autenticado | SQS, Redis, segredo do access token |
+| **Consumidores de eventos** | `src/main/event-consumers.ts` | Reações de um contexto aos eventos de outro, cada uma com a própria fila: o Ordering tira dos pedidos que não saíram o entregador desativado ou removido ([ver abaixo](#entregador-desativado-ou-removido)) | PostgreSQL, SQS |
 
 Dois jobs de uma execução preparam o ambiente: `migrate` (migrations) e `messaging-setup` (tópico, filas, fila morta e assinatura; ver [Mensageria](#mensageria-sns--sqs)).
 
-Por que separados: conexões longas (WebSocket) e o worker não competem com a API, cada um escala e reinicia sozinho, e um deploy da API não derruba os painéis. O relay pode ter várias réplicas (lotes disjuntos via `SKIP LOCKED`); o gateway também (a fila divide as mensagens entre as réplicas, e o Redis as leva a todas).
+Por que separados: conexões longas (WebSocket) e os workers não competem com a API, cada um escala e reinicia sozinho, e um deploy da API não derruba os painéis. O relay pode ter várias réplicas (lotes disjuntos via `SKIP LOCKED`); o gateway também (a fila divide as mensagens entre as réplicas, e o Redis as leva a todas).
 
 ### Bounded contexts
 
@@ -123,7 +129,7 @@ npm run docker:up
 
 Os scripts só chamam o Docker Compose (`docker compose -f ../docker-compose.yml …`).
 
-Sobe, nesta ordem: `postgres`, `redis` e `floci` → `migrate` (aplica as migrations e sai) → `messaging-setup` (cria tópico SNS, filas SQS e assinatura, e sai) e `seed` (popula com `seed/data.json` e sai) → `api`, `outbox-relay` e `realtime`. Todos têm health check. A imagem é construída uma vez (pelo `migrate`) com a raiz do repositório como contexto (ela leva o `seed/data.json`), filtrada por [`Dockerfile.dockerignore`](Dockerfile.dockerignore), que só deixa entrar `backend/` e `seed/`; os outros serviços reaproveitam a mesma imagem.
+Sobe, nesta ordem: `postgres`, `redis` e `floci` → `migrate` (aplica as migrations e sai) → `messaging-setup` (cria tópico SNS, filas SQS e assinatura, e sai) e `seed` (popula com `seed/data.json` e sai) → `api`, `outbox-relay`, `realtime` e `event-consumers`. Todos têm health check. A imagem é construída uma vez (pelo `migrate`) com a raiz do repositório como contexto (ela leva o `seed/data.json`), filtrada por [`Dockerfile.dockerignore`](Dockerfile.dockerignore), que só deixa entrar `backend/` e `seed/`; os outros serviços reaproveitam a mesma imagem.
 
 | Serviço | URL |
 |---|---|
@@ -167,6 +173,10 @@ npm run dev:relay              # worker do outbox
 
 ```bash
 npm run dev:realtime           # WebSocket em ws://localhost:3002/realtime
+```
+
+```bash
+npm run dev:consumers          # consumidores de eventos (ex.: entregador desativado)
 ```
 
 `npm run seed -- --reset` apaga os dados e popula de novo (recusado com `NODE_ENV=production`).
@@ -222,7 +232,7 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 87 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 91 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 21 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 13 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
@@ -331,6 +341,17 @@ Resposta da otimização:
 | `PUT` | `/delivery-persons/:id` | `delivery-persons:write` | Atualização parcial (dados, ativação, localização; as duas coordenadas `null` apagam a posição) |
 | `DELETE` | `/delivery-persons/:id` | `delivery-persons:write` | Soft delete → `204`; `409 DELIVERY_PERSON_IN_USE` se estiver em entrega |
 
+#### Entregador desativado ou removido
+
+Desativar (ou remover) um entregador **não** mexe na entrega que ele já está fazendo: o pedido `delivering` segue com ele até `delivered`. Os pedidos que ainda não saíram (`pending`, `preparing`, `ready`) e estavam atribuídos a ele **perdem o entregador e voltam para a atribuição**, em geral em menos de 1 s:
+
+1. O Delivery publica `delivery-person.activation-changed` (ou `delivery-person.removed`) pelo outbox.
+2. O SNS entrega a mensagem à fila do Ordering (`fastmeals-ordering.fifo`), que só assina esse tópico.
+3. O processo `event-consumers` chama o caso de uso [`ReleaseDeliveryPersonOrders`](src/ordering/application/usecases/release-delivery-person-orders/release-delivery-person-orders.usecase.ts), que confere o estado **atual**: se o entregador foi reativado nesse meio-tempo, nada muda.
+4. Cada pedido liberado publica `order.delivery-person-unassigned`, e o quadro de atribuição atualiza sozinho.
+
+Antes disso terminar, nada sai errado: despachar com o entregador inativo já é recusado (`422 DELIVERY_PERSON_UNAVAILABLE`), e a sugestão do otimizador só considera entregadores ativos.
+
 ### Relatórios
 
 | Método | Rota | Parâmetros | Base de data |
@@ -430,8 +451,9 @@ Endpoint: `ws://localhost:3002/realtime`. A origem do navegador precisa estar em
 
 Tópicos e tipos de `payload.type`:
 
-- `ordering.order-updates`: `order.placed`, `order.status-changed` (com `previousStatus`, `status`, `deliveryPersonId`) e `order.delivery-person-assigned`. Dados pessoais do cliente não trafegam pelo canal.
+- `ordering.order-updates`: `order.placed`, `order.status-changed` (com `previousStatus`, `status`, `deliveryPersonId`), `order.delivery-person-assigned` e `order.delivery-person-unassigned` (com `previousDeliveryPersonId`: o entregador foi desativado ou removido). Dados pessoais do cliente não trafegam pelo canal.
 - `catalog.product-updates`: `product.created`, `product.updated`, `product.price-changed`, `product.availability-changed` (com `isAvailable`) e `product.removed`, todos com `productId`. O painel recarrega os dados pela API.
+- `delivery.delivery-person-updates`: `delivery-person.registered`, `delivery-person.updated`, `delivery-person.relocated`, `delivery-person.activation-changed` (com `isActive`) e `delivery-person.removed`, todos com `deliveryPersonId`. Sem nome, telefone nem coordenadas: o canal é o mesmo para todos os perfis, e os dados vêm pela API, que exige `delivery-persons:read`.
 
 3. Um novo `auth` com o token renovado estende a conexão; quando o token vence, o servidor fecha com `4401`.
 
@@ -449,13 +471,15 @@ A entrega é **pelo menos uma vez**: o cliente descarta repetidos pelo `id` e, a
 
 ## Mensageria (SNS + SQS)
 
-O relay publica cada mensagem do outbox **uma vez**, no tópico SNS **FIFO** `fastmeals-events.fifo`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`) no atributo `topic`. Publica **em lote**: o lote do outbox (até 100 mensagens) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, com resultado por mensagem; uma que falha fica pendente e segura só as seguintes do mesmo agregado. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
+O relay publica cada mensagem do outbox **uma vez**, no tópico SNS **FIFO** `fastmeals-events.fifo`, com o tópico lógico (`ordering.order-updates`, `catalog.product-updates`, `delivery.delivery-person-updates`) no atributo `topic`. Publica **em lote**: o lote do outbox (até 100 mensagens) vira chamadas `PublishBatch` de até 10 mensagens e 256 KiB, 5 em paralelo, com resultado por mensagem; uma que falha fica pendente e segura só as seguintes do mesmo agregado. Cada consumidor tem a **própria fila SQS** assinada no tópico, com filtro e fila morta próprios; um consumidor novo (e-mail, analytics) é só mais uma fila, sem mexer no relay.
 
 | Recurso | Nome | Papel |
 |---|---|---|
 | Tópico SNS FIFO | `fastmeals-events.fifo` | Recebe tudo o que sai do outbox, com deduplicação explícita e vazão por grupo |
 | Fila SQS FIFO | `fastmeals-realtime.fifo` | Assinada no tópico com filtro pelos tópicos do painel e entrega crua (o corpo é o envelope); visibility timeout de 30 s |
 | Fila morta FIFO | `fastmeals-realtime-dlq.fifo` | Recebe do SQS a mensagem que falhou 5 vezes; guarda por 14 dias |
+| Fila SQS FIFO | `fastmeals-ordering.fifo` | Do Ordering: só `delivery.delivery-person-updates`; mesmos limites da do tempo real |
+| Fila morta FIFO | `fastmeals-ordering-dlq.fifo` | Mudança da frota que o Ordering não conseguiu aplicar 5 vezes (banco fora, contrato incompatível) |
 
 Em desenvolvimento e nos testes, tudo roda no **[Floci](https://floci.io)** (emulador local da AWS, em `http://localhost:4566`), criado pelo job `messaging-setup` ([`messaging-setup.ts`](src/main/messaging-setup.ts)), que pode rodar de novo sem efeito. Em produção, o mesmo código fala com a AWS: basta não definir `AWS_ENDPOINT_URL` e declarar os recursos na infraestrutura como código.
 
@@ -480,8 +504,9 @@ Pedidos diferentes andam em paralelo. Um pedido com uma mensagem que sempre falh
 |---|---|---|---|
 | **Publicar** (o SNS recusa a mensagem) | coluna `dead_lettered_at` do outbox | `npm run outbox:dead-letters` | `npm run outbox:redrive -- --all` |
 | **Consumir** (o gateway não consegue repassar) | SQS `fastmeals-realtime-dlq.fifo` | `npm run events:dead-letters` | `npm run events:redrive` |
+| **Consumir** (o Ordering não consegue aplicar) | SQS `fastmeals-ordering-dlq.fifo` | `npm run events:dead-letters -- ordering` | `npm run events:redrive -- ordering` |
 
-No Docker: `docker compose run --rm --no-deps outbox-relay node dist/outbox-redrive.js list` e `docker compose run --rm --no-deps realtime node dist/events-dead-letters.js list` (ou `redrive`).
+No Docker: `docker compose run --rm --no-deps outbox-relay node dist/outbox-redrive.js list` e `docker compose run --rm --no-deps realtime node dist/events-dead-letters.js list` (ou `redrive`; acrescente `ordering` para a fila do Ordering).
 
 ### Fila morta do outbox
 
@@ -509,7 +534,7 @@ API, relay e gateway exportam **traces, métricas e logs** por OTLP. O SDK é pr
 | Grafana com o dashboard **FastMeals** | http://localhost:3300/d/fastmeals |
 | OTLP para processos fora do Docker (`npm run dev`) | `http://localhost:4318` |
 
-### Um trace por ação, pelos três processos
+### Um trace por ação, por todos os processos
 
 O contexto do trace da requisição é gravado no outbox junto com o evento (coluna `trace_context`). O relay publica cada mensagem num span de **produtor** filho dele e leva o `traceparent` nos atributos da mensagem SNS; o gateway processa a mensagem da fila num span de **consumidor** filho do produtor. Uma mudança de status no painel aparece, no Tempo, como um trace só:
 
@@ -518,6 +543,8 @@ PATCH /api/orders/:id/status   (fastmeals-api: handler, BEGIN/SELECT/INSERT no o
 └─ publish ordering.order-updates   (fastmeals-outbox-relay)
    └─ process fastmeals-realtime.fifo   (fastmeals-realtime: PUBLISH no Redis)
 ```
+
+Desativar um entregador com pedidos atribuídos segue o mesmo caminho e continua no `fastmeals-event-consumers` (`process fastmeals-ordering.fifo`, com as escritas no banco), até a mensagem `order.delivery-person-unassigned` chegar ao painel.
 
 O ciclo do relay também é um span (`outbox relay batch`), ligado aos traces das mensagens que publicou.
 
@@ -580,12 +607,14 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `OTEL_METRIC_EXPORT_INTERVAL` | API, relay, gateway | `15000` | Intervalo de exportação das métricas (ms) |
 | `OTEL_SDK_DISABLED` | API, relay, gateway | `false` | `true` desliga a telemetria (no-op) |
 | `RELAY_HEALTH_PORT` | relay | `3003` | Porta interna do health check |
+| `EVENT_CONSUMERS_HEALTH_PORT` | consumidores | `3004` | Porta interna do health check |
 | `AWS_REGION` | relay, gateway, setup | `us-east-1` | Região AWS |
 | `AWS_ENDPOINT_URL` | relay, gateway, setup | vazio (AWS real) | Endpoint do emulador (`http://localhost:4566` com o Floci) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | relay, gateway, setup | cadeia padrão do SDK | Credenciais (`test` / `test` no Floci) |
 | `EVENTS_TOPIC_ARN` | relay | — | ARN do tópico SNS FIFO de eventos (termina em `.fifo`) |
 | `EVENTS_TOPIC_NAME` | setup | `fastmeals-events.fifo` | Nome do tópico FIFO a criar |
 | `REALTIME_QUEUE_NAME` / `REALTIME_DLQ_NAME` | gateway, setup | `fastmeals-realtime.fifo` / `fastmeals-realtime-dlq.fifo` | Fila FIFO do tempo real e a fila morta dela (ambas FIFO) |
+| `ORDERING_QUEUE_NAME` / `ORDERING_DLQ_NAME` | consumidores, setup | `fastmeals-ordering.fifo` / `fastmeals-ordering-dlq.fifo` | Fila FIFO do Ordering (mudanças na frota) e a fila morta dela |
 | `REALTIME_MAX_RECEIVE_COUNT` | setup | `5` | Recebimentos sem sucesso até a fila morta do SQS |
 | `REALTIME_VISIBILITY_TIMEOUT_SECONDS` | setup | `30` | Quanto a mensagem fica invisível enquanto é processada |
 | `REALTIME_PORT` | gateway | `3002` | Porta do WebSocket |
@@ -600,14 +629,14 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 |---|---|
 | `npm run docker:up` / `docker:down` / `docker:reset` / `docker:logs` | Backend completo no Docker (ver [Como rodar](#como-rodar)) |
 | `npm run dev` | API com recarga automática (tsx watch) |
-| `npm run dev:relay` / `npm run dev:realtime` | Worker do outbox / gateway WebSocket com recarga |
+| `npm run dev:relay` / `npm run dev:realtime` / `npm run dev:consumers` | Worker do outbox / gateway WebSocket / consumidores de eventos, com recarga |
 | `npm run seed` | Aplica as migrations e popula o banco (`-- --reset` para recriar) |
 | `npm run migrate:latest` / `npm run migrate:down` | Aplica as migrations pendentes / desfaz a última |
 | `npm run messaging:setup` | Cria tópico, filas, fila morta e assinatura (Floci ou AWS) |
 | `npm run outbox:dead-letters` / `npm run outbox:redrive` | Lista / devolve à fila as mensagens mortas do outbox (ver [Duas filas mortas](#duas-filas-mortas)) |
-| `npm run events:dead-letters` / `npm run events:redrive` | Lista / devolve à fila do tempo real as mensagens mortas do SQS |
-| `npm run build` | Bundles de produção em `dist/` (`server`, `dispatch-planner.worker`, `outbox-relay`, `outbox-redrive`, `realtime-gateway`, `messaging-setup`, `events-dead-letters`, `migrate`, `seed`) |
-| `npm start`, `start:relay`, `start:realtime`, `start:migrate`, `start:seed` | Rodam os bundles de `dist/` |
+| `npm run events:dead-letters` / `npm run events:redrive` | Lista / devolve à fila de origem as mensagens mortas do SQS (do tempo real; `-- ordering` para a do Ordering) |
+| `npm run build` | Bundles de produção em `dist/` (`server`, `dispatch-planner.worker`, `outbox-relay`, `outbox-redrive`, `realtime-gateway`, `event-consumers`, `messaging-setup`, `events-dead-letters`, `migrate`, `seed`) |
+| `npm start`, `start:relay`, `start:realtime`, `start:consumers`, `start:migrate`, `start:seed` | Rodam os bundles de `dist/` |
 | `npm test`, `test:unit`, `test:architecture`, `test:integration`, `test:e2e`, `test:watch` | Testes |
 | `npm run typecheck` | Verificação de tipos |
 | `npm run lint` | Oxlint com regras de tipo ([`.oxlintrc.json`](.oxlintrc.json)); falha em qualquer aviso |

@@ -8,9 +8,9 @@ Painel administrativo da **FastMeals** em **React 19 + TypeScript** estrito. Mes
 > **Estado atual:**
 > - **Identity**: login, sessão, renovação de token, rotas protegidas por sessão e permissão, logout.
 > - **Catalog**: tela de produtos (`/produtos`) com busca por nome enquanto digita, filtros de categoria e disponibilidade na URL, tabela paginada, criar/editar em modal com validação em tempo real (as mesmas regras e mensagens da API), alternar disponibilidade na linha com atualização otimista e exclusão com confirmação (o `409 PRODUCT_IN_USE` sugere desativar em vez de excluir).
-> - **Delivery**: tela de atribuição (`/atribuicao`, só para `orders:write`) com os pedidos prontos e os entregadores livres (sem GPS sinalizado), a sugestão do otimizador do backend (pares com distância, total em km, algoritmo e tempo de execução) e aceitar/rejeitar cada par ou aceitar todos. Aceitar despacha o pedido (`delivering`); uma sugestão desatualizada é marcada com o motivo da API sem afetar os outros pares.
+> - **Delivery**: tela de atribuição (`/atribuicao`, só para `orders:write`) com os pedidos prontos e os entregadores livres (sem GPS sinalizado), a sugestão do otimizador do backend (pares com distância, total em km, algoritmo e tempo de execução) e aceitar/rejeitar cada par ou aceitar todos. Aceitar despacha o pedido (`delivering`); uma sugestão desatualizada é marcada com o motivo da API sem afetar os outros pares. Tela de entregadores (`/entregadores`, com `delivery-persons:read`): a frota com veículo, situação (livre, em entrega ou inativo) e localização, filtros de ativação e de entrega na URL, cadastrar/editar em modal com validação em tempo real (nome, telefone `(XX) XXXXX-XXXX`, veículo e as duas coordenadas juntas ou nenhuma), ativar/desativar na linha com atualização otimista e exclusão com confirmação (o `409 DELIVERY_PERSON_IN_USE` sugere esperar a entrega ou desativar).
 > - **Reporting**: relatórios (`/relatorios`) com período na URL (atalhos de 7 dias, 30 dias e mês atual; até 366 dias, dias de São Paulo), resumo (receita, pedidos entregues, ticket médio, tempo médio de entrega), receita por dia (área), top 10 produtos (barras), pedidos por status (rosca) e tempo de entrega por veículo. Cada relatório carrega e falha sozinho, e cada gráfico tem uma tabela equivalente para leitores de tela.
-> - **Realtime**: o painel fica conectado ao gateway WebSocket (selo "Ao vivo" no topo). Pedido criado ou alterado em qualquer lugar recarrega sozinho a lista de pedidos, o detalhe aberto e o quadro de atribuição. A conexão autentica pela primeira mensagem com o access token, reautentica quando o token renova, reconecta com backoff exponencial e aleatório (`4401` renova a sessão antes; `4403` desiste), descarta eventos repetidos e, ao voltar de uma queda, recarrega as telas.
+> - **Realtime**: o painel fica conectado ao gateway WebSocket (selo "Ao vivo" no topo). Pedido criado ou alterado em qualquer lugar recarrega sozinho a lista de pedidos, o detalhe aberto e o quadro de atribuição; um entregador cadastrado, editado, desativado ou removido, ou um despacho que o ocupa, recarrega a tela de entregadores e o quadro. A conexão autentica pela primeira mensagem com o access token, reautentica quando o token renova, reconecta com backoff exponencial e aleatório (`4401` renova a sessão antes; `4403` desiste), descarta eventos repetidos e, ao voltar de uma queda, recarrega as telas.
 > - **Ordering**: painel de pedidos (`/pedidos`, a página inicial) com filtros por status, período e ordenação guardados na URL, lista paginada, detalhe em modal com link próprio e botões de status contextuais (só as transições válidas; cancelar pede confirmação; despachar sem entregador fica bloqueado com o motivo; perfil `viewer` não vê ações).
 >
 
@@ -107,7 +107,7 @@ main → presentation → application → domain
 
 ### Erros
 
-O cliente HTTP traduz cada resposta de erro da API (`{ error: { code, message, details } }`) para a mesma categoria do backend: `InputValidationError` (400, com mensagens por campo), `UnauthenticatedError` (401), `ForbiddenError` (403), `ResourceNotFoundError` (404), `RequestConflictError` (409), `BusinessRuleRejectedError` (422), `RateLimitedError` (429, com `Retry-After`) e `ServiceUnavailableError` (rede, 5xx ou resposta fora do contrato, validada com Zod). As telas mostram a mensagem sem conhecer HTTP. Só falhas transitórias são repetidas automaticamente.
+O cliente HTTP traduz cada resposta de erro da API (`{ error: { code, message, details } }`) para a mesma categoria do backend: `InputValidationError` (400, com mensagens por campo), `UnauthenticatedError` (401), `ForbiddenError` (403), `ResourceNotFoundError` (404), `RequestConflictError` (409), `BusinessRuleRejectedError` (422), `RateLimitedError` (429, com `Retry-After`) e `ServiceUnavailableError` (rede, 5xx ou resposta fora do contrato, validada com Zod). Dos `details`, só os por campo (`{ field, message }`) são usados; os outros (como o `{ deliveryPersonId }` de um `409`) não invalidam o erro. As telas mostram a mensagem sem conhecer HTTP. Só falhas transitórias são repetidas automaticamente.
 
 ### Formulários
 
@@ -133,7 +133,7 @@ npm run lint               # oxlint: regras de tipo, React (hooks) e acessibilid
 | Sufixo | O que cobre |
 |---|---|
 | `*.unit.spec.ts(x)` | Value Objects, casos de uso com fakes, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token (renovação única), trava entre abas, agendador (fake timers), componentes (renderização e interação) |
-| `*.integration.spec.tsx` | O painel inteiro, montado como em `main.tsx`, com roteador em memória e a API atendida pelo **MSW**: login válido e inválido, retorno à página pedida, sessão restaurada no reload, sessão revogada → login com aviso, logout |
+| `*.integration.spec.tsx` | O painel inteiro, montado como em `main.tsx`, com roteador em memória e a API atendida pelo **MSW**: login válido e inválido, retorno à página pedida, sessão restaurada no reload, sessão revogada → login com aviso, logout; as telas de pedidos, produtos, atribuição, entregadores e relatórios; tempo real |
 | `*.architecture.spec.ts` | Camadas, isolamento entre contextos, domínio sem bibliotecas, aplicação sem React/HTTP/APIs do navegador, segurança (sem storage, sem HTML cru, sem `document.cookie`), convenções de nomes e pastas |
 
 Nenhum teste do Vitest chama a rede: o MSW recusa qualquer requisição sem handler.
@@ -156,10 +156,11 @@ npm run test:e2e:report                # relatório HTML (trace, vídeo e screen
 | `products.e2e.ts` | Cardápio do seed, criação com validação em tempo real, busca com filtro na URL, edição, pausar persistindo após o reload, exclusão confirmada |
 | `orders.e2e.ts` | Lista e filtro por status pela URL, só transições válidas no detalhe, despacho que exige entregador |
 | `assignment.e2e.ts` | Quadro de prontos e entregadores livres (o que está em entrega não aparece), sugestão pelo Húngaro com distâncias, aceitar despacha |
+| `delivery-persons.e2e.ts` | Cadastrar, editar, desativar (persistindo após o reload) e excluir pela tela; o `409` de quem está em entrega; a lista atualizando sozinha quando outro gestor cadastra; desativar um entregador devolve o pedido pronto dele à atribuição, ao vivo (passando pelos consumidores de eventos do backend); perfil somente leitura sem a tela |
 | `reports.e2e.ts` | As quatro métricas com os dados do seed, troca de período |
 | `realtime.e2e.ts` | Dois gestores em navegadores separados: o produto pausado por um aparece pausado para o outro; pedido novo e mudança de status chegam sem recarregar, passando por outbox → SNS FIFO → SQS FIFO → gateway → WebSocket |
 
-Cada teste entra pela API com **a própria sessão**: reaproveitar um cookie salvo (o `storageState` do Playwright) entre testes dispararia a detecção de reuso do refresh token rotativo, que revoga a sessão. Os testes que alteram dados criam os próprios pela API (com nomes únicos) e rodam em sequência sobre o mesmo banco.
+Cada teste entra pela API com **a própria sessão**: reaproveitar um cookie salvo (o `storageState` do Playwright) entre testes dispararia a detecção de reuso do refresh token rotativo, que revoga a sessão. Os testes que alteram dados criam os próprios pela API (com nomes únicos) e rodam em sequência sobre o mesmo banco. Por isso nenhum teste depende de um dado do seed que outro teste muda (o pedido pronto do seed é despachado pela atribuição), nem da primeira página de uma listagem que os outros testes enchem.
 
 ## Scripts
 

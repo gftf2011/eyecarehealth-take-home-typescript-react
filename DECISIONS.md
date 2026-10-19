@@ -18,17 +18,18 @@ Este documento registra as decisões técnicas do projeto: por que cada bibliote
 
 ## 1. Visão geral
 
-O projeto tem duas aplicações. O **backend** é um **monólito modular**: um repositório, uma imagem Docker e três processos com responsabilidades diferentes. Os eventos saem do outbox por **SNS + SQS** (no Floci em desenvolvimento), com fila morta ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)). O **painel** (React) é servido por um nginx que também faz o proxy da API e do WebSocket na mesma origem.
+O projeto tem duas aplicações. O **backend** é um **monólito modular**: um repositório, uma imagem Docker e quatro processos com responsabilidades diferentes. Os eventos saem do outbox por **SNS + SQS** (no Floci em desenvolvimento), com fila morta ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)). O **painel** (React) é servido por um nginx que também faz o proxy da API e do WebSocket na mesma origem.
 
 ```mermaid
 flowchart LR
     navegador([Navegador])
     painel[Painel :3000<br/>nginx + React]
 
-    subgraph processos[Backend: mesma imagem, três processos]
+    subgraph processos[Backend: mesma imagem, quatro processos]
         api[API REST :3001<br/>server.ts]
         relay[Outbox relay<br/>outbox-relay.ts]
         gw[Gateway WebSocket :3002<br/>realtime-gateway.ts]
+        consumers[Consumidores de eventos<br/>event-consumers.ts]
     end
 
     pg[(PostgreSQL 17<br/>tabelas + outbox_events)]
@@ -36,6 +37,7 @@ flowchart LR
     sns[[SNS FIFO fastmeals-events.fifo]]
     sqs[[SQS FIFO fastmeals-realtime.fifo]]
     dlq[[SQS FIFO fastmeals-realtime-dlq.fifo]]
+    orderingQueue[[SQS FIFO fastmeals-ordering.fifo<br/>+ fila morta]]
     lgtm[(otel-lgtm<br/>Prometheus, Loki, Tempo, Grafana)]
 
     navegador -- HTTPS / WebSocket --> painel
@@ -48,7 +50,10 @@ flowchart LR
     sqs -- 5 falhas --> dlq
     sqs -- long polling --> gw
     gw -- PUBLISH / SUBSCRIBE<br/>entre as réplicas --> redis
-    api & relay & gw -. OTLP: traces, métricas e logs .-> lgtm
+    sns -- só a frota --> orderingQueue
+    orderingQueue -- long polling --> consumers
+    consumers -- caso de uso do Ordering --> pg
+    api & relay & gw & consumers -. OTLP: traces, métricas e logs .-> lgtm
     painel -- /realtime --> gw
 ```
 
@@ -327,7 +332,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Decisão.**
   1. Os agregados registram eventos de domínio (`OrderPlaced`, `OrderStatusChanged`, ...).
   2. Os repositórios só os **coletam**; o Unit of Work os entrega a um **mediator em memória**, ainda dentro da transação e antes do commit.
-  3. Um *handler* decide o que sai do processo: o [`PublishOrderUpdateHandler`](backend/src/ordering/application/event-handlers/publish-order-update.handler.ts) converte os eventos de pedido numa mensagem pública versionada (`ordering.order-updates` v1, **sem dados pessoais do cliente**) e a grava na tabela `outbox_events`, na mesma transação. O Catalog faz o mesmo com o [`PublishProductUpdateHandler`](backend/src/catalog/application/event-handlers/publish-product-update.handler.ts) (`catalog.product-updates` v1: criado, editado, preço, disponibilidade, removido).
+  3. Um *handler* decide o que sai do processo: o [`PublishOrderUpdateHandler`](backend/src/ordering/application/event-handlers/publish-order-update.handler.ts) converte os eventos de pedido numa mensagem pública versionada (`ordering.order-updates` v1, **sem dados pessoais do cliente**) e a grava na tabela `outbox_events`, na mesma transação. O Catalog faz o mesmo com o [`PublishProductUpdateHandler`](backend/src/catalog/application/event-handlers/publish-product-update.handler.ts) (`catalog.product-updates` v1: criado, editado, preço, disponibilidade, removido), e o Delivery com o [`PublishDeliveryPersonUpdateHandler`](backend/src/delivery/application/event-handlers/publish-delivery-person-update.handler.ts) (`delivery.delivery-person-updates` v1: cadastrado, editado, localização, ativação, removido; só o id, sem nome nem telefone, porque o canal do tempo real é o mesmo para todos os perfis).
   4. O [relay](backend/src/shared-kernel/infra/outbox/outbox-relay.ts) lê o outbox em lotes e publica no tópico SNS de eventos ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
   5. **Fila morta no próprio outbox**, para o que o broker **recusa**. Queda do broker (`BrokerUnavailableError`: rede, throttling, 5xx) não conta tentativa: o relay espera e tenta de novo. Recusa da mensagem (`InvalidParameter`, por exemplo, grande demais) conta. Na `OUTBOX_MAX_ATTEMPTS`-ésima (padrão 5), a linha ganha `dead_lettered_at` e `last_error`, sai do índice de pendentes e o lote segue. A retenção não apaga mensagens mortas, e o [`outbox-redrive`](backend/src/main/outbox-redrive.ts) lista e devolve à fila depois de corrigida a causa.
 - **Alternativas.** *Publicar no Redis direto do caso de uso*: perde o evento se o processo cair depois do commit, ou publica um evento de uma transação que vai falhar. *Todo evento de domínio no outbox automaticamente*: expõe a estrutura interna do domínio como contrato público. *CDC (Debezium) ou broker (Kafka/RabbitMQ)*: robustos, mas infraestrutura demais para um painel. *Fila morta da publicação no SQS*: mover a mensagem recusada para outro sistema deixaria de ser atômico com a transação do outbox; no banco, marcar como morta é um `UPDATE` na mesma transação. O SQS tem a fila morta do **consumo** ([ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out)).
@@ -340,6 +345,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Protocolo do gateway.** Autenticação pela **primeira mensagem** `{ type: "auth", accessToken }` em até 5 s. O navegador não envia `Authorization` em WebSocket, e token na URL vazaria em logs de proxy. Além disso: allowlist de `Origin` antes do upgrade, *heartbeat* ping/pong de 30 s, limite de 4 KB por mensagem, *backpressure* de 1 MB (cliente lento é desconectado com `1013`), reautenticação para estender a sessão e `1012` no shutdown para o cliente reconectar.
 - **Alternativas.** WebSocket dentro da API: mais simples, mas um deploy da API derrubaria todos os painéis, e conexões longas competiriam com requisições curtas. Relay dentro da API: com N réplicas da API seriam N relays, acoplados ao ciclo de vida do HTTP.
 - **Consequências.** ➕ Cada processo escala, reinicia e tem health check próprio. ➖ Mais serviços para operar; o pub/sub não guarda mensagens, então o cliente recarrega a lista pela API ao reconectar.
+- **Depois.** Um quarto processo, `event-consumers`, recebe as reações de um contexto aos eventos de outro ([ADR-28](#adr-28--entregador-desativado-ou-removido-o-ordering-reage-pela-própria-fila)).
 
 ### ADR-06 — Access token em memória e refresh token rotativo em cookie `httpOnly`
 
@@ -403,7 +409,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 87 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 91 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 21 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
   | `*.e2e.spec.ts` | 13 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
@@ -417,7 +423,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 - **Decisão.**
   - **Imagem do backend:** multi-stage (`node:22-alpine`, usuário não root, só dependências de produção). Cada serviço escolhe o processo pelo comando. Só o `migrate` constrói a imagem; os outros a reaproveitam (vários serviços com `build` da mesma imagem fazem o BuildKit exportá-la em paralelo, e os exports colidem).
   - **Imagem do frontend:** build do Vite servido por nginx sem root, que faz o proxy de `/api` e `/realtime` para o backend na mesma origem (o cookie `httpOnly` funciona sem CORS), com SPA fallback, cache imutável dos assets e cabeçalhos de segurança (CSP).
-  - **Compose único na raiz:** `docker compose up --build` sobe, nesta ordem, `postgres` e `redis` → `migrate` → `seed` → `api`, `outbox-relay` e `realtime` → `frontend`, todos com health check. Os scripts `npm run docker:*` do backend usam o mesmo arquivo para subir só o backend.
+  - **Compose único na raiz:** `docker compose up --build` sobe, nesta ordem, `postgres` e `redis` → `migrate` → `seed` → `api`, `outbox-relay`, `realtime` e `event-consumers` → `frontend`, todos com health check. Os scripts `npm run docker:*` do backend usam o mesmo arquivo para subir só o backend.
   - **Proxy confiável, sem endereço fixo:** a API confia em um salto de proxy (`TRUST_PROXY=1`), o nginx, que acrescenta o IP real ao `X-Forwarded-For`; um valor forjado pelo cliente fica à esquerda e é ignorado. As portas da API, do gateway, do Postgres e do Redis só abrem em `127.0.0.1`, então ninguém na rede fala com a API sem passar pelo nginx.
   - **Contexto de build do backend:** a raiz do repositório, para levar o `seed/data.json`, filtrada por uma allowlist em `Dockerfile.dockerignore`.
 - **Alternativas.** Um compose por aplicação (o do backend chegou a existir em `backend/`), unidos na raiz com `include`: duplica a configuração ou exige override, e o comando do enunciado fica na raiz de qualquer jeito. Para o proxy confiável, uma sub-rede e um IP fixos para o nginx (`TRUST_PROXY=<ip>`) chegaram a ser usados, mas quebram em máquinas onde aquela faixa já existe ("pool overlaps"): foram trocados pelo salto único com as portas presas em `127.0.0.1`.
@@ -519,10 +525,10 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
-  | `*.unit.spec.ts(x)` | 50 | 333 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 8 | 62 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
+  | `*.unit.spec.ts(x)` | 59 | 374 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 9 | 73 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
-  | `e2e/*.e2e.ts` (Playwright) | 6 | 19 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, relatórios e tempo real entre dois navegadores |
+  | `e2e/*.e2e.ts` (Playwright) | 7 | 24 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, relatórios e tempo real entre dois navegadores |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
 - **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Playwright para tudo**: mais realista, mas lento para cobrir cada caso de borda. Ele fica no topo da pirâmide, com poucos testes por fluxo principal, e os casos de borda continuam no Vitest. *Playwright contra o dev server com a API simulada*: rápido, mas repetiria os testes de integração; o valor dele é exercitar a stack de verdade (nginx, cookies, WebSocket, SNS/SQS). *`storageState` compartilhado entre testes*: o refresh token rotativo com detecção de reuso revogaria a sessão no segundo teste, então cada teste entra pela API com a própria sessão.
@@ -538,7 +544,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
      - um lote recusado inteiro é reenviado mensagem a mensagem, para recusar só a culpada.
 
      No Floci, 500 mensagens saíram 15× mais rápido que uma por chamada (8.640 contra 561 por segundo). Na AWS, com dezenas de ms por chamada, a diferença tende a ser maior, e a transação que trava o lote do outbox fica aberta por um intervalo bem menor.
-  2. Cada consumidor tem a **própria fila SQS** assinada no tópico, com **filtro** por tópico lógico e **entrega crua** (o corpo é o envelope). Hoje há uma: `fastmeals-realtime.fifo`. Tópico e filas são FIFO ([ADR-23](#adr-23--tópico-e-filas-fifo-ordem-por-agregado-e-deduplicação-pelo-id-do-outbox)).
+  2. Cada consumidor tem a **própria fila SQS** assinada no tópico, com **filtro** por tópico lógico e **entrega crua** (o corpo é o envelope). Hoje são duas: `fastmeals-realtime.fifo` e `fastmeals-ordering.fifo` ([ADR-28](#adr-28--entregador-desativado-ou-removido-o-ordering-reage-pela-própria-fila)). Tópico e filas são FIFO ([ADR-23](#adr-23--tópico-e-filas-fifo-ordem-por-agregado-e-deduplicação-pelo-id-do-outbox)).
   3. **Fila morta nativa do SQS:** `RedrivePolicy` com `maxReceiveCount=5` para `fastmeals-realtime-dlq.fifo` (retenção de 14 dias). O gateway ([`SqsQueueConsumer`](backend/src/shared-kernel/infra/messaging/aws/sqs-queue-consumer.ts)) só apaga a mensagem depois de repassá-la; se falhar, ela reaparece após o visibility timeout (30 s). Reprocessar é `StartMessageMoveTask` (`npm run events:redrive`).
   4. **O Redis continua, só para o fan-out.** A fila entrega cada mensagem a **uma** réplica do gateway; essa réplica a publica no Redis ([`RealtimeFanoutForwarder`](backend/src/realtime/infra/realtime-fanout.forwarder.ts)), e **todas** a recebem. Sem o Redis, com duas réplicas, metade dos painéis perderia cada evento.
   5. **Duas filas mortas, uma por ponto de falha.** A do outbox ([ADR-04](#adr-04--eventos-de-domínio-com-mediator-em-memória-e-transactional-outbox)) guarda o que o SNS **recusa** (mensagem inválida); a do SQS, o que o gateway **não consegue consumir**. Queda do SNS (rede, throttling, 5xx, credenciais) é transitória: o relay espera sem contar tentativa.
@@ -648,7 +654,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
 - **Contexto.** O caminho de uma ação no painel atravessa três processos e dois brokers: API → outbox → relay → SNS → SQS → gateway → Redis → WebSocket. Sem observabilidade, um "a outra aba não atualizou" não tinha como ser investigado. Os logs de cada processo eram independentes, e não havia métrica nenhuma: nem o atraso do outbox, nem a latência por rota, nem o funil de pedidos.
 - **Decisão.**
-  1. **OpenTelemetry nos três processos**, pré-carregado com `node --import` ([`instrumentation.ts`](backend/src/main/telemetry/instrumentation.ts)), exportando por OTLP. Instrumentação de HTTP, Fastify (`@fastify/otel`), `pg`, `ioredis` e pino, configurada pelas variáveis padrão `OTEL_*`. O mesmo código manda para qualquer backend OTLP.
+  1. **OpenTelemetry em todos os processos**, pré-carregado com `node --import` ([`instrumentation.ts`](backend/src/main/telemetry/instrumentation.ts)), exportando por OTLP. Instrumentação de HTTP, Fastify (`@fastify/otel`), `pg`, `ioredis` e pino, configurada pelas variáveis padrão `OTEL_*`. O mesmo código manda para qualquer backend OTLP.
   2. **Trace que atravessa o outbox.**
      - O `KyselyOutboxWriter` grava o `traceparent` da requisição (nova coluna `trace_context`).
      - O publisher SNS abre um span de **produtor** por mensagem, filho desse contexto, e leva o contexto dele nos atributos da mensagem.
@@ -708,6 +714,28 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➕ O Swagger UI permite testar a API pelo navegador, com Authorize pelo token do login.
   - ➖ Os schemas de resposta são declarados à parte dos presenters: o teste de contrato os mantém em sintonia, mas o tipo não.
   - ➖ Regras de domínio (transições de status, campos obrigatórios da receita) aparecem como descrição, não como validação do schema.
+
+### ADR-28 — Entregador desativado ou removido: o Ordering reage pela própria fila
+
+- **Contexto.** Um pedido pode ter entregador atribuído antes do despacho (`pending`, `preparing` ou `ready`). Se o entregador fosse desativado ou removido, o pedido continuava preso a ele: o quadro de atribuição mostrava "Atribuído a Fulano", e o gestor só descobria ao tentar despachar (`422`). Quem desativa é o Delivery, e quem guarda a atribuição é o Ordering. Os dois contextos não importam o código um do outro.
+- **Decisão.**
+  1. **O Ordering reage ao evento público do Delivery** (`delivery.delivery-person-updates`, que já existia para o painel), numa **fila SQS própria**, `fastmeals-ordering.fifo`, assinada só nesse tópico, com fila morta própria. É o caminho previsto no [ADR-22](#adr-22--eventos-por-sns--sqs-com-fila-morta-e-o-redis-só-para-o-fan-out): um consumidor novo é mais uma fila, sem mexer no relay.
+  2. **Um processo para os consumidores**, `event-consumers`, separado da API, como o relay e o gateway. Ele monta o `SqsQueueConsumer` que já existia.
+  3. **Camada anticorrupção na entrada.** O [`DeliveryPersonUpdatesConsumer`](backend/src/ordering/presentation/consumers/delivery-person-updates.consumer.ts) valida a mensagem com o **próprio esquema** do Ordering. Ele só reage a `activation-changed` com `isActive: false` e a `removed`. Um formato ou versão desconhecidos fazem a mensagem falhar e ir para a fila morta, em vez de sumir.
+  4. **A mensagem só dispara a conferência.** O caso de uso `ReleaseDeliveryPersonOrders` relê o entregador na transação. Se ele foi reativado depois da mensagem, nada muda. Mensagem repetida não tem efeito, porque o pedido já está sem entregador.
+  5. **Ordem de lock: pedidos → entregador**, a mesma do despacho e da atribuição. Um teste de concorrência com o PostgreSQL confere que um despacho simultâneo espera a liberação e não sai com o entregador desativado.
+  6. **O pedido liberado publica `order.delivery-person-unassigned`**, e o quadro de atribuição e as listas atualizam sozinhos.
+  7. **A entrega em andamento não muda.** O pedido `delivering` segue com o entregador até `delivered`; desativar só impede novas atribuições.
+- **Alternativas.**
+  - *Recusar a desativação* (`409`) enquanto houver pedido atribuído: mais simples, mas trava o gestor justamente quando o entregador precisa sair (adoeceu, a moto quebrou).
+  - *Chamar o Ordering de dentro do caso de uso do Delivery*: acopla os contextos e põe as duas escritas numa transação só, que precisaria conhecer as tabelas do outro.
+  - *Reagir no mesmo processo, depois do commit* (`afterCommit`): sem fila nem processo novos, mas a reação se perde se o processo cair entre o commit e a chamada.
+  - *Só avisar na tela*: deixa o problema visível, mas não o resolve.
+- **Consequências.**
+  - ➕ Os contextos continuam independentes, e a reação tem retentativa, fila morta e trace como o resto da mensageria.
+  - ➕ Enquanto a reação não chega, nada sai errado: o despacho com o entregador inativo já era recusado, e o otimizador só considera entregadores ativos.
+  - ➖ Mais um processo e mais uma fila para operar.
+  - ➖ A liberação é eventual (em geral, menos de 1 s depois da desativação).
 
 ---
 
@@ -835,12 +863,16 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 37. **Documentação que podia estar errada sem ninguém perceber.** Na primeira versão, o texto do `401` citava um código (`UNAUTHENTICATED`) que a API nunca devolve, e nenhum teste olhava isso. **Solução:** o texto passou a citar os códigos reais (`INVALID_TOKEN`, `TOKEN_EXPIRED`), e o teste de contrato valida as respostas reais, de sucesso e de erro, contra os schemas documentados. Uma verificação manual (tirar um campo do schema de entregador) derrubou três testes.
 
+38. **Erro da API escondido atrás de "o servidor encontrou um erro".** O Playwright da nova tela de entregadores pegou: excluir quem está em entrega mostrava a mensagem genérica, embora a API respondesse `409 DELIVERY_PERSON_IN_USE` corretamente. O cliente HTTP do painel validava `details` como `{ field, message }`, e esse erro manda `{ deliveryPersonId }`. A validação falhava, e o erro virava "resposta fora do contrato". O mesmo valia para `PRODUCT_IN_USE`, `PRODUCT_NOT_FOUND`, `DELIVERY_PERSON_UNAVAILABLE` e outros. Os testes de tela não pegavam porque as APIs simuladas não mandavam esses detalhes. **Solução:** o cliente usa só os detalhes por campo e ignora os outros, e as APIs simuladas passaram a mandar os mesmos detalhes do backend. Com o código antigo, três testes falham, inclusive o da tela de produtos.
+
+39. **Testes de ponta a ponta que dependiam do estado deixado por outros.** Os testes rodam em sequência sobre o mesmo banco. O de filtro de pedidos procurava o pedido pronto do seed, que o teste de atribuição (que roda antes) despacha. O de produtos procurava um produto do seed na primeira página, que os pedidos criados pelos outros testes empurram para a segunda. Os dois passavam ou falhavam conforme a ordem e a quantidade de testes. **Solução:** o filtro de pedidos cria os próprios pedidos, o cardápio do seed é procurado pela busca, e os testes de entregadores removem o que criam (um entregador livre a mais mudaria a sugestão da atribuição).
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
 
 - **Esteira sem deploy.** O [GitHub Actions](.github/workflows/ci.yml) instala, faz lint, testa e gera o build a cada commit na `main` ([ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)), mas não publica imagens nem faz deploy. Os testes de ponta a ponta rodam só no Chromium e sem regressão visual.
-- **Tela de entregadores (CRUD).** A API tem as rotas, mas o enunciado não lista a tela, e ela não foi feita. Os entregadores vêm do seed.
+- **O entregador não usa o sistema.** A frota é gerida pelo gestor (`/entregadores`), mas não há um perfil `courier` para o próprio entregador ver a entrega dele e marcá-la como entregue. Isso pediria um vínculo entre usuário e entregador (Identity ↔ Delivery por ACL), autorização por dono do recurso (não só por permissão), rotas `/api/me/...` e uma tela pensada para o celular.
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
