@@ -514,10 +514,11 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   | `*.unit.spec.ts(x)` | 50 | 333 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
   | `*.integration.spec.tsx` | 8 | 62 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
+  | `e2e/*.e2e.ts` (Playwright) | 6 | 19 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, relatórios e tempo real entre dois navegadores |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
-- **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Cypress/Playwright** para tudo: mais realista, mas lento para cobrir cada caso de borda (ver [limitações](#7-limitações-conhecidas-e-próximos-passos)).
-- **Consequências.** ➕ Os testes de integração pegam o que só aparece com as peças juntas (ex.: o tempo real recarregando a lista filtrada). ➖ Sem navegador real nos testes automatizados: layout e CSS foram verificados manualmente no navegador.
+- **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Playwright para tudo**: mais realista, mas lento para cobrir cada caso de borda. Ele fica no topo da pirâmide, com poucos testes por fluxo principal, e os casos de borda continuam no Vitest. *Playwright contra o dev server com a API simulada*: rápido, mas repetiria os testes de integração; o valor dele é exercitar a stack de verdade (nginx, cookies, WebSocket, SNS/SQS). *`storageState` compartilhado entre testes*: o refresh token rotativo com detecção de reuso revogaria a sessão no segundo teste, então cada teste entra pela API com a própria sessão.
+- **Consequências.** ➕ Os testes de integração pegam o que só aparece com as peças juntas (ex.: o tempo real recarregando a lista filtrada). ➕ Os testes de ponta a ponta sobem uma stack isolada (projeto `fastmeals-e2e`, portas próprias, banco novo com o seed) e não tocam o ambiente de desenvolvimento. ➖ Precisam de Docker e levam cerca de 1,5 minuto com as imagens em cache. ➖ Só Chromium. ➖ Layout e CSS em telas menores continuam verificados à mão.
 
 ### ADR-22 — Eventos por SNS + SQS, com fila morta, e o Redis só para o fan-out
 
@@ -701,11 +702,15 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 27. **Timeout que contava o boot do worker.** Depois de um tempo limite, o worker recriado recebia o próximo cálculo antes de terminar de carregar (o loader do tsx leva ~100 ms), e o cálculo também estourava o tempo. **Solução:** o worker avisa quando está pronto e só então recebe trabalho, e uma trava para o pool depois de 3 falhas seguidas no boot, em vez de recriar o worker para sempre.
 
+28. **Testes de ponta a ponta que não podiam compartilhar a sessão.** O jeito comum no Playwright é entrar uma vez e salvar o `storageState` para todos os testes. Aqui isso quebraria: o refresh token gira a cada uso, e reapresentar um cookie antigo é tratado como roubo, o que revoga a sessão inteira. **Solução:** cada teste entra pela API no próprio contexto do navegador (`page.request`), e o cookie `httpOnly` fica só nele. Um teste confere que o token nunca fica acessível ao JavaScript (`document.cookie` vazio, nada no `localStorage`).
+
+29. **O limite de requisições derrubaria a suíte.** Todos os testes saem do mesmo IP, e o painel faz muitas consultas (cada tela, cada relatório, cada renovação); os 100 por minuto da API seriam estourados. **Solução:** a stack de testes sobe com `RATE_LIMIT_MAX` alto, exposto no compose, sem mexer no padrão de desenvolvimento e produção.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
 
-- **Testes E2E com navegador real** (Playwright) e **CI** (GitHub Actions com lint e testes): não implementados. Os testes de integração cobrem as telas com MSW, e o layout foi conferido manualmente no navegador. Também não há ESLint configurado; o TypeScript estrito e os testes de arquitetura cobrem parte do que ele pegaria.
+- **CI** (GitHub Actions com testes e lint): não implementado. Os testes de ponta a ponta com Playwright existem, mas só rodam localmente, só no Chromium e sem regressão visual. Também não há ESLint configurado; o TypeScript estrito e os testes de arquitetura cobrem parte do que ele pegaria.
 - **Tela de entregadores (CRUD).** A API tem as rotas, mas o enunciado não lista a tela, e ela não foi feita. Os entregadores vêm do seed.
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
