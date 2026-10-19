@@ -27,12 +27,24 @@ const errorBodySchema = z.object({
 
 const SERVER_ERROR_MESSAGE = 'O servidor encontrou um erro. Tente novamente em instantes.';
 
+/** No 503, só código e mensagem importam (os detalhes variam: tempo limite etc.). */
+const unavailableBodySchema = z.object({ error: z.object({ code: z.string(), message: z.string().min(1) }) });
+
 /** Traduz uma resposta de erro da API para a categoria correspondente ao status. */
 export function toRequestError(
   status: number,
   body: unknown,
   retryAfterHeader: string | null,
 ): DomainError {
+  // 503 com corpo da API: indisponibilidade temporária com motivo (ex.: otimizador
+  // ocupado), cuja mensagem orienta o usuário melhor que um "erro no servidor".
+  if (status === 503) {
+    const unavailable = unavailableBodySchema.safeParse(body);
+    if (unavailable.success) {
+      return new ServiceUnavailableError(SERVICE_UNAVAILABLE_CODES.temporarilyUnavailable, unavailable.data.error.message);
+    }
+  }
+
   const parsed = errorBodySchema.safeParse(body);
   if (!parsed.success || status >= 500) {
     return new ServiceUnavailableError(SERVICE_UNAVAILABLE_CODES.server, SERVER_ERROR_MESSAGE);

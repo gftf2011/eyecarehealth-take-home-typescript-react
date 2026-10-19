@@ -121,8 +121,20 @@ describe('Tela de relatórios', () => {
   });
 
   // Falha transitória (5xx): o painel tenta de novo duas vezes (1 s + 2 s) antes de mostrar o erro.
+  it('503 com motivo da API mostra a mensagem dela no relatório', { timeout: 15_000 }, async () => {
+    reports.failures.set('top-products', {
+      status: 503,
+      code: 'SERVICE_BUSY',
+      message: 'Relatório temporariamente indisponível. Tente novamente em instantes.',
+    });
+    open();
+
+    const alert = await within(await card('Produtos mais vendidos')).findByRole('alert', {}, { timeout: 8_000 });
+    expect(alert).toHaveTextContent('Relatório temporariamente indisponível');
+  });
+
   it('um relatório com erro não derruba os outros', { timeout: 15_000 }, async () => {
-    reports.failures.set('top-products', { status: 503, code: 'SERVICE_UNAVAILABLE', message: 'Indisponível' });
+    reports.failures.set('top-products', { status: 500, code: 'INTERNAL_ERROR', message: 'Erro interno do servidor' });
     open();
 
     const alert = await within(await card('Produtos mais vendidos')).findByRole('alert', {}, { timeout: 8_000 });

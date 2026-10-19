@@ -4,6 +4,8 @@ export const SERVICE_UNAVAILABLE_CODES = {
   network: 'NETWORK_ERROR',
   server: 'SERVER_ERROR',
   unexpectedResponse: 'UNEXPECTED_RESPONSE',
+  /** 503 com motivo: o servidor está bem, mas um recurso está ocupado (ex.: o otimizador). */
+  temporarilyUnavailable: 'TEMPORARILY_UNAVAILABLE',
 } as const;
 
 export type ServiceUnavailableCode =

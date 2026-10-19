@@ -103,6 +103,26 @@ describe('FetchHttpClient', () => {
     await expect(client.request({ path: '/x' }, productSchema)).rejects.toBeInstanceOf(category);
   });
 
+  it('503 com motivo da API mostra a mensagem dela (ex.: otimizador ocupado)', async () => {
+    const message = 'O otimizador está ocupado com outras sugestões. Tente novamente em instantes.';
+    const { fetch } = fakeFetch(json(503, { error: { code: 'OPTIMIZER_BUSY', message, details: [{ timeoutMs: 10 }] } }));
+    const client = new FetchHttpClient({ baseUrl: BASE_URL, fetch });
+
+    const error = await client.request({ path: '/x' }, productSchema).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ServiceUnavailableError);
+    expect(error).toMatchObject({ code: 'TEMPORARILY_UNAVAILABLE', message });
+  });
+
+  it('500 continua com a mensagem genérica, sem expor o erro do servidor', async () => {
+    const { fetch } = fakeFetch(json(500, { error: { code: 'INTERNAL_ERROR', message: 'stack trace' } }));
+    const client = new FetchHttpClient({ baseUrl: BASE_URL, fetch });
+
+    const error = await client.request({ path: '/x' }, productSchema).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: 'SERVER_ERROR', message: 'O servidor encontrou um erro. Tente novamente em instantes.' });
+  });
+
   it('mantém código, mensagem e detalhes por campo da API', async () => {
     const { fetch } = fakeFetch(
       apiError(400, 'VALIDATION_ERROR', [{ field: 'price', message: 'O preço deve ser maior que zero' }]),
