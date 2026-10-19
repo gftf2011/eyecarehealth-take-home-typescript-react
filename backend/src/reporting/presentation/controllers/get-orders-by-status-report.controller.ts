@@ -8,7 +8,7 @@ import {
 } from '../../../shared-kernel/presentation';
 import type { OrdersByStatusReportDto } from '../../application/dtos/report.dtos';
 import type { GetOrdersByStatusReportInput } from '../../application/usecases/get-orders-by-status-report/get-orders-by-status-report.usecase';
-import { periodQuerySchema } from './period-query';
+import { periodQuerySchema } from '../schemas/report.schemas';
 
 /** GET /api/reports/orders-by-status */
 export class GetOrdersByStatusReportController implements Controller {

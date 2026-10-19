@@ -8,7 +8,7 @@ import {
 } from '../../../shared-kernel/presentation';
 import type { RevenueReportDto } from '../../application/dtos/report.dtos';
 import type { GetRevenueReportInput } from '../../application/usecases/get-revenue-report/get-revenue-report.usecase';
-import { periodQuerySchema } from './period-query';
+import { periodQuerySchema } from '../schemas/report.schemas';
 
 /** GET /api/reports/revenue */
 export class GetRevenueReportController implements Controller {

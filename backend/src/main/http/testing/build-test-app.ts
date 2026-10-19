@@ -43,12 +43,14 @@ export type TestApp = {
   readonly orderingDb: Kysely<OrderingDatabase>;
   readonly deliveryDb: Kysely<DeliveryDatabase>;
   readonly clock: FixedClock;
+  /** As rotas registradas (documentação e testes de contrato). */
+  readonly routes: readonly Route[];
   /** Cadastra um usuário com senha real (bcrypt) para os testes de autenticação. */
   givenUser(email: string, password: string, role: RoleValue): Promise<User>;
   close(): Promise<void>;
 };
 
-export type TestAppOverrides = Partial<Pick<AppOptions, 'trustProxy'>> & {
+export type TestAppOverrides = Partial<Pick<AppOptions, 'trustProxy' | 'apiDocs'>> & {
   /** Padrão: limite alto, contador Redis isolado para este app. */
   readonly rateLimit?: Partial<RateLimitOptions>;
   /**
@@ -88,15 +90,16 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
     loginAttempts: isolatedRedisCounter(redis, 'login-failures'),
   });
 
+  const routes: Route[] = [
+    ...identity.routes,
+    ...makeCatalogRoutes({ db, clock, events }),
+    ...makeOrderingRoutes({ db: orderingDb, clock, events }),
+    ...makeDeliveryRoutes({ db: deliveryDb, clock, events, planner: overrides.dispatchPlanner ?? makeInlineDispatchPlanner() }),
+    ...makeReportingRoutes({ db: reportingDb }),
+    ...(overrides.extraRoutes?.(clock) ?? []),
+  ];
   const app = await buildApp({
-    routes: [
-      ...identity.routes,
-      ...makeCatalogRoutes({ db, clock, events }),
-      ...makeOrderingRoutes({ db: orderingDb, clock, events }),
-      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, planner: overrides.dispatchPlanner ?? makeInlineDispatchPlanner() }),
-      ...makeReportingRoutes({ db: reportingDb }),
-      ...(overrides.extraRoutes?.(clock) ?? []),
-    ],
+    routes,
     authenticator: overrides.auth === 'jwt' ? identity.authenticator : new StaticAuthenticator(),
     healthChecks: {
       database: async () => {
@@ -112,6 +115,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
       ...overrides.rateLimit,
     },
     ...(overrides.trustProxy !== undefined && { trustProxy: overrides.trustProxy }),
+    ...(overrides.apiDocs !== undefined && { apiDocs: overrides.apiDocs }),
   });
   await app.ready();
 
@@ -119,6 +123,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
 
   return {
     app,
+    routes,
     db,
     identityDb,
     orderingDb,

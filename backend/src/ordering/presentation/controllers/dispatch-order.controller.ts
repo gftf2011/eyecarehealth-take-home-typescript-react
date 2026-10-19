@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import type { UseCase } from '../../../shared-kernel/application';
 import {
   idParams,
@@ -11,8 +9,7 @@ import {
 } from '../../../shared-kernel/presentation';
 import type { OrderDto } from '../../application/dtos/order.dto';
 import type { DispatchOrderInput } from '../../application/usecases/dispatch-order/dispatch-order.usecase';
-
-const bodySchema = z.object({ deliveryPersonId: z.string() });
+import { deliveryPersonIdBodySchema } from '../schemas/order.schemas';
 
 /** POST /api/orders/:id/dispatch — atribui e despacha (aceitar a sugestão). */
 export class DispatchOrderController implements Controller {
@@ -20,7 +17,7 @@ export class DispatchOrderController implements Controller {
 
   async handle(request: HttpRequest): Promise<HttpResponse> {
     const { id } = parseRequest(idParams, request.params, 'params');
-    const { deliveryPersonId } = parseRequest(bodySchema, request.body, 'body');
+    const { deliveryPersonId } = parseRequest(deliveryPersonIdBodySchema, request.body, 'body');
     return ok(await this.dispatchOrder.execute({ id, deliveryPersonId }));
   }
 }

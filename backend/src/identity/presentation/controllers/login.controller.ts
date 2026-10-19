@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import type { UseCase } from '../../../shared-kernel/application';
 import {
   parseRequest,
@@ -11,11 +9,7 @@ import type { AuthTokensDto } from '../../application/dtos/auth-tokens.dto';
 import type { LoginInput } from '../../application/usecases/login/login.usecase';
 import type { RefreshTokenCookie } from '../cookies/refresh-token.cookie';
 import { sessionResponse } from './session-response';
-
-const bodySchema = z.object({
-  email: z.string(),
-  password: z.string(),
-});
+import { loginBodySchema } from '../schemas/auth.schemas';
 
 /** POST /api/auth/login */
 export class LoginController implements Controller {
@@ -25,7 +19,7 @@ export class LoginController implements Controller {
   ) {}
 
   async handle(request: HttpRequest): Promise<HttpResponse> {
-    const { email, password } = parseRequest(bodySchema, request.body, 'body');
+    const { email, password } = parseRequest(loginBodySchema, request.body, 'body');
     const tokens = await this.login.execute({ email, password, ipAddress: request.ip });
     return sessionResponse(tokens, this.cookie);
   }

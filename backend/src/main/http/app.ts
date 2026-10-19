@@ -13,6 +13,7 @@ import {
 } from '../../shared-kernel/presentation';
 import type { RateLimitCounter } from '../../shared-kernel/application';
 import { toRateLimitStore } from '../../shared-kernel/presentation/http/fastify/rate-limit-counter.store';
+import { registerApiDocs } from './api-docs';
 import { registerHttpMetrics } from './http-metrics';
 import { registerRoutes } from '../../shared-kernel/presentation/http/fastify/register-routes';
 
@@ -41,6 +42,8 @@ export type AppOptions = {
    */
   readonly trustProxy?: false | number | readonly string[];
   readonly logger?: boolean;
+  /** Swagger UI em `/api/docs` e o documento OpenAPI em `/api/docs/json`. Padrão: ligado. */
+  readonly apiDocs?: boolean;
 };
 
 const HEALTH_CHECK_TIMEOUT_MS = 1_000;
@@ -65,6 +68,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.status(response.status).send(response.body);
   });
 
+  // Antes do rate limit: a interface do Swagger baixa vários arquivos estáticos.
+  if (options.apiDocs ?? true) await registerApiDocs(app, options.routes);
   await app.register(cookie);
 
   await app.register(rateLimit, {

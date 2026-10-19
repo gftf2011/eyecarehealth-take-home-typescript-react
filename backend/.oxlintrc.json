@@ -24,6 +24,8 @@
     "vitest/valid-expect": "error",
     "vitest/no-standalone-expect": "error",
     "vitest/no-conditional-expect": "error",
+    // `expectContract` (contrato da API) faz as asserções do teste.
+    "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "expectContract"] }],
     // O Húngaro aloca vetores de tamanho fixo de propósito.
     "unicorn/no-new-array": "off"
   },

@@ -176,6 +176,9 @@ services:
       OPTIMIZER_MAX_QUEUED: ${OPTIMIZER_MAX_QUEUED:-4}
       OPTIMIZER_TIMEOUT_MS: ${OPTIMIZER_TIMEOUT_MS:-10000}
       OPTIMIZER_INLINE_MAX_CELLS: ${OPTIMIZER_INLINE_MAX_CELLS:-10000}
+      # Swagger UI em /api/docs (e o OpenAPI em /api/docs/json). Em produção,
+      # API_DOCS_ENABLED=false tira os dois do ar.
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
     ports:
       - "127.0.0.1:${API_PORT:-3001}:3001"
     depends_on:

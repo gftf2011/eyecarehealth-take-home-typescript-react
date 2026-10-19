@@ -8,6 +8,7 @@ const brokenRoute: Route = {
   method: 'GET',
   url: '/api/__broken',
   permission: null,
+  docs: { summary: 'Rota de teste', tags: ['Teste'], responses: {} },
   controller: {
     handle: async () => {
       throw new Error('conexão com senha=segredo recusada');

@@ -64,6 +64,8 @@ const envSchema = z
     BCRYPT_COST: z.coerce.number().int().min(10).max(15).default(10),
     LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     LOGIN_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+    /** Swagger UI em `/api/docs` (e o documento em `/api/docs/json`). */
+    API_DOCS_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
     /** Workers do otimizador de atribuição (padrão: núcleos − 1, no máximo 2). */
     OPTIMIZER_WORKERS: z.coerce.number().int().min(1).max(32).optional(),
     /** Sugestões esperando um worker livre; além disso, 503 OPTIMIZER_BUSY. */

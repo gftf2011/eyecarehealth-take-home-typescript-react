@@ -1,4 +1,5 @@
 import type { Permission } from '../../domain';
+import type { RouteDocs } from '../openapi/route-docs';
 import type { Controller } from './http';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -14,4 +15,6 @@ export type Route = {
   /** `null` apenas para rotas públicas (ex.: login, health check). */
   readonly permission: Permission | null;
   readonly controller: Controller;
+  /** Documentação OpenAPI da rota (obrigatória: toda rota aparece no Swagger). */
+  readonly docs: RouteDocs;
 };

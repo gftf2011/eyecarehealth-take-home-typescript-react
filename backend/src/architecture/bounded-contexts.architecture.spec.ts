@@ -17,6 +17,8 @@ const INFRASTRUCTURE_PACKAGES = [
   '@fastify/cookie',
   '@fastify/rate-limit',
   '@fastify/websocket',
+  '@fastify/swagger',
+  '@fastify/swagger-ui',
   'kysely',
   'pg',
   'ioredis',

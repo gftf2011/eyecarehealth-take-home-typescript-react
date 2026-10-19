@@ -81,6 +81,7 @@ async function main(): Promise<void> {
       counter: new RedisRateLimitCounter(redis, 'fastmeals:rate-limit:'),
     },
     trustProxy: env.TRUST_PROXY,
+    apiDocs: env.API_DOCS_ENABLED,
     logger: env.NODE_ENV !== 'test',
   });
 
