@@ -13,8 +13,9 @@ export type LoginRedirectState = {
 
 /**
  * Guard das telas do painel: enquanto a sessão é restaurada mostra o
- * carregamento; sem sessão, manda para o login lembrando a página pedida e o
- * motivo (ex.: sessão expirada).
+ * carregamento; sem sessão, manda para o login com o motivo (ex.: sessão
+ * expirada). A página pedida é lembrada para voltar a ela depois do login,
+ * exceto quando a pessoa saiu ("Sair"): quem entra depois pode ser outra.
  */
 export function RequireSession({ children }: { readonly children: ReactNode }) {
   const state = useSessionState();
@@ -23,7 +24,7 @@ export function RequireSession({ children }: { readonly children: ReactNode }) {
   if (state.status === 'restoring') return <SplashScreen />;
   if (state.status === 'anonymous') {
     const redirect: LoginRedirectState = {
-      from: `${location.pathname}${location.search}`,
+      ...(state.endedBy === 'signed-out' ? {} : { from: `${location.pathname}${location.search}` }),
       reason: state.endedBy,
     };
     return <Navigate to="/login" replace state={redirect} />;

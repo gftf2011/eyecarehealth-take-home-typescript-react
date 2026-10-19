@@ -94,10 +94,27 @@ test.describe('Entregador', () => {
     await expect(page.getByText('Localização enviada: -23,5614; -46,6559')).toBeVisible();
   });
 
+  test('o admin sai de /pedidos e o entregador entra no mesmo navegador: vai para as entregas dele', async ({ page }) => {
+    await signIn(page, USERS.admin);
+    await page.goto('/pedidos');
+    await page.getByRole('button', { name: 'Sair' }).click();
+    await expect(page.getByText('Você saiu do painel.')).toBeVisible();
+
+    await page.getByLabel('Email').fill(USERS.courier.email);
+    await page.getByLabel('Senha').fill(USERS.courier.password);
+    await page.getByRole('button', { name: 'Entrar' }).click();
+
+    await expect(page).toHaveURL(/\/minhas-entregas$/);
+    await expect(page.getByRole('heading', { name: 'Minhas entregas' })).toBeVisible();
+    await expect(page.getByText('Acesso negado')).toHaveCount(0);
+  });
+
   test('não abre as telas do painel, e o painel não tem "minhas entregas"', async ({ page }) => {
     await signIn(page, USERS.courier);
     await page.goto('/pedidos');
     await expect(page.getByText('Acesso negado')).toBeVisible();
+    await page.getByRole('link', { name: 'Ir para a minha tela inicial' }).click();
+    await expect(page).toHaveURL(/\/minhas-entregas$/);
 
     await signIn(page, USERS.admin);
     await page.goto('/');

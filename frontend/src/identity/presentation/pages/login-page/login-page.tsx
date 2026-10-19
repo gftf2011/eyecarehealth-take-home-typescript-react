@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router';
 
-import { Alert } from '../../../../shared-kernel/presentation';
+import { Alert, afterLoginState } from '../../../../shared-kernel/presentation';
 import type { SessionEndReason } from '../../../application';
 import { LoginForm } from '../../components/login-form/login-form';
 import type { LoginRedirectState } from '../../components/require-session/require-session';
@@ -15,7 +15,9 @@ const END_MESSAGES: Readonly<Record<SessionEndReason, string>> = {
 
 /**
  * Tela de login. Com a sessão autenticada (login aceito ou já logado), segue
- * para a página que o usuário tentou abrir, ou para o painel.
+ * para a página que o usuário tentou abrir, ou para a tela inicial do perfil.
+ * A navegação vai marcada como "logo depois do login": se a página lembrada
+ * não for do perfil de quem entrou, o guard leva à tela inicial dele.
  */
 export function LoginPage() {
   const state = useSessionState();
@@ -23,7 +25,7 @@ export function LoginPage() {
   const redirect = readRedirectState(useLocation().state);
 
   if (state.status === 'authenticated') {
-    return <Navigate to={redirect.from ?? '/'} replace />;
+    return <Navigate to={redirect.from ?? '/'} replace state={afterLoginState()} />;
   }
 
   const reason = redirect.reason ?? (state.status === 'anonymous' ? state.endedBy : null);

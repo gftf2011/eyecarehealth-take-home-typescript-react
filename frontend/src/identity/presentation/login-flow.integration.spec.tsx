@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { createTestApiServer } from '../../shared-kernel/infra/testing/test-api';
 import { renderApp } from '../../main/testing/render-app';
+import { FakeMyDeliveriesApi } from '../../delivery/infra/testing/fake-my-deliveries-api';
 import { FakeOrdersApi } from '../../ordering/infra/testing/fake-orders-api';
 import { FakeAuthApi, SEED_USERS } from '../infra/testing/fake-auth-api';
 
@@ -24,7 +25,7 @@ async function signIn(view: ReturnType<typeof renderApp>, email: string, passwor
 beforeAll(() => api.listen());
 beforeEach(() => {
   auth = new FakeAuthApi();
-  api.server.use(...auth.handlers(), ...new FakeOrdersApi().handlers());
+  api.server.use(...auth.handlers(), ...new FakeOrdersApi().handlers(), ...new FakeMyDeliveriesApi().handlers());
 });
 afterEach(() => {
   app?.unmount();
@@ -107,4 +108,70 @@ describe('Fluxo de login', () => {
     expect(view.router.state.location.pathname).toBe('/login');
     expect(auth.logoutCalls).toBe(1);
   });
+
+  describe('outra pessoa no mesmo navegador', () => {
+    it('o admin sai de /pedidos e o entregador entra: vai para a tela dele, não para a do admin', async () => {
+      auth.givenSignedIn(SEED_USERS.admin);
+      const view = open({ path: '/pedidos' });
+      await view.user.click(await screen.findByRole('button', { name: 'Sair' }));
+      await screen.findByText('Você saiu do painel.');
+
+      await signIn(view, SEED_USERS.courier.email, SEED_USERS.courier.password);
+
+      expect(await screen.findByRole('heading', { name: 'Minhas entregas' })).toBeInTheDocument();
+      expect(view.router.state.location.pathname).toBe('/minhas-entregas');
+      expect(screen.queryByText('Acesso negado')).not.toBeInTheDocument();
+    });
+
+    it('depois de "Sair", a página não é lembrada: o próximo login vai para a tela inicial', async () => {
+      auth.givenSignedIn(SEED_USERS.admin);
+      const view = open({ path: '/produtos' });
+      await view.user.click(await screen.findByRole('button', { name: 'Sair' }));
+      await screen.findByText('Você saiu do painel.');
+
+      await signIn(view, SEED_USERS.admin.email, SEED_USERS.admin.password);
+
+      await screen.findByRole('button', { name: 'Sair' });
+      expect(view.router.state.location.pathname).toBe('/pedidos');
+    });
+
+    it('sessão expirada em /pedidos e quem entra é o entregador: tela inicial dele', async () => {
+      auth.tokenTtlMs = 1_000;
+      auth.givenSignedIn(SEED_USERS.admin);
+      const view = open({ path: '/pedidos', renewal: { marginMs: 60_000, minDelayMs: 50 } });
+      await screen.findByRole('button', { name: 'Sair' });
+      auth.revokeSession();
+      await screen.findByText('Sua sessão expirou. Entre novamente para continuar.');
+
+      await signIn(view, SEED_USERS.courier.email, SEED_USERS.courier.password);
+
+      expect(await screen.findByRole('heading', { name: 'Minhas entregas' })).toBeInTheDocument();
+      expect(view.router.state.location.pathname).toBe('/minhas-entregas');
+    });
+
+    it('sessão expirada e a mesma pessoa entra de novo: volta para a página onde estava', async () => {
+      auth.tokenTtlMs = 1_000;
+      auth.givenSignedIn(SEED_USERS.viewer);
+      const view = open({ path: '/produtos', renewal: { marginMs: 60_000, minDelayMs: 50 } });
+      await screen.findByRole('button', { name: 'Sair' });
+      auth.revokeSession();
+      await screen.findByText('Sua sessão expirou. Entre novamente para continuar.');
+
+      await signIn(view, SEED_USERS.viewer.email, SEED_USERS.viewer.password);
+
+      await screen.findByRole('button', { name: 'Sair' });
+      expect(view.router.state.location.pathname).toBe('/produtos');
+    });
+
+    it('link direto para uma tela do outro perfil: o aviso de acesso negado leva à tela inicial', async () => {
+      auth.givenSignedIn(SEED_USERS.viewer);
+      const view = open({ path: '/entregadores' });
+
+      expect(await screen.findByText('Acesso negado')).toBeInTheDocument();
+      await view.user.click(screen.getByRole('link', { name: 'Ir para a minha tela inicial' }));
+
+      expect(view.router.state.location.pathname).toBe('/pedidos');
+    });
+  });
 });
+
