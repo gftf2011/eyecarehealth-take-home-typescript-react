@@ -36,6 +36,7 @@ flowchart LR
     sns[[SNS FIFO fastmeals-events.fifo]]
     sqs[[SQS FIFO fastmeals-realtime.fifo]]
     dlq[[SQS FIFO fastmeals-realtime-dlq.fifo]]
+    lgtm[(otel-lgtm<br/>Prometheus, Loki, Tempo, Grafana)]
 
     navegador -- HTTPS / WebSocket --> painel
     painel -- /api --> api
@@ -47,6 +48,7 @@ flowchart LR
     sqs -- 5 falhas --> dlq
     sqs -- long polling --> gw
     gw -- PUBLISH / SUBSCRIBE<br/>entre as réplicas --> redis
+    api & relay & gw -. OTLP: traces, métricas e logs .-> lgtm
     painel -- /realtime --> gw
 ```
 
@@ -97,6 +99,7 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 |---|---|---|---|
 | **Fastify 5** | Servidor HTTP da API e do gateway | Erros de handlers `async` tratados nativamente; plugins encapsulados (cookie, rate limit, websocket) mantidos pelo próprio time; `inject()` para testes e2e sem abrir porta; bom desempenho de serialização. O Fastify só aparece em `presentation`/`main`: controllers recebem um `HttpRequest` próprio. | **Express 5**: tratamento async chegou só na v5 e quase tudo vem de middlewares de terceiros. **Koa**: minimalista demais para rate limit, cookies e websocket integrados. |
 | **Kysely** + **pg** | Acesso ao PostgreSQL e migrations | Query builder com tipos inferidos do schema, mas é SQL: os relatórios agrupam por dia local de São Paulo, o relay usa `FOR UPDATE SKIP LOCKED`, as escritas usam `FOR UPDATE`/`FOR SHARE`, e existem índices parciais e trigram. Tudo isso é natural em Kysely e trabalhoso num ORM. Não impõe modelo: o agregado é do domínio e um mapper converte linha ↔ agregado. `pg` é o driver padrão, com pool. | **Prisma** / **TypeORM**: o modelo gerado (ou com decorators) compete com o agregado DDD, e locks, `SKIP LOCKED` e agregações com fuso acabariam em SQL cru. **Drizzle**: alternativa próxima; Kysely foi escolhido por ser só query builder (sem camada de ORM) e ter migrations simples em TypeScript. **Knex**: tipagem fraca. |
+| **OpenTelemetry** (SDK Node, OTLP, instrumentações de HTTP, `pg`, `ioredis`, pino e `@fastify/otel`) | Traces, métricas e logs dos três processos | Padrão aberto: o mesmo código exporta para qualquer backend OTLP. A propagação W3C atravessa o outbox e o SNS/SQS ([ADR-26](#adr-26--observabilidade-com-opentelemetry-um-trace-por-ação-métricas-de-negócio-e-logs-correlacionados)). | `prom-client` (só métricas), Datadog/New Relic APM (presos a um fornecedor) |
 | **@aws-sdk/client-sns** + **@aws-sdk/client-sqs** | Publicar eventos, consumir a fila do tempo real, fila morta e redrive | SDK oficial v3, modular (só os dois clientes), com `AbortSignal` para interromper o long polling no shutdown e `AWS_ENDPOINT_URL` para apontar ao emulador sem mudar código. | `sqs-consumer` (abstrai o laço, mas esconde o controle de apagar só depois de repassar e do encerramento), LocalStack SDKs |
 | **ioredis** | Rate limit distribuído e fan-out do tempo real entre as réplicas do gateway | Reconexão automática, scripts Lua (o contador faz `INCR` + `PEXPIRE` atomicamente), suporte a Cluster/Sentinel se o Redis crescer, conexão dedicada para `SUBSCRIBE`. | **node-redis**: equivalente; ioredis tem API de Lua e reconexão mais diretas. |
 | **jose** | Emissão e verificação de JWT (HS256) | Implementação fiel às RFCs, sem dependências, API `async`, validação de `audience`/`issuer`/expiração embutida (access e refresh usam segredos e audiences diferentes). | **jsonwebtoken**: API de callbacks, CommonJS, menos rigor por padrão. |
@@ -398,9 +401,9 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 85 | Domínio e casos de uso com fakes em memória |
-  | `*.integration.spec.ts` | 20 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
-  | `*.e2e.spec.ts` | 10 | API HTTP (`app.inject`) e clientes WebSocket reais |
+  | `*.unit.spec.ts` | 86 | Domínio e casos de uso com fakes em memória |
+  | `*.integration.spec.ts` | 21 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
+  | `*.e2e.spec.ts` | 11 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
 
   Os testes de performance (listagens < 200 ms com 10 mil registros, com `EXPLAIN` confirmando o índice; otimização < 2 s) e de concorrência são automatizados.
@@ -639,6 +642,42 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➖ A esteira do frontend leva mais tempo por causa do Playwright, que constrói as imagens e sobe a stack inteira.
   - ➖ O primeiro run sem cache baixa as imagens do Testcontainers e do compose.
 
+### ADR-26 — Observabilidade com OpenTelemetry: um trace por ação, métricas de negócio e logs correlacionados
+
+- **Contexto.** O caminho de uma ação no painel atravessa três processos e dois brokers: API → outbox → relay → SNS → SQS → gateway → Redis → WebSocket. Sem observabilidade, um "a outra aba não atualizou" não tinha como ser investigado. Os logs de cada processo eram independentes, e não havia métrica nenhuma: nem o atraso do outbox, nem a latência por rota, nem o funil de pedidos.
+- **Decisão.**
+  1. **OpenTelemetry nos três processos**, pré-carregado com `node --import` ([`instrumentation.ts`](backend/src/main/telemetry/instrumentation.ts)), exportando por OTLP. Instrumentação de HTTP, Fastify (`@fastify/otel`), `pg`, `ioredis` e pino, configurada pelas variáveis padrão `OTEL_*`. O mesmo código manda para qualquer backend OTLP.
+  2. **Trace que atravessa o outbox.**
+     - O `KyselyOutboxWriter` grava o `traceparent` da requisição (nova coluna `trace_context`).
+     - O publisher SNS abre um span de **produtor** por mensagem, filho desse contexto, e leva o contexto dele nos atributos da mensagem.
+     - O consumidor da fila abre um span de **consumidor**, filho do produtor.
+     - O ciclo do relay é um span próprio, com *links* para os traces das mensagens.
+     - Resultado: uma ação no painel vira **um trace só** pelos três processos.
+  3. **Sem ruído de fundo.** O relay consulta o banco a cada 500 ms e o gateway faz long polling na fila a cada 20 s.
+     - Banco, Redis e HTTP de saída só geram span dentro de um trace existente (`requireParentSpan`).
+     - Ciclos vazios do relay não abrem span.
+     - Health checks e o upgrade do WebSocket não abrem trace.
+  4. **Logs correlacionados.** O pino continua no stdout e envia cada log também por OTLP, com `trace_id`/`span_id`; no Grafana, log e trace se ligam nos dois sentidos.
+  5. **Métricas nomeadas pelo domínio:** latência por **rota** (nunca a URL com id, para a cardinalidade não explodir), funil de pedidos, outbox (pendentes, atraso, fila morta), fila do tempo real, conexões, otimizador. Ver a [tabela no README](backend/README.md#métricas).
+  6. **Arquitetura.**
+     - Domínio e aplicação não conhecem o OpenTelemetry, e o teste de arquitetura impõe isso.
+     - As métricas de negócio passam pela porta `OrderingMetrics`.
+     - Os adapters de infra usam a API do OTel direto: sem o SDK (testes), ela é no-op.
+  7. **Métricas de negócio só depois do commit.** O escopo dos handlers de eventos ganhou `afterCommit(efeito)`. Os Unit of Work rodam esses efeitos só com a transação confirmada, e uma falha neles nunca derruba a requisição. Um pedido recusado ou desfeito não entra na métrica.
+  8. **Stack local** `grafana/otel-lgtm` (Collector, Prometheus, Loki, Tempo e Grafana numa imagem), com o dashboard **FastMeals** [provisionado](observability/grafana/fastmeals-dashboard.json). Nada depende dela: sem ela, os processos funcionam e só não exportam. A stack do Playwright sobe com `OTEL_SDK_DISABLED=true`.
+- **Alternativas.**
+  - *Auto-instrumentação completa* (`auto-instrumentations-node`): dezenas de instrumentações e um pacote enorme, que instrumentaria `fs` e `dns` e geraria spans no polling.
+  - *Instrumentação do AWS SDK* em vez da propagação manual: ela também injeta contexto nos atributos das mensagens, mas o do relay em lote, não o da requisição que gerou o evento. O trace terminaria no relay.
+  - *Métricas derivadas dos spans* (span metrics no Collector): menos código, mas sem as métricas de negócio e de estado (outbox pendente, conexões, pool).
+  - *Prometheus `/metrics` direto em cada processo*: simples para métricas, mas sem traces nem logs, e com um endpoint a mais em cada processo.
+  - *Contar pedidos no caso de uso*: três casos de uso alterados e um port a mais em cada um; o handler com `afterCommit` cobre todos, inclusive os que vierem.
+- **Consequências.**
+  - ➕ Uma ação no painel pode ser seguida, com tempos, do clique ao WebSocket.
+  - ➕ O atraso do outbox, a fila morta e as recusas do otimizador viram números com alerta possível.
+  - ➖ Mais dependências (OpenTelemetry), uma migration e um pré-carregamento a mais no boot.
+  - ➖ A imagem `otel-lgtm` tem cerca de 1 GB e guarda os dados só enquanto o contêiner existe: é para desenvolvimento.
+  - ➖ O custo por requisição é baixo, mas existe (spans e métricas em memória até a exportação).
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -753,6 +792,12 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 31. **Um efeito do React que o lint acusou com razão.** O filtro de produtos aplicava a busca num `useEffect` que dependia só do texto digitado, mas lia `value` e `apply` sem declará-los. Declarar as dependências reaplicaria a busca a cada mudança de filtro. **Solução:** `useEffectEvent` (React 19), que lê os valores atuais sem virar dependência: correto e sem desligar a regra.
 
+32. **Telemetria que só mostrava o polling.** Ligada sem cuidado, a instrumentação gerava um trace a cada 500 ms (as consultas do relay ao outbox) e outro a cada 20 s (o long polling da fila no gateway), enterrando as ações reais. **Solução:** banco, Redis e HTTP de saída só criam span com um pai (`requireParentSpan`), o relay só abre span quando o lote tem mensagens, e health checks e o WebSocket ficam fora.
+
+33. **Métrica de negócio que contaria o que foi desfeito.** Os handlers de eventos rodam dentro da transação, antes do commit: um pedido contado ali podia ser desfeito em seguida. **Solução:** `afterCommit` no escopo dos handlers, executado pelos Unit of Work só com a transação confirmada. Um teste e2e confere que o pedido recusado (produto indisponível, 422) não conta.
+
+34. **Contadores fracionados no Grafana.** O dashboard mostrava "5,41 logins recusados": o `increase()` do Prometheus extrapola a janela. **Solução:** os totais por período usam `round()`; os gráficos de taxa continuam sem arredondar.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
@@ -764,5 +809,6 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
 - **Escala do otimizador.** O cálculo grande não trava mais a API ([ADR-24](#adr-24--otimizador-de-atribuição-fora-da-thread-da-api)), mas continua O(k²·K): ~2 s com 1000 × 1000, e no máximo 2 ao mesmo tempo por instância. Para escalas maiores, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
 - **Tempo real sem histórico.** A fila SQS segura o evento até uma réplica do gateway repassá-lo, mas o Redis pub/sub não guarda mensagens: o painel que estava desconectado recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams ou guardar os últimos eventos por tópico.
+- **Observabilidade local, não de produção.** O `otel-lgtm` guarda os dados enquanto o contêiner existe e não tem alertas configurados. Em produção, o caminho é apontar o `OTEL_EXPORTER_OTLP_ENDPOINT` para um backend gerenciado e criar alertas para: atraso do outbox acima de alguns segundos, fila morta maior que zero, p95 das listagens acima de 200 ms e recusas do otimizador.
 - **Floci não é a AWS.** Retentativas de entrega do SNS, latências e limites são aproximações locais. Antes de produção, os mesmos testes de integração deveriam rodar contra uma conta AWS de teste, e a topologia ir para o Terraform (com alarmes na idade da mensagem mais antiga e no tamanho da fila morta).
 - **Revogação imediata de access token.** Hoje vale até expirar (15 min). Se for necessária, uma denylist curta no Redis resolveria.
