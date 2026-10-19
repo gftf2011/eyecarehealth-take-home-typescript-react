@@ -7,6 +7,7 @@ import type {
   ListOrdersInput,
   OrderDto,
   RequestOptions,
+  ReturnOrderToAssignmentInput,
 } from '../../application';
 
 /** Casos de uso que as telas de pedidos usam. */
@@ -14,6 +15,7 @@ export type OrderingServices = {
   readonly listOrders: UseCase<ListOrdersInput & RequestOptions, Page<OrderDto>>;
   readonly getOrder: UseCase<GetOrderInput, OrderDto>;
   readonly changeOrderStatus: UseCase<ChangeOrderStatusInput, OrderDto>;
+  readonly returnOrderToAssignment: UseCase<ReturnOrderToAssignmentInput, OrderDto>;
 };
 
 const OrderingContext = createContext<OrderingServices | null>(null);

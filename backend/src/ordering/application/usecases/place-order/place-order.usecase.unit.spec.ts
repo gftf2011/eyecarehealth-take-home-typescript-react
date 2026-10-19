@@ -69,6 +69,7 @@ describe('PlaceOrderUseCase', () => {
           unitPrice: 12.5,
         },
       ],
+      statusHistory: [{ from: null, to: 'pending', changedAt: PLACED_AT, reason: null }],
       createdAt: PLACED_AT,
       updatedAt: PLACED_AT,
     });

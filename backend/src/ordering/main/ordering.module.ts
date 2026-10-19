@@ -9,6 +9,7 @@ import { DispatchOrderUseCase } from '../application/usecases/dispatch-order/dis
 import { GetOrderUseCase } from '../application/usecases/get-order/get-order.usecase';
 import { ListOrdersUseCase } from '../application/usecases/list-orders/list-orders.usecase';
 import { PlaceOrderUseCase } from '../application/usecases/place-order/place-order.usecase';
+import { ReturnOrderToAssignmentUseCase } from '../application/usecases/return-order-to-assignment/return-order-to-assignment.usecase';
 import type { OrderingDatabase } from '../infra/persistence/schema/ordering-database';
 import { KyselyOrderingUnitOfWork } from '../infra/persistence/unit-of-work/kysely-ordering-unit-of-work';
 import { AssignDeliveryPersonController } from '../presentation/controllers/assign-delivery-person.controller';
@@ -17,12 +18,14 @@ import { DispatchOrderController } from '../presentation/controllers/dispatch-or
 import { GetOrderController } from '../presentation/controllers/get-order.controller';
 import { ListOrdersController } from '../presentation/controllers/list-orders.controller';
 import { PlaceOrderController } from '../presentation/controllers/place-order.controller';
+import { ReturnOrderToAssignmentController } from '../presentation/controllers/return-order-to-assignment.controller';
 import { assignDeliveryPersonRoute } from '../presentation/routes/assign-delivery-person.route';
 import { changeOrderStatusRoute } from '../presentation/routes/change-order-status.route';
 import { dispatchOrderRoute } from '../presentation/routes/dispatch-order.route';
 import { getOrderRoute } from '../presentation/routes/get-order.route';
 import { listOrdersRoute } from '../presentation/routes/list-orders.route';
 import { placeOrderRoute } from '../presentation/routes/place-order.route';
+import { returnOrderToAssignmentRoute } from '../presentation/routes/return-order-to-assignment.route';
 import { OtelOrderingMetrics } from '../infra/observability/otel-ordering-metrics';
 import { subscribeOrderingEventHandlers } from './ordering-event-handlers';
 
@@ -55,5 +58,8 @@ export function makeOrderingRoutes({ db, clock, events }: OrderingModuleDependen
       new AssignDeliveryPersonController(new AssignDeliveryPersonUseCase(unitOfWork, clock)),
     ),
     dispatchOrderRoute(new DispatchOrderController(new DispatchOrderUseCase(unitOfWork, clock))),
+    returnOrderToAssignmentRoute(
+      new ReturnOrderToAssignmentController(new ReturnOrderToAssignmentUseCase(unitOfWork, clock)),
+    ),
   ];
 }

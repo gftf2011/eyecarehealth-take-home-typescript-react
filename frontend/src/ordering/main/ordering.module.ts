@@ -1,5 +1,10 @@
 import type { FetchHttpClient } from '../../shared-kernel/infra';
-import { ChangeOrderStatusUseCase, GetOrderUseCase, ListOrdersUseCase } from '../application';
+import {
+  ChangeOrderStatusUseCase,
+  GetOrderUseCase,
+  ListOrdersUseCase,
+  ReturnOrderToAssignmentUseCase,
+} from '../application';
 import { HttpOrderGateway } from '../infra';
 import type { OrderingServices } from '../presentation';
 
@@ -15,6 +20,7 @@ export function createOrderingModule(api: FetchHttpClient): OrderingModule {
       listOrders: new ListOrdersUseCase(orders),
       getOrder: new GetOrderUseCase(orders),
       changeOrderStatus: new ChangeOrderStatusUseCase(orders),
+      returnOrderToAssignment: new ReturnOrderToAssignmentUseCase(orders),
     },
   };
 }

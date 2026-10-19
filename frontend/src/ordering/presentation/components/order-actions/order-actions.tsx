@@ -5,17 +5,20 @@ import type { OrderDto } from '../../../application';
 import type { OrderStatusValue } from '../../../domain';
 import { useChangeOrderStatus } from '../../hooks/use-change-order-status';
 import { TRANSITION_ACTION_LABELS, TRANSITION_BLOCKER_MESSAGES } from '../../labels/order-labels';
+import { ReturnToAssignmentDialog } from '../return-to-assignment-dialog/return-to-assignment-dialog';
 import styles from './order-actions.module.css';
 
 /**
  * Botões contextuais: só as transições válidas a partir do status atual.
  * Cancelar pede confirmação; despachar sem entregador fica desabilitado com
- * o motivo. Perfis sem `orders:write` não veem ações.
+ * o motivo. Uma entrega em andamento também pode voltar para a atribuição
+ * (com motivo). Perfis sem `orders:write` não veem ações.
  */
 export function OrderActions({ order, compact = false }: { readonly order: OrderDto; readonly compact?: boolean }) {
   const canWrite = useCan('orders:write');
   const change = useChangeOrderStatus();
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [returning, setReturning] = useState(false);
   const hintId = useId();
 
   if (!canWrite || order.transitions.length === 0) return null;
@@ -50,6 +53,11 @@ export function OrderActions({ order, compact = false }: { readonly order: Order
             {TRANSITION_ACTION_LABELS[to]}
           </Button>
         ))}
+        {order.canReturnToAssignment && !compact ? (
+          <Button variant="secondary" disabled={change.isPending} onClick={() => setReturning(true)}>
+            Devolver para a atribuição
+          </Button>
+        ) : null}
       </div>
 
       {blocker === null ? null : (
@@ -59,6 +67,10 @@ export function OrderActions({ order, compact = false }: { readonly order: Order
       )}
 
       {change.error === null || confirmingCancel ? null : <Alert tone="error">{errorMessage(change.error)}</Alert>}
+
+      {order.canReturnToAssignment ? (
+        <ReturnToAssignmentDialog order={order} open={returning} onClose={() => setReturning(false)} />
+      ) : null}
 
       <ConfirmDialog
         open={confirmingCancel}

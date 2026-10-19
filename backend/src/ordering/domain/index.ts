@@ -29,4 +29,5 @@ export { PhoneNumber } from './order/value-objects/phone-number';
 export { ProductId } from './order/value-objects/product-id';
 export { ProductSnapshot } from './order/value-objects/product-snapshot';
 export { Quantity } from './order/value-objects/quantity';
+export { ReturnReason } from './order/value-objects/return-reason';
 export { StatusChange } from './order/value-objects/status-change';

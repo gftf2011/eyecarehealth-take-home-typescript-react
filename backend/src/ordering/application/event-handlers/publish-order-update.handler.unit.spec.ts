@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { EventHandlingScope, OutboxMessage } from '../../../shared-kernel/application';
 import type { DomainEvent } from '../../../shared-kernel/domain';
 import { InMemoryEventMediator } from '../../../shared-kernel/infra/events/in-memory-event-mediator';
-import { Order, OrderStatus } from '../../domain';
+import { Order, OrderStatus, ReturnReason } from '../../domain';
 import {
   availableCourier,
   buildOrderIn,
@@ -113,6 +113,18 @@ describe('PublishOrderUpdateHandler (inscrito pelo Ordering no mediador)', () =>
         previousDeliveryPersonId: COURIER_ID,
         occurredAt: LATER.toISOString(),
       },
+    ]);
+  });
+
+  it('entrega devolvida pelo gestor: mudança de status sem entregador e a perda do entregador', async () => {
+    const order = buildOrderIn('delivering');
+    order.returnToAssignment(ReturnReason.create('Entregador sem contato'), LATER);
+
+    await publish(order.pullDomainEvents());
+
+    expect(appended.map((message) => message.payload)).toEqual([
+      expect.objectContaining({ type: 'order.status-changed', previousStatus: 'delivering', status: 'ready', deliveryPersonId: null }),
+      expect.objectContaining({ type: 'order.delivery-person-unassigned', previousDeliveryPersonId: COURIER_ID }),
     ]);
   });
 

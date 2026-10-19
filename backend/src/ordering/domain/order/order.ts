@@ -19,6 +19,7 @@ import { OrderStatus, type OrderStatusValue } from './value-objects/order-status
 import type { PhoneNumber } from './value-objects/phone-number';
 import type { ProductSnapshot } from './value-objects/product-snapshot';
 import type { Quantity } from './value-objects/quantity';
+import type { ReturnReason } from './value-objects/return-reason';
 import { StatusChange } from './value-objects/status-change';
 
 /** Status em que o entregador ainda pode ser definido ou trocado. */
@@ -61,6 +62,8 @@ export type OrderSnapshot = {
  * - Status só muda pelas transições da máquina de estados; `ready → delivering`
  *   (despacho) exige entregador atribuído, ativo e sem outra entrega em andamento.
  * - Entregador só é atribuído antes do despacho e se estiver ativo e livre.
+ * - Uma entrega em andamento só volta para `ready` por `returnToAssignment`,
+ *   com motivo e sem o entregador (a máquina de estados genérica não permite).
  * - Toda transição fica registrada no histórico de status.
  */
 export class Order extends AggregateRoot<OrderId> {
@@ -239,14 +242,14 @@ export class Order extends AggregateRoot<OrderId> {
     return this.#state.deliveryPersonId;
   }
 
-  private transitionTo(next: OrderStatus, now: Date): void {
+  private transitionTo(next: OrderStatus, now: Date, reason: string | null = null): void {
     const current = this.#state.status;
     this.#state = {
       ...this.#state,
       status: next,
       statusHistory: [
         ...this.#state.statusHistory,
-        StatusChange.record(current.value, next.value, now),
+        StatusChange.record(current.value, next.value, now, reason),
       ],
       updatedAt: new Date(now.getTime()),
     };
@@ -285,6 +288,30 @@ export class Order extends AggregateRoot<OrderId> {
         previousDeliveryPersonId: previous?.value ?? null,
       }),
     );
+  }
+
+  /**
+   * Devolve uma entrega em andamento para a atribuição (`delivering → ready`):
+   * o entregador ficou sem contato, sofreu um acidente, o veículo quebrou. É
+   * uma decisão do gestor, com motivo, nunca automática: a comida está com o
+   * entregador, e despachar outro sem saber o que houve duplicaria a entrega.
+   * O pedido fica sem entregador (livre para outra entrega) e a transição,
+   * com o motivo, entra no histórico.
+   */
+  returnToAssignment(reason: ReturnReason, now: Date): void {
+    const { status, deliveryPersonId: previous } = this.#state;
+    const ready = OrderStatus.of('ready');
+    if (!status.is('delivering') || previous === null) {
+      throw new InvalidStatusTransitionError(
+        status.value,
+        ready.value,
+        'só uma entrega em andamento volta para a atribuição',
+      );
+    }
+
+    this.#state = { ...this.#state, deliveryPersonId: null };
+    this.transitionTo(ready, now, reason.value);
+    this.addDomainEvent(new DeliveryPersonUnassigned(this.id, now, { previousDeliveryPersonId: previous.value }));
   }
 
   /**

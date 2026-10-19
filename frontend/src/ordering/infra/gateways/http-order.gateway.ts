@@ -1,7 +1,7 @@
 import { mapPage, type Page } from '../../../shared-kernel/application';
 import type { FetchHttpClient, HttpRequestOptions } from '../../../shared-kernel/infra';
 import type { OrderGateway, RequestOptions } from '../../application';
-import type { Order, OrderListCriteria, OrderStatusValue } from '../../domain';
+import type { Order, OrderListCriteria, OrderStatusValue, ReturnReason } from '../../domain';
 import { orderPageSchema, orderSchema, toOrder } from '../mappers/order.mapper';
 
 /** `/api/orders` com o cliente autenticado (token e renovação ficam no cliente HTTP). */
@@ -41,6 +41,18 @@ export class HttpOrderGateway implements OrderGateway {
   async changeStatus(id: string, status: OrderStatusValue): Promise<Order> {
     const body = await this.http.request(
       { method: 'PATCH', path: `/orders/${encodeURIComponent(id)}/status`, body: { status } },
+      orderSchema,
+    );
+    return toOrder(body);
+  }
+
+  async returnToAssignment(id: string, reason: ReturnReason): Promise<Order> {
+    const body = await this.http.request(
+      {
+        method: 'POST',
+        path: `/orders/${encodeURIComponent(id)}/return-to-assignment`,
+        body: { reason: reason.value },
+      },
       orderSchema,
     );
     return toOrder(body);

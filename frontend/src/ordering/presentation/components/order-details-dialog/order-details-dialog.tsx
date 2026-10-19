@@ -8,6 +8,7 @@ import {
 } from '../../../../shared-kernel/presentation';
 import type { OrderDto } from '../../../application';
 import { useOrder } from '../../hooks/use-order';
+import { ORDER_STATUS_LABELS } from '../../labels/order-labels';
 import { OrderActions } from '../order-actions/order-actions';
 import { OrderStatusBadge } from '../order-status-badge/order-status-badge';
 import styles from './order-details-dialog.module.css';
@@ -18,7 +19,7 @@ export type OrderDetailsDialogProps = {
   readonly onClose: () => void;
 };
 
-/** Detalhe do pedido em modal: cliente, entrega, itens com preços congelados e ações. */
+/** Detalhe do pedido em modal: cliente, entrega, itens com preços congelados, histórico e ações. */
 export function OrderDetailsDialog({ orderId, onClose }: OrderDetailsDialogProps) {
   const query = useOrder(orderId);
   const order = query.data;
@@ -93,8 +94,34 @@ function OrderDetails({ order }: { readonly order: OrderDto }) {
         </tfoot>
       </table>
 
+      <StatusHistory order={order} />
+
       <OrderActions order={order} />
     </>
+  );
+}
+
+/** Linha do tempo das transições, com o motivo quando houver (entrega devolvida). */
+function StatusHistory({ order }: { readonly order: OrderDto }) {
+  return (
+    <section className={styles.history} aria-label="Histórico do pedido">
+      <h3 className={styles.historyTitle}>Histórico</h3>
+      <ol className={styles.timeline}>
+        {order.statusHistory.map((change) => (
+          <li key={`${change.to}-${change.changedAt.toISOString()}`} className={styles.step}>
+            <span className={styles.stepStatus}>
+              {change.from === null
+                ? `Criado como ${ORDER_STATUS_LABELS[change.to].toLowerCase()}`
+                : `${ORDER_STATUS_LABELS[change.from]} → ${ORDER_STATUS_LABELS[change.to]}`}
+            </span>
+            <time className={styles.muted} dateTime={change.changedAt.toISOString()}>
+              {formatDateTime(change.changedAt)}
+            </time>
+            {change.reason === null ? null : <q className={styles.reason}>{change.reason}</q>}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

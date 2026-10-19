@@ -9,6 +9,15 @@ export type OrderItemDto = {
   readonly unitPrice: number;
 };
 
+export type StatusChangeDto = {
+  /** `null` na criação do pedido. */
+  readonly from: OrderStatusValue | null;
+  readonly to: OrderStatusValue;
+  readonly changedAt: Date;
+  /** Só nas transições que exigem motivo (entrega devolvida para a atribuição). */
+  readonly reason: string | null;
+};
+
 /** Representação de saída de um pedido: só tipos primitivos, sem VOs. */
 export type OrderDto = {
   readonly id: string;
@@ -22,6 +31,8 @@ export type OrderDto = {
   readonly totalAmount: number;
   readonly deliveryPerson: DeliveryPersonSummary | null;
   readonly items: readonly OrderItemDto[];
+  /** Transições em ordem, da criação até o status atual. */
+  readonly statusHistory: readonly StatusChangeDto[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
@@ -71,6 +82,12 @@ export function toOrderDto(order: Order, deliveryPersons: DeliveryPersonSummarie
       product: { id: item.productId.value, name: item.productName },
       quantity: item.quantity.value,
       unitPrice: item.unitPrice.toDecimal(),
+    })),
+    statusHistory: order.statusHistory.map((change) => ({
+      from: change.from,
+      to: change.to,
+      changedAt: change.changedAt,
+      reason: change.reason,
     })),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,

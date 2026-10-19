@@ -105,7 +105,7 @@ describe('Contratos da API: as respostas reais seguem o Swagger', () => {
     await expectContract('GET', '/api/delivery-persons', 200, { path: '/api/delivery-persons?isActive=true' });
   });
 
-  it('pedidos: criar, detalhar, avançar, atribuir, sugerir, despachar e listar', async () => {
+  it('pedidos: criar, detalhar, avançar, atribuir, sugerir, despachar, devolver e listar', async () => {
     const placed = await expectContract('POST', '/api/orders', 201, {
       payload: {
         customerName: 'Cliente do Contrato',
@@ -125,6 +125,12 @@ describe('Contratos da API: as respostas reais seguem o Swagger', () => {
     await expectContract('PATCH', '/api/orders/:id/assign', 200, { ...order('/assign'), payload: { deliveryPersonId: ids.courier } });
     const suggestion = await expectContract('POST', '/api/orders/optimize-assignment', 200);
     expect(suggestion.json().assignments).toHaveLength(1);
+    await expectContract('POST', '/api/orders/:id/dispatch', 200, { ...order('/dispatch'), payload: { deliveryPersonId: ids.courier } });
+    // O entregador some; a entrega volta para a atribuição e sai de novo com ele.
+    await expectContract('POST', '/api/orders/:id/return-to-assignment', 200, {
+      ...order('/return-to-assignment'),
+      payload: { reason: 'Entregador sem contato' },
+    });
     await expectContract('POST', '/api/orders/:id/dispatch', 200, { ...order('/dispatch'), payload: { deliveryPersonId: ids.courier } });
     await expectContract('PATCH', '/api/orders/:id/status', 200, { ...order('/status'), payload: { status: 'delivered' } });
     await expectContract('GET', '/api/orders', 200, { path: '/api/orders?status=delivered&sortBy=totalAmount' });

@@ -5,7 +5,12 @@ import type { ReactNode } from 'react';
 
 import { PERMISSIONS, type Permission } from '../../../shared-kernel/domain';
 import { PermissionsProvider } from '../../../shared-kernel/presentation';
-import { ChangeOrderStatusUseCase, GetOrderUseCase, ListOrdersUseCase } from '../../application';
+import {
+  ChangeOrderStatusUseCase,
+  GetOrderUseCase,
+  ListOrdersUseCase,
+  ReturnOrderToAssignmentUseCase,
+} from '../../application';
 import { FakeOrderGateway } from '../../application/testing/fake-order.gateway';
 import { OrderingProvider } from '../providers/ordering-provider';
 
@@ -20,6 +25,7 @@ export function renderWithOrdering(
     listOrders: new ListOrdersUseCase(gateway),
     getOrder: new GetOrderUseCase(gateway),
     changeOrderStatus: new ChangeOrderStatusUseCase(gateway),
+    returnOrderToAssignment: new ReturnOrderToAssignmentUseCase(gateway),
   };
 
   const view = render(

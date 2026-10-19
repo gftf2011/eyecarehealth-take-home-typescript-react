@@ -1,9 +1,10 @@
-export { InvalidOrderStatusError } from './order/errors';
+export { InvalidOrderStatusError, InvalidReturnReasonError } from './order/errors';
 export {
   Order,
   type AssignedDeliveryPerson,
   type OrderItem,
   type OrderProps,
+  type StatusChange,
   type StatusTransition,
   type TransitionBlocker,
 } from './order/order';
@@ -13,3 +14,4 @@ export {
   type OrderSortField,
 } from './order/order-list-criteria';
 export { ORDER_STATUSES, OrderStatus, type OrderStatusValue } from './order/value-objects/order-status';
+export { ReturnReason } from './order/value-objects/return-reason';

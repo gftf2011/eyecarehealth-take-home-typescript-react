@@ -15,6 +15,7 @@ export type OrderBodyFixture = {
   totalAmount: number;
   deliveryPerson: { id: string; name: string } | null;
   items: { id: string; product: { id: string; name: string }; quantity: number; unitPrice: number }[];
+  statusHistory: { from: OrderStatusValue | null; to: OrderStatusValue; changedAt: string; reason: string | null }[];
   createdAt: string;
   updatedAt: string;
 };
@@ -34,6 +35,7 @@ export function orderBody(overrides: Partial<OrderBodyFixture> = {}): OrderBodyF
       { id: 'item-1', product: { id: 'p-burger', name: 'X-Burger Especial' }, quantity: 2, unitPrice: 32.9 },
       { id: 'item-2', product: { id: 'p-juice', name: 'Suco de Laranja' }, quantity: 1, unitPrice: 12.5 },
     ],
+    statusHistory: [{ from: null, to: 'pending', changedAt: CREATED_AT.toISOString(), reason: null }],
     createdAt: CREATED_AT.toISOString(),
     updatedAt: CREATED_AT.toISOString(),
     ...overrides,
@@ -55,6 +57,7 @@ export function buildOrder(
     ],
     totalAmount: Money.fromDecimal(78.3),
     deliveryPerson: null,
+    statusHistory: [{ from: null, to: 'pending', changedAt: CREATED_AT, reason: null }],
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
     ...rest,

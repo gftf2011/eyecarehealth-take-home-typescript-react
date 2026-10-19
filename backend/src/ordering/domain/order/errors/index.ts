@@ -7,6 +7,7 @@ export { InvalidGeoLocationError } from './invalid-geo-location.error';
 export { InvalidOrderStatusError } from './invalid-order-status.error';
 export { InvalidPhoneNumberError } from './invalid-phone-number.error';
 export { InvalidQuantityError } from './invalid-quantity.error';
+export { InvalidReturnReasonError } from './invalid-return-reason.error';
 export { InvalidStatusTransitionError } from './invalid-status-transition.error';
 export { OrderNotFoundError } from './order-not-found.error';
 export { UnavailableProductError } from './unavailable-product.error';

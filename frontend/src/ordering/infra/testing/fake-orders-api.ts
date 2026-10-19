@@ -18,6 +18,7 @@ export class FakeOrdersApi {
   /** Query string de cada `GET /orders`, para o teste conferir os filtros enviados. */
   readonly listQueries: URLSearchParams[] = [];
   readonly statusChanges: { id: string; status: string }[] = [];
+  readonly returns: { id: string; reason: string }[] = [];
 
   /** Pedidos iniciais (copiados: mudanças de status não vazam entre testes). */
   given(...orders: OrderBodyFixture[]): void {
@@ -72,6 +73,20 @@ export class FakeOrdersApi {
         }
         order.status = status;
         order.updatedAt = new Date().toISOString();
+        return HttpResponse.json(order);
+      }),
+
+      http.post(apiUrl('/orders/:id/return-to-assignment'), async ({ params, request }) => {
+        const { reason } = (await request.json()) as { reason: string };
+        const order = this.orders.find((candidate) => candidate.id === params.id);
+        if (order === undefined) return apiError(404, 'ORDER_NOT_FOUND', 'Pedido não encontrado');
+        this.returns.push({ id: order.id, reason });
+        if (order.status !== 'delivering') {
+          return apiError(422, 'INVALID_STATUS_TRANSITION', `Não é possível alterar o status de '${order.status}' para 'ready'`);
+        }
+        const now = new Date().toISOString();
+        order.statusHistory.push({ from: 'delivering', to: 'ready', changedAt: now, reason: reason.trim() });
+        Object.assign(order, { status: 'ready', deliveryPerson: null, updatedAt: now });
         return HttpResponse.json(order);
       }),
     ];

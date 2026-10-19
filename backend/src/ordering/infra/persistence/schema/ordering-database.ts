@@ -34,6 +34,8 @@ export interface OrderStatusHistoryTable {
   from_status: OrderStatusValue | null;
   to_status: OrderStatusValue;
   changed_at: Date;
+  /** Só nas transições que exigem motivo (entrega devolvida para a atribuição). */
+  reason: string | null;
 }
 
 /**

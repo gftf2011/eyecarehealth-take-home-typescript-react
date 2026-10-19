@@ -22,6 +22,14 @@ export const orderSchema = z.object({
       unitPrice: z.number(),
     }),
   ),
+  statusHistory: z.array(
+    z.object({
+      from: z.string().nullable(),
+      to: z.string(),
+      changedAt: isoDate,
+      reason: z.string().nullable(),
+    }),
+  ),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -54,6 +62,12 @@ export function toOrder(body: OrderBody): Order {
       productName: item.product.name,
       quantity: item.quantity,
       unitPrice: Money.fromDecimal(item.unitPrice, 'unitPrice'),
+    })),
+    statusHistory: body.statusHistory.map((change) => ({
+      from: change.from === null ? null : OrderStatus.create(change.from).value,
+      to: OrderStatus.create(change.to).value,
+      changedAt: change.changedAt,
+      reason: change.reason,
     })),
     createdAt: body.createdAt,
     updatedAt: body.updatedAt,

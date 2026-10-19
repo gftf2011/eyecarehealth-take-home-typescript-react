@@ -23,6 +23,7 @@ import {
   OrderStatus,
   ProductId,
   Quantity,
+  ReturnReason,
   type Order,
 } from '../../../domain';
 import {
@@ -104,6 +105,18 @@ describe('KyselyOrderingUnitOfWork', () => {
         { product_name: 'Suco de Laranja', unit_price: '12.50', quantity: 1 },
         { product_name: 'X-Burger Especial', unit_price: '32.90', quantity: 2 },
       ]);
+    });
+
+    it('guarda o motivo da entrega devolvida no histórico', async () => {
+      const order = buildOrderIn('delivering');
+      await save(order);
+      order.returnToAssignment(ReturnReason.create('Entregador sem contato'), NOW);
+      await save(order);
+
+      const reloaded = await find(order);
+      expect(reloaded?.status.value).toBe('ready');
+      expect(reloaded?.deliveryPersonId).toBeNull();
+      expect(reloaded?.statusHistory.map((change) => change.reason)).toEqual([null, null, null, null, 'Entregador sem contato']);
     });
 
     it('salvar de novo só acrescenta as transições novas (idempotente)', async () => {

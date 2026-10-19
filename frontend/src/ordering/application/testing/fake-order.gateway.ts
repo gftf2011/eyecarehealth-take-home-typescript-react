@@ -1,5 +1,5 @@
 import type { Page } from '../../../shared-kernel/application';
-import type { Order, OrderListCriteria, OrderStatusValue } from '../../domain';
+import type { Order, OrderListCriteria, OrderStatusValue, ReturnReason } from '../../domain';
 import { buildOrder } from '../../domain/order/testing/order.fixture';
 import type { OrderGateway } from '../ports/order-gateway';
 
@@ -8,6 +8,7 @@ export class FakeOrderGateway implements OrderGateway {
   orders: Order[] = [buildOrder()];
   readonly listCalls: OrderListCriteria[] = [];
   readonly statusChanges: { id: string; status: OrderStatusValue }[] = [];
+  readonly returns: { id: string; reason: string }[] = [];
   changeStatusAnswer: ((id: string, status: OrderStatusValue) => Promise<Order>) | null = null;
 
   list(criteria: OrderListCriteria): Promise<Page<Order>> {
@@ -27,5 +28,10 @@ export class FakeOrderGateway implements OrderGateway {
     this.statusChanges.push({ id, status });
     if (this.changeStatusAnswer !== null) return this.changeStatusAnswer(id, status);
     return Promise.resolve(buildOrder({ id, status }));
+  }
+
+  returnToAssignment(id: string, reason: ReturnReason): Promise<Order> {
+    this.returns.push({ id, reason: reason.value });
+    return Promise.resolve(buildOrder({ id, status: 'ready' }));
   }
 }

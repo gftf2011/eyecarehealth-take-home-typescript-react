@@ -63,7 +63,7 @@ export function toOrder(
     deliveryPersonId: row.delivery_person_id === null ? null : DeliveryPersonId.from(row.delivery_person_id),
     statusHistory: [...history]
       .sort((a, b) => a.position - b.position)
-      .map((change) => StatusChange.record(change.from_status, change.to_status, change.changed_at)),
+      .map((change) => StatusChange.record(change.from_status, change.to_status, change.changed_at, change.reason)),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -100,6 +100,7 @@ export function toOrderRows(order: Order): OrderRows {
       from_status: change.from,
       to_status: change.to,
       changed_at: change.changedAt,
+      reason: change.reason,
     })),
   };
 }

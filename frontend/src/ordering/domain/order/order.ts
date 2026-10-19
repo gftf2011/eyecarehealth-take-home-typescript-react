@@ -16,6 +16,15 @@ export type AssignedDeliveryPerson = {
   readonly name: string;
 };
 
+/** Uma transição do histórico (a primeira, `from: null`, é a criação). */
+export type StatusChange = {
+  readonly from: OrderStatusValue | null;
+  readonly to: OrderStatusValue;
+  readonly changedAt: Date;
+  /** Motivo, nas transições que exigem um (entrega devolvida para a atribuição). */
+  readonly reason: string | null;
+};
+
 export type OrderProps = {
   readonly id: string;
   readonly customerName: string;
@@ -26,6 +35,8 @@ export type OrderProps = {
   /** Calculado pela API (soma de preço × quantidade). */
   readonly totalAmount: Money;
   readonly deliveryPerson: AssignedDeliveryPerson | null;
+  /** Transições em ordem, da criação até o status atual. */
+  readonly statusHistory: readonly StatusChange[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 };
@@ -49,7 +60,7 @@ export class Order {
   private constructor(private readonly props: OrderProps) {}
 
   static restore(props: OrderProps): Order {
-    return new Order({ ...props, items: [...props.items] });
+    return new Order({ ...props, items: [...props.items], statusHistory: [...props.statusHistory] });
   }
 
   get id(): string {
@@ -82,6 +93,18 @@ export class Order {
 
   get deliveryPerson(): AssignedDeliveryPerson | null {
     return this.props.deliveryPerson;
+  }
+
+  get statusHistory(): readonly StatusChange[] {
+    return this.props.statusHistory;
+  }
+
+  /**
+   * Uma entrega em andamento pode voltar para a atribuição (o gestor decide,
+   * com motivo): é uma operação própria, fora da máquina de estados.
+   */
+  get canReturnToAssignment(): boolean {
+    return this.props.status.value === 'delivering';
   }
 
   get createdAt(): Date {

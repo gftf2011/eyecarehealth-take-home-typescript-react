@@ -46,6 +46,15 @@ export const changeOrderStatusBodySchema = z.object({
   }),
 });
 
+export const returnToAssignmentBodySchema = z.object({
+  reason: z.string().meta({
+    minLength: 3,
+    maxLength: 200,
+    description: 'Por que a entrega voltou (fica no histórico do pedido)',
+    examples: ['Entregador sem contato há 30 minutos'],
+  }),
+});
+
 export const deliveryPersonIdBodySchema = z.object({
   deliveryPersonId: z.string().meta({ format: 'uuid', description: 'Entregador ativo e sem entrega em andamento' }),
 });
@@ -68,6 +77,16 @@ export const orderSchema = z.strictObject({
       unitPrice: z.number().meta({ description: 'Preço no momento do pedido, em reais' }),
     }),
   ),
+  statusHistory: z
+    .array(
+      z.strictObject({
+        from: z.enum(ORDER_STATUSES).nullable().meta({ description: '`null` na criação do pedido' }),
+        to: z.enum(ORDER_STATUSES),
+        changedAt: isoDateTime,
+        reason: z.string().nullable().meta({ description: 'Motivo, quando a transição exige (entrega devolvida)' }),
+      }),
+    )
+    .meta({ description: 'Transições em ordem, da criação até o status atual' }),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
 });

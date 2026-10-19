@@ -98,6 +98,7 @@ describe('API de pedidos (/api/orders)', () => {
             unitPrice: 32.9,
           },
         ],
+        statusHistory: [{ from: null, to: 'pending', changedAt: '2025-02-01T12:00:00.000Z', reason: null }],
         createdAt: '2025-02-01T12:00:00.000Z',
         updatedAt: '2025-02-01T12:00:00.000Z',
       });
@@ -268,6 +269,61 @@ describe('API de pedidos (/api/orders)', () => {
       expect(invalid.statusCode).toBe(400);
       expect(missing.statusCode).toBe(404);
       expect(missing.json().error.code).toBe('ORDER_NOT_FOUND');
+    });
+  });
+
+  describe('POST /api/orders/:id/return-to-assignment', () => {
+    const returnToAssignment = (id: string, reason: unknown, token = ADMIN_TOKEN) =>
+      request('POST', `/api/orders/${id}/return-to-assignment`, { reason }, token);
+
+    async function deliveringOrder(): Promise<string> {
+      const id = await readyOrder();
+      await assign(id, COURIER_ID);
+      await changeStatus(id, 'delivering');
+      return id;
+    }
+
+    it('200: a entrega volta para ready, sem entregador, com o motivo no histórico; o entregador fica livre', async () => {
+      const id = await deliveringOrder();
+      testApp.clock.setTo(new Date('2025-02-01T12:40:00Z'));
+
+      const returned = await returnToAssignment(id, 'Entregador sem contato há 30 minutos');
+
+      expect(returned.statusCode).toBe(200);
+      expect(returned.json()).toMatchObject({ status: 'ready', deliveryPerson: null });
+      expect(returned.json().statusHistory.at(-1)).toEqual({
+        from: 'delivering',
+        to: 'ready',
+        changedAt: '2025-02-01T12:40:00.000Z',
+        reason: 'Entregador sem contato há 30 minutos',
+      });
+      // Livre: pode assumir outra entrega na hora.
+      const other = await readyOrder();
+      expect((await assign(other, COURIER_ID)).statusCode).toBe(200);
+    });
+
+    it('422 INVALID_STATUS_TRANSITION se o pedido não está em entrega', async () => {
+      const id = await readyOrder();
+
+      const response = await returnToAssignment(id, 'Entregador sem contato');
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json().error.code).toBe('INVALID_STATUS_TRANSITION');
+    });
+
+    it('400 sem motivo válido, 403 para o viewer e 404 para pedido inexistente', async () => {
+      const id = await deliveringOrder();
+
+      const short = await returnToAssignment(id, 'ab');
+      const missing = await request('POST', `/api/orders/${id}/return-to-assignment`, {});
+      const viewer = await returnToAssignment(id, 'Entregador sem contato', VIEWER_TOKEN);
+      const unknown = await returnToAssignment('c0ffee00-1234-4abc-8def-0123456789ab', 'Entregador sem contato');
+
+      expect(short.statusCode).toBe(400);
+      expect(short.json().error.details).toEqual([{ field: 'reason', message: 'O motivo deve ter entre 3 e 200 caracteres' }]);
+      expect(missing.statusCode).toBe(400);
+      expect(viewer.statusCode).toBe(403);
+      expect(unknown.statusCode).toBe(404);
     });
   });
 

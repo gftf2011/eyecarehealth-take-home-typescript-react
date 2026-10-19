@@ -1,4 +1,4 @@
-import type { Order, OrderStatusValue, StatusTransition } from '../../domain';
+import type { Order, OrderStatusValue, StatusChange, StatusTransition } from '../../domain';
 
 export type OrderItemDto = {
   readonly id: string;
@@ -24,6 +24,10 @@ export type OrderDto = {
   readonly updatedAt: Date;
   /** Transições oferecidas a partir do status atual (botões contextuais). */
   readonly transitions: readonly StatusTransition[];
+  /** Em entrega: o gestor pode devolvê-la para a atribuição, com motivo. */
+  readonly canReturnToAssignment: boolean;
+  /** Da criação até o status atual. */
+  readonly statusHistory: readonly StatusChange[];
 };
 
 export function toOrderDto(order: Order): OrderDto {
@@ -46,5 +50,7 @@ export function toOrderDto(order: Order): OrderDto {
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     transitions: order.transitions(),
+    canReturnToAssignment: order.canReturnToAssignment,
+    statusHistory: order.statusHistory,
   };
 }

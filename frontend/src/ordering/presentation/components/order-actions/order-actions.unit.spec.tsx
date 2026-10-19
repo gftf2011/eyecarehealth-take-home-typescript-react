@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { BusinessRuleRejectedError } from '../../../../shared-kernel/application';
@@ -13,7 +13,7 @@ describe('OrderActions', () => {
   it.each([
     ['pending', ['Iniciar preparo', 'Cancelar pedido']],
     ['preparing', ['Marcar como pronto', 'Cancelar pedido']],
-    ['delivering', ['Confirmar entrega']],
+    ['delivering', ['Confirmar entrega', 'Devolver para a atribuição']],
   ] as const)('pedido %s mostra só as ações válidas', (status, labels) => {
     renderWithOrdering(<OrderActions order={dto({ status })} />);
 
@@ -77,5 +77,42 @@ describe('OrderActions', () => {
     await user.click(screen.getByRole('button', { name: 'Iniciar preparo' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('O pedido já foi cancelado');
+  });
+
+  describe('devolver a entrega para a atribuição', () => {
+    const delivering = () => dto({ status: 'delivering', deliveryPerson: { id: 'c-1', name: 'Carlos Santos' } });
+
+    it('pede o motivo, explica o efeito e valida antes de enviar', async () => {
+      const { user, gateway } = renderWithOrdering(<OrderActions order={delivering()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Devolver para a atribuição' }));
+      const dialog = screen.getByRole('dialog', { name: 'Devolver entrega para a atribuição?' });
+      expect(dialog).toHaveTextContent('volta para os prontos, sem entregador (Carlos Santos fica livre)');
+
+      await user.click(within(dialog).getByRole('button', { name: 'Devolver para a atribuição' }));
+
+      expect(within(dialog).getByLabelText('Motivo')).toHaveAccessibleDescription(
+        expect.stringContaining('O motivo deve ter entre 3 e 200 caracteres'),
+      );
+      expect(within(dialog).getByLabelText('Motivo')).toHaveFocus();
+      expect(gateway.returns).toEqual([]);
+    });
+
+    it('envia o motivo e fecha', async () => {
+      const { user, gateway } = renderWithOrdering(<OrderActions order={delivering()} />);
+
+      await user.click(screen.getByRole('button', { name: 'Devolver para a atribuição' }));
+      const dialog = screen.getByRole('dialog');
+      await user.type(within(dialog).getByLabelText('Motivo'), 'Entregador sem contato');
+      await user.click(within(dialog).getByRole('button', { name: 'Devolver para a atribuição' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(gateway.returns).toEqual([{ id: 'order-1', reason: 'Entregador sem contato' }]);
+    });
+
+    it('não aparece na linha da lista, só no detalhe', () => {
+      renderWithOrdering(<OrderActions order={delivering()} compact />);
+      expect(screen.queryByRole('button', { name: 'Devolver para a atribuição' })).not.toBeInTheDocument();
+    });
   });
 });

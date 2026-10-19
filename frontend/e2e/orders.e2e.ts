@@ -56,4 +56,38 @@ test.describe('Pedidos', () => {
 
     await expect(dialog.getByText('Atribua um entregador na tela de atribuição para despachar.')).toBeVisible();
   });
+
+  test('entrega sem contato volta para a atribuição com motivo, e o entregador fica livre', async ({ page, api }) => {
+    const courier = await api.registerDeliveryPerson(unique('Entregador Sumido'));
+    const customer = unique('Cliente Devolvido');
+    const order = await api.placeOrder(customer);
+    await api.changeStatus(order.id, 'preparing');
+    await api.changeStatus(order.id, 'ready');
+    await api.dispatch(order.id, courier.id);
+    await page.goto(`/pedidos?order=${order.id}`);
+    const details = page.getByRole('dialog', { name: 'Detalhes do pedido' });
+    await expect(details).toContainText(courier.name);
+
+    await details.getByRole('button', { name: 'Devolver para a atribuição' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Devolver entrega para a atribuição?' });
+    await confirm.getByLabel('Motivo').fill('Entregador sem contato há 30 minutos');
+    await confirm.getByRole('button', { name: 'Devolver para a atribuição' }).click();
+
+    await expect(confirm).toHaveCount(0);
+    await expect(details).toContainText('Não atribuído');
+    const history = details.getByRole('region', { name: 'Histórico do pedido' });
+    await expect(history).toContainText('Em entrega → Pronto');
+    await expect(history).toContainText('Entregador sem contato há 30 minutos');
+
+    // De volta aos prontos, sem entregador; e o entregador está livre para outra entrega.
+    await page.goto('/atribuicao');
+    const ready = page.getByRole('region', { name: 'Pedidos prontos' }).getByRole('listitem').filter({ hasText: customer });
+    await expect(ready).toBeVisible();
+    await expect(ready).not.toContainText('Atribuído a');
+    await expect(page.getByRole('region', { name: 'Entregadores disponíveis' })).toContainText(courier.name);
+
+    await api.changeStatus(order.id, 'cancelled');
+    await api.removeDeliveryPerson(courier.id);
+  });
 });
+

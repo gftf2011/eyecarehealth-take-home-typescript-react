@@ -132,6 +132,35 @@ describe('Painel de pedidos', () => {
     expect(within(await rowOf('João Silva')).getByRole('button', { name: 'Marcar como pronto' })).toBeEnabled();
   });
 
+  it('devolve uma entrega para a atribuição com motivo: volta a pronto, sem entregador, e o motivo aparece no histórico', async () => {
+    const PEDRO = orderBody({
+      id: 'order-pedro',
+      customerName: 'Pedro Almeida',
+      status: 'delivering',
+      deliveryPerson: { id: 'dp-1', name: 'Carlos Entregador' },
+      createdAt: '2026-10-17T13:00:00.000Z',
+    });
+    orders.given(JOAO, MARIA, ANA, PEDRO);
+    const view = open('/pedidos?order=order-pedro');
+    const dialog = await screen.findByRole('dialog', { name: 'Detalhes do pedido' });
+
+    await view.user.click(await within(dialog).findByRole('button', { name: 'Devolver para a atribuição' }));
+    const confirm = screen.getByRole('dialog', { name: 'Devolver entrega para a atribuição?' });
+    await view.user.type(within(confirm).getByLabelText('Motivo'), 'Entregador sem contato há 30 minutos');
+    await view.user.click(within(confirm).getByRole('button', { name: 'Devolver para a atribuição' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Devolver entrega para a atribuição?' })).not.toBeInTheDocument(),
+    );
+    expect(orders.returns).toEqual([{ id: 'order-pedro', reason: 'Entregador sem contato há 30 minutos' }]);
+    const details = screen.getByRole('dialog', { name: 'Detalhes do pedido' });
+    expect(await within(details).findByText('Não atribuído')).toBeInTheDocument();
+    const history = within(details).getByRole('region', { name: 'Histórico do pedido' });
+    expect(history).toHaveTextContent('Em entrega → Pronto');
+    expect(history).toHaveTextContent('Entregador sem contato há 30 minutos');
+    expect(within(await rowOf('Pedro Almeida')).getByText('Pronto')).toBeInTheDocument();
+  });
+
   it('tela desatualizada: a recusa da API aparece e nada muda', async () => {
     const view = open();
     const joao = await rowOf('João Silva');
