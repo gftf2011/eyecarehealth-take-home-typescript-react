@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { Money } from '../../../shared-kernel/domain';
+import { paginationSchema } from '../../../shared-kernel/infra';
 import {
   DELIVERY_ISSUE_DECISIONS,
   DELIVERY_ISSUE_REASONS,
@@ -56,12 +57,7 @@ export type OrderBody = z.output<typeof orderSchema>;
 
 export const orderPageSchema = z.object({
   data: z.array(orderSchema),
-  pagination: z.object({
-    page: z.number().int(),
-    limit: z.number().int(),
-    total: z.number().int(),
-    totalPages: z.number().int(),
-  }),
+  pagination: paginationSchema,
 });
 
 /** Corpo da API → agregado (valores em reais viram `Money` em centavos). */

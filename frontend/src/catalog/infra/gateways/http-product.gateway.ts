@@ -13,7 +13,7 @@ export class HttpProductGateway implements ProductGateway {
       {
         path: '/products',
         query: {
-          page: criteria.page,
+          cursor: criteria.cursor,
           limit: criteria.limit,
           search: criteria.search,
           category: criteria.category,

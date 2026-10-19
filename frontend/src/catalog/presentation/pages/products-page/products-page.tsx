@@ -24,10 +24,17 @@ import styles from './products-page.module.css';
 export function ProductsPage() {
   useProductLiveUpdates();
   const canWrite = useCan('products:write');
-  const { filters, input, applyFilters, goToPage } = useProductFilters();
+  const { filters, input, applyFilters, goToCursor } = useProductFilters();
   const products = useProducts(input);
   const page = products.data;
   const filtered = Object.values(filters).some((value) => value !== '');
+  // Um link de página antigo (cursor) pode não valer mais: sempre há o caminho de volta ao início.
+  const backToStart =
+    input.cursor === '' ? undefined : (
+      <Button variant="secondary" size="sm" onClick={() => goToCursor(null)}>
+        Primeira página
+      </Button>
+    );
 
   const [editing, setEditing] = useState<ProductDto | 'new' | null>(null);
   const [removing, setRemoving] = useState<ProductDto | null>(null);
@@ -55,6 +62,7 @@ export function ProductsPage() {
           <Button variant="secondary" size="sm" onClick={() => void products.refetch()}>
             Tentar novamente
           </Button>
+          {backToStart}
         </Alert>
       ) : null}
 
@@ -65,7 +73,8 @@ export function ProductsPage() {
           title={filtered ? 'Nenhum produto encontrado' : 'O cardápio está vazio'}
           description={filtered ? 'Tente outra busca ou limpe os filtros.' : 'Cadastre o primeiro produto do cardápio.'}
           action={
-            canWrite && !filtered ? <Button onClick={() => setEditing('new')}>Novo produto</Button> : undefined
+            backToStart ??
+            (canWrite && !filtered ? <Button onClick={() => setEditing('new')}>Novo produto</Button> : undefined)
           }
         />
       ) : null}
@@ -73,7 +82,12 @@ export function ProductsPage() {
       {page !== undefined && page.data.length > 0 ? (
         <div className={styles.results} aria-busy={products.isFetching}>
           <ProductTable products={page.data} onEdit={setEditing} onRemove={setRemoving} />
-          <Pagination pagination={page.pagination} onPageChange={goToPage} itemLabel="produtos" />
+          <Pagination
+            pagination={page.pagination}
+            count={page.data.length}
+            onCursorChange={goToCursor}
+            itemLabel="produtos"
+          />
         </div>
       ) : null}
 

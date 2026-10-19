@@ -1,7 +1,13 @@
 import type { Transaction } from 'kysely';
 
 import type { DomainEventBuffer } from '../../../../shared-kernel/application';
-import type { Slice } from '../../../../shared-kernel/domain';
+import {
+  keysetScanDirection,
+  toKeysetSlice,
+  type KeysetSlice,
+  type SortKeyValue,
+} from '../../../../shared-kernel/domain';
+import { centsToDecimal } from '../../../../shared-kernel/infra/database/numeric';
 import type {
   Product,
   ProductId,
@@ -17,6 +23,13 @@ const SORT_COLUMNS = {
   price: 'price',
   createdAt: 'created_at',
 } as const satisfies Record<ProductSortField, string>;
+
+/** O valor do cursor (nome, centavos, epoch em ms) no tipo da coluna. */
+const TO_COLUMN_VALUE = {
+  name: (value: SortKeyValue) => String(value),
+  price: (value: SortKeyValue) => centsToDecimal(Number(value)),
+  createdAt: (value: SortKeyValue) => new Date(value),
+} as const satisfies Record<ProductSortField, (value: SortKeyValue) => unknown>;
 
 /**
  * Repositório de Product em PostgreSQL. Só existe dentro de uma transação
@@ -51,7 +64,7 @@ export class KyselyProductRepository implements ProductRepository {
     this.events.collectFrom(product);
   }
 
-  async list(criteria: ProductListCriteria): Promise<Slice<Product>> {
+  async list(criteria: ProductListCriteria): Promise<KeysetSlice<Product>> {
     let query = this.trx.selectFrom('products').where('deleted_at', 'is', null);
 
     if (criteria.visibility === 'public') query = query.where('is_available', '=', true);
@@ -61,19 +74,21 @@ export class KyselyProductRepository implements ProductRepository {
       query = query.where('name', 'ilike', `%${escapeLikePattern(criteria.search)}%`);
     }
 
-    const [counted, rows] = await Promise.all([
-      query.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow(),
-      query
-        .selectAll()
-        .orderBy(SORT_COLUMNS[criteria.sort.field], criteria.sort.direction)
-        // Desempate estável para a paginação não repetir nem pular itens.
-        .orderBy('id', 'asc')
-        .limit(criteria.limit)
-        .offset(criteria.offset)
-        .execute(),
-    ]);
+    const { field } = criteria.sort;
+    const column = SORT_COLUMNS[field];
+    const { keyset } = criteria;
+    const scan = keysetScanDirection(criteria.sort.direction, keyset);
+    if (keyset !== null) {
+      const value = TO_COLUMN_VALUE[field](keyset.value);
+      query = query.where((eb) =>
+        eb(eb.refTuple(column, 'id'), scan === 'asc' ? '>' : '<', eb.tuple(value, keyset.id)),
+      );
+    }
 
-    return { items: rows.map(toProduct), total: Number(counted.total) };
+    // Um item a mais só para saber se há outra página; desempate na mesma direção (mesmo índice).
+    const rows = await query.selectAll().orderBy(column, scan).orderBy('id', scan).limit(criteria.limit + 1).execute();
+    const slice = toKeysetSlice(rows, criteria.limit, keyset);
+    return { items: slice.items.map(toProduct), hasMore: slice.hasMore };
   }
 }
 

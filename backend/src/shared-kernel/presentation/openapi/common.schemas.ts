@@ -21,10 +21,9 @@ export const errorResponseSchema = z
   });
 
 const paginationSchema = z.strictObject({
-  page: z.number().int().min(1),
   limit: z.number().int().min(1).max(MAX_PAGE_LIMIT),
-  total: z.number().int().min(0),
-  totalPages: z.number().int().min(0),
+  nextCursor: z.string().nullable().meta({ description: 'Envie em `cursor` para a próxima página; `null` na última' }),
+  previousCursor: z.string().nullable().meta({ description: 'Envie em `cursor` para a página anterior; `null` na primeira' }),
 });
 
 /** Página `{ data, pagination }` de qualquer listagem. */
@@ -32,5 +31,7 @@ export function pageOf<T extends z.ZodType>(item: T) {
   return z.strictObject({ data: z.array(item), pagination: paginationSchema });
 }
 
-/** Query de paginação documentada (a validação fica no `PageRequest`). */
-export const PAGE_DOC = `Página a partir de 1; \`limit\` de 1 a ${MAX_PAGE_LIMIT} (padrão ${DEFAULT_PAGE_LIMIT}).`;
+/** Query de paginação documentada (a validação fica no `CursorPageRequest`). */
+export const CURSOR_DOC =
+  'Cursor opaco devolvido em `pagination.nextCursor` ou `pagination.previousCursor`, válido só com a mesma ordenação; sem ele, a primeira página.';
+export const LIMIT_DOC = `Itens por página, de 1 a ${MAX_PAGE_LIMIT} (padrão ${DEFAULT_PAGE_LIMIT}).`;

@@ -1,5 +1,7 @@
-import type { DomainEvent, Slice } from '../../../shared-kernel/domain';
+import { keysetSliceInMemory } from '../../../shared-kernel/application/testing/in-memory-keyset';
+import type { DomainEvent, KeysetSlice } from '../../../shared-kernel/domain';
 import {
+  ORDER_SORT_KEYS,
   Order,
   OrderId,
   type DeliveryPersonAvailability,
@@ -169,17 +171,12 @@ class InMemoryOrderRepository implements OrderRepository {
     this.stagedEvents.push(...order.pullDomainEvents());
   }
 
-  /** Mesma semântica esperada do SQL: filtros, ordenação estável e fatia da página. */
-  async list(criteria: OrderListCriteria): Promise<Slice<Order>> {
+  /** Mesma semântica esperada do SQL: filtros, ordenação estável e keyset. */
+  async list(criteria: OrderListCriteria): Promise<KeysetSlice<Order>> {
     const visible = [...new Map([...this.committed, ...this.staged])]
       .map(([id, snapshot]) => Order.reconstitute(OrderId.from(id), snapshot))
-      .filter((order) => matches(order, criteria))
-      .sort(compareBy(criteria.sort));
-
-    return {
-      items: visible.slice(criteria.offset, criteria.offset + criteria.limit),
-      total: visible.length,
-    };
+      .filter((order) => matches(order, criteria));
+    return keysetSliceInMemory(visible, criteria, ORDER_SORT_KEYS[criteria.sort.field]);
   }
 }
 
@@ -190,20 +187,6 @@ function matches(order: Order, criteria: OrderListCriteria): boolean {
   if (from !== null && createdAt < from.getTime()) return false;
   if (to !== null && createdAt >= to.getTime()) return false;
   return true;
-}
-
-function compareBy(sort: OrderListCriteria['sort']): (a: Order, b: Order) => number {
-  const direction = sort.direction === 'asc' ? 1 : -1;
-  const byField = (a: Order, b: Order): number => {
-    switch (sort.field) {
-      case 'createdAt':
-        return a.createdAt.getTime() - b.createdAt.getTime();
-      case 'totalAmount':
-        return a.totalAmount.cents - b.totalAmount.cents;
-    }
-  };
-  // Desempate pelo ID, na mesma direção, para a paginação ser estável.
-  return (a, b) => direction * (byField(a, b) || a.id.value.localeCompare(b.id.value));
 }
 
 class InMemoryProductCatalog implements ProductCatalog {

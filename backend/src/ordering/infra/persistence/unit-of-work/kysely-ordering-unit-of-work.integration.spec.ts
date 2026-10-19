@@ -6,6 +6,7 @@ import { ProductInUseError } from '../../../../catalog/domain';
 import type { CatalogDatabase } from '../../../../catalog/infra/persistence/schema/catalog-database';
 import { KyselyCatalogUnitOfWork } from '../../../../catalog/infra/persistence/unit-of-work/kysely-catalog-unit-of-work';
 import { FixedClock } from '../../../../shared-kernel/application/testing/fixed-clock';
+import type { Keyset } from '../../../../shared-kernel/domain';
 import {
   connectToTestDatabase,
   resetDatabase,
@@ -195,20 +196,29 @@ describe('KyselyOrderingUnitOfWork', () => {
       cancelled.changeStatus(OrderStatus.of('cancelled'), LATER);
       await save(cheap, expensive, middle, cancelled);
 
-      const page = await unitOfWork.transaction(({ orders }) =>
-        orders.list({
-          offset: 0,
-          limit: 2,
-          status: 'pending',
-          createdAt: { from: new Date('2025-01-20T00:00:00Z'), to: null },
-          sort: { field: 'totalAmount', direction: 'desc' },
-        }),
-      );
+      const list = (keyset: Keyset | null) =>
+        unitOfWork.transaction(({ orders }) =>
+          orders.list({
+            limit: 2,
+            keyset,
+            status: 'pending',
+            createdAt: { from: new Date('2025-01-20T00:00:00Z'), to: null },
+            sort: { field: 'totalAmount', direction: 'desc' },
+          }),
+        );
+      const ids = (orders: readonly Order[]) => orders.map((order) => order.id.value);
 
-      expect(page.total).toBe(3);
-      expect(page.items.map((order) => order.id.value)).toEqual([expensive.id.value, middle.id.value]);
+      const page = await list(null);
+      expect(page.hasMore).toBe(true);
+      expect(ids(page.items)).toEqual([expensive.id.value, middle.id.value]);
       expect(page.items[0]?.items).toHaveLength(1);
       expect(page.items[0]?.statusHistory).toHaveLength(1);
+
+      const next = await list({ direction: 'after', value: middle.totalAmount.cents, id: middle.id.value });
+      expect([ids(next.items), next.hasMore]).toEqual([[cheap.id.value], false]);
+
+      const previous = await list({ direction: 'before', value: cheap.totalAmount.cents, id: cheap.id.value });
+      expect([ids(previous.items), previous.hasMore]).toEqual([[expensive.id.value, middle.id.value], false]);
     });
 
     it('findById e findByIdForUpdate devolvem null para pedido inexistente', async () => {

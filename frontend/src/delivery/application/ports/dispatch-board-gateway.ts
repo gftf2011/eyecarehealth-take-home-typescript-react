@@ -10,6 +10,6 @@ export type RequestOptions = {
  * contexto (como a ACL `DispatchBoard` do backend).
  */
 export interface DispatchBoardGateway {
-  readyOrders(options?: RequestOptions): Promise<{ readonly orders: readonly ReadyOrder[]; readonly total: number }>;
+  readyOrders(options?: RequestOptions): Promise<{ readonly orders: readonly ReadyOrder[]; readonly hasMore: boolean }>;
   availableCouriers(options?: RequestOptions): Promise<readonly AvailableCourier[]>;
 }

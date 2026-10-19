@@ -5,7 +5,8 @@ import {
   isoDateTime,
   optionalBooleanQuery,
   optionalIntegerQuery,
-  PAGE_DOC,
+  CURSOR_DOC,
+  LIMIT_DOC,
   pageOf,
   uuid,
 } from '../../../shared-kernel/presentation';
@@ -42,8 +43,8 @@ export const createProductBodySchema = z.object(productFields);
 export const updateProductBodySchema = z.object(productFields).partial();
 
 export const listProductsQuerySchema = z.object({
-  page: optionalIntegerQuery.meta({ description: PAGE_DOC, minimum: 1 }),
-  limit: optionalIntegerQuery.meta({ minimum: 1, maximum: 100 }),
+  cursor: z.string().optional().meta({ description: CURSOR_DOC }),
+  limit: optionalIntegerQuery.meta({ description: LIMIT_DOC, minimum: 1, maximum: 100 }),
   search: z.string().optional().meta({ description: 'Busca parcial no nome, sem diferenciar maiúsculas' }),
   category: z.string().optional().meta({ enum: [...PRODUCT_CATEGORIES] }),
   isAvailable: optionalBooleanQuery,

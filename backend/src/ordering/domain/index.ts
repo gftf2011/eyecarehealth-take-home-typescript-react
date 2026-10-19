@@ -19,6 +19,7 @@ export {
 export { OrderId } from './order/order-id';
 export {
   ORDER_SORT_FIELDS,
+  ORDER_SORT_KEYS,
   type OrderListCriteria,
   type OrderSortField,
 } from './order/repositories/order-list-criteria';

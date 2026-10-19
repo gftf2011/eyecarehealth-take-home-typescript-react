@@ -9,6 +9,7 @@ export {
 export { ProductId } from './product/product-id';
 export {
   PRODUCT_SORT_FIELDS,
+  PRODUCT_SORT_KEYS,
   type ProductListCriteria,
   type ProductSortField,
   type ProductVisibility,

@@ -32,5 +32,5 @@ export {
   parseRequest,
 } from './validation/parse-request';
 export { buildOpenApiDocument, toOpenApiPath, type OpenApiDocument, type OpenApiInfo } from './openapi/build-openapi-document';
-export { errorResponseSchema, isoDateTime, PAGE_DOC, pageOf, uuid } from './openapi/common.schemas';
+export { CURSOR_DOC, errorResponseSchema, isoDateTime, LIMIT_DOC, pageOf, uuid } from './openapi/common.schemas';
 export type { ResponseDoc, RouteDocs } from './openapi/route-docs';

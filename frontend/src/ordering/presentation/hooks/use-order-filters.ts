@@ -14,9 +14,10 @@ export type OrderFilterValues = {
 
 const FILTER_KEYS = ['status', 'startDate', 'endDate', 'sortBy', 'sortOrder'] as const;
 const OPEN_ORDER_KEY = 'order';
+const CURSOR_KEY = 'cursor';
 
 /**
- * Filtros, página e pedido aberto ficam **na URL**: recarregar, voltar e
+ * Filtros, página (cursor) e pedido aberto ficam **na URL**: recarregar, voltar e
  * compartilhar o link mantêm a mesma visão do painel.
  */
 export function useOrderFilters() {
@@ -32,13 +33,10 @@ export function useOrderFilters() {
     }),
     [params],
   );
-  const page = Number(params.get('page') ?? '1');
+  const cursor = params.get(CURSOR_KEY) ?? '';
   const openOrderId = params.get(OPEN_ORDER_KEY);
 
-  const input = useMemo<ListOrdersInput>(
-    () => ({ ...filters, page: Number.isFinite(page) ? page : Number.NaN }),
-    [filters, page],
-  );
+  const input = useMemo<ListOrdersInput>(() => ({ ...filters, cursor }), [filters, cursor]);
 
   const update = useCallback(
     (change: (next: URLSearchParams) => void) => {
@@ -51,25 +49,29 @@ export function useOrderFilters() {
     [setParams],
   );
 
-  /** Aplica novos filtros e volta para a primeira página. */
+  /**
+   * Aplica novos filtros e volta para a primeira página: o cursor é uma
+   * posição na ordenação antiga.
+   */
   const applyFilters = useCallback(
     (values: OrderFilterValues) =>
       update((next) => {
         for (const key of FILTER_KEYS) setOrDelete(next, key, values[key]);
-        next.delete('page');
+        next.delete(CURSOR_KEY);
       }),
     [update],
   );
 
-  const goToPage = useCallback(
-    (target: number) => update((next) => setOrDelete(next, 'page', target <= 1 ? '' : String(target))),
+  /** `null` = primeira página. */
+  const goToCursor = useCallback(
+    (target: string | null) => update((next) => setOrDelete(next, CURSOR_KEY, target ?? '')),
     [update],
   );
 
   const openOrder = useCallback((id: string) => update((next) => next.set(OPEN_ORDER_KEY, id)), [update]);
   const closeOrder = useCallback(() => update((next) => next.delete(OPEN_ORDER_KEY)), [update]);
 
-  return { filters, input, page, openOrderId, applyFilters, goToPage, openOrder, closeOrder };
+  return { filters, input, openOrderId, applyFilters, goToCursor, openOrder, closeOrder };
 }
 
 function setOrDelete(params: URLSearchParams, key: string, value: string): void {

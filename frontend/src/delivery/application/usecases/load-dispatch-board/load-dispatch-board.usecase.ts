@@ -11,6 +11,6 @@ export class LoadDispatchBoardUseCase implements UseCase<RequestOptions, Dispatc
       this.board.readyOrders(options),
       this.board.availableCouriers(options),
     ]);
-    return { readyOrders: ready.orders, readyOrdersTotal: ready.total, availableCouriers: couriers };
+    return { readyOrders: ready.orders, hasMoreReadyOrders: ready.hasMore, availableCouriers: couriers };
   }
 }

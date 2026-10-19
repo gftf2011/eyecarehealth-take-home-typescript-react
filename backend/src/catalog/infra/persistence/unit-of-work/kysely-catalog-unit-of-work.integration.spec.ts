@@ -128,7 +128,7 @@ describe('KyselyCatalogUnitOfWork', () => {
     expect(updated).toMatchObject({ price: 13.9, isAvailable: false });
 
     const publicPage = await new ListProductsUseCase(unitOfWork).execute({ visibility: 'public' });
-    expect(publicPage.pagination.total).toBe(0);
+    expect(publicPage.data).toEqual([]);
 
     clock.advanceBy(60_000);
     await new RemoveProductUseCase(unitOfWork, clock).execute({ id: created.id });

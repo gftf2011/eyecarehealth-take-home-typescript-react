@@ -1,4 +1,4 @@
-import type { Repository, Slice } from '../../../../shared-kernel/domain';
+import type { KeysetSlice, Repository } from '../../../../shared-kernel/domain';
 import type { Product } from '../product';
 import type { ProductListCriteria } from './product-list-criteria';
 
@@ -8,5 +8,5 @@ import type { ProductListCriteria } from './product-list-criteria';
  */
 export interface ProductRepository extends Repository<Product> {
   /** Página de produtos que atendem aos critérios, com o total geral. */
-  list(criteria: ProductListCriteria): Promise<Slice<Product>>;
+  list(criteria: ProductListCriteria): Promise<KeysetSlice<Product>>;
 }

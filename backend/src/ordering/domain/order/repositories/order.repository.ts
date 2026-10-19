@@ -1,4 +1,4 @@
-import type { Repository, Slice } from '../../../../shared-kernel/domain';
+import type { KeysetSlice, Repository } from '../../../../shared-kernel/domain';
 import type { Order } from '../order';
 import type { OrderId } from '../order-id';
 import type { DeliveryPersonId } from '../value-objects/delivery-person-id';
@@ -36,6 +36,9 @@ export interface OrderRepository extends Repository<Order> {
    */
   listOpenAssignedTo(deliveryPersonId: DeliveryPersonId): Promise<Order[]>;
 
-  /** Página de pedidos que atendem aos critérios, com o total geral. */
-  list(criteria: OrderListCriteria): Promise<Slice<Order>>;
+  /**
+   * Página de pedidos que atendem aos critérios, a partir do keyset (sem
+   * OFFSET nem contagem: o custo não cresce com a página nem com o total).
+   */
+  list(criteria: OrderListCriteria): Promise<KeysetSlice<Order>>;
 }

@@ -19,7 +19,7 @@ export const readyOrdersSchema = z.object({
       createdAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),
     }),
   ),
-  pagination: z.object({ total: z.number().int().nonnegative() }),
+  pagination: z.object({ nextCursor: z.string().nullable() }),
 });
 
 export const availableCouriersSchema = z.object({

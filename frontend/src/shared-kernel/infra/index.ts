@@ -9,3 +9,4 @@ export {
   type HttpRequestOptions,
   type QueryValue,
 } from './http/fetch-http.client';
+export { paginationSchema } from './http/pagination.schema';

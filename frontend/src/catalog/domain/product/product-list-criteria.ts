@@ -11,7 +11,8 @@ export const MAX_SEARCH_LENGTH = 120;
 
 /** Busca, filtros, ordenação e página da listagem de produtos, já validados. */
 export type ProductListCriteria = {
-  readonly page: number;
+  /** Cursor opaco da API; `null` = primeira página. Só vale com a mesma ordenação. */
+  readonly cursor: string | null;
   readonly limit: number;
   /** Trecho do nome, sem diferenciar maiúsculas. */
   readonly search: string | null;

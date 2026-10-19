@@ -16,7 +16,7 @@ export function AssignmentPage() {
   useDispatchBoardLiveUpdates();
   const assignment = useAssignmentPlan();
   const data = board.data;
-  const nothingToAssign = data !== undefined && data.readyOrdersTotal === 0;
+  const nothingToAssign = data !== undefined && data.readyOrders.length === 0;
 
   return (
     <section className={styles.page} aria-labelledby="assignment-title">
@@ -70,7 +70,7 @@ export function AssignmentPage() {
 
       {data === undefined ? null : (
         <div className={styles.board}>
-          <ReadyOrdersPanel orders={data.readyOrders} total={data.readyOrdersTotal} />
+          <ReadyOrdersPanel orders={data.readyOrders} hasMore={data.hasMoreReadyOrders} />
           <AvailableCouriersPanel couriers={data.availableCouriers} />
         </div>
       )}

@@ -9,7 +9,7 @@ import { ListProductsController } from './list-products.controller';
 
 const EMPTY_PAGE: Page<ProductDto> = {
   data: [],
-  pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+  pagination: { limit: 20, nextCursor: null, previousCursor: null },
 };
 
 function request(query: unknown) {
@@ -22,13 +22,13 @@ describe('ListProductsController', () => {
     const controller = new ListProductsController(useCase);
 
     const response = await controller.handle(
-      request({ page: '2', limit: '10', isAvailable: 'false', search: 'burger', sortBy: 'price' }),
+      request({ cursor: 'abc', limit: '10', isAvailable: 'false', search: 'burger', sortBy: 'price' }),
     );
 
     expect(response).toEqual({ status: 200, body: EMPTY_PAGE });
     expect(useCase.inputs).toEqual([
       {
-        page: 2,
+        cursor: 'abc',
         limit: 10,
         isAvailable: false,
         search: 'burger',
@@ -42,7 +42,7 @@ describe('ListProductsController', () => {
     const useCase = new SpyUseCase<ListProductsInput, Page<ProductDto>>(EMPTY_PAGE);
 
     await expect(
-      new ListProductsController(useCase).handle(request({ page: 'abc', isAvailable: 'sim' })),
+      new ListProductsController(useCase).handle(request({ limit: 'abc', isAvailable: 'sim' })),
     ).rejects.toBeInstanceOf(InputValidationError);
     expect(useCase.inputs).toHaveLength(0);
   });

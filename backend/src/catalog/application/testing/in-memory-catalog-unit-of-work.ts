@@ -1,5 +1,7 @@
-import type { DomainEvent, Slice } from '../../../shared-kernel/domain';
+import { keysetSliceInMemory } from '../../../shared-kernel/application/testing/in-memory-keyset';
+import type { DomainEvent, KeysetSlice } from '../../../shared-kernel/domain';
 import {
+  PRODUCT_SORT_KEYS,
   Product,
   ProductId,
   type ProductListCriteria,
@@ -97,17 +99,12 @@ class InMemoryProductRepository implements ProductRepository {
     this.stagedEvents.push(...product.pullDomainEvents());
   }
 
-  /** Mesma semântica esperada do SQL: filtros, ordenação estável e fatia da página. */
-  async list(criteria: ProductListCriteria): Promise<Slice<Product>> {
+  /** Mesma semântica esperada do SQL: filtros, ordenação estável e keyset. */
+  async list(criteria: ProductListCriteria): Promise<KeysetSlice<Product>> {
     const visible = [...new Map([...this.committed, ...this.staged])]
       .map(([id, snapshot]) => Product.reconstitute(ProductId.from(id), snapshot))
-      .filter((product) => matches(product, criteria))
-      .sort(compareBy(criteria.sort));
-
-    return {
-      items: visible.slice(criteria.offset, criteria.offset + criteria.limit),
-      total: visible.length,
-    };
+      .filter((product) => matches(product, criteria));
+    return keysetSliceInMemory(visible, criteria, PRODUCT_SORT_KEYS[criteria.sort.field]);
   }
 }
 
@@ -120,20 +117,4 @@ function matches(product: Product, criteria: ProductListCriteria): boolean {
     return product.name.value.toLowerCase().includes(criteria.search.toLowerCase());
   }
   return true;
-}
-
-function compareBy(sort: ProductListCriteria['sort']): (a: Product, b: Product) => number {
-  const direction = sort.direction === 'asc' ? 1 : -1;
-  const byField = (a: Product, b: Product): number => {
-    switch (sort.field) {
-      case 'name':
-        return a.name.value.localeCompare(b.name.value, 'pt-BR');
-      case 'price':
-        return a.price.amount.cents - b.price.amount.cents;
-      case 'createdAt':
-        return a.createdAt.getTime() - b.createdAt.getTime();
-    }
-  };
-  // Desempate pelo ID para a paginação ser estável.
-  return (a, b) => direction * byField(a, b) || a.id.value.localeCompare(b.id.value);
 }

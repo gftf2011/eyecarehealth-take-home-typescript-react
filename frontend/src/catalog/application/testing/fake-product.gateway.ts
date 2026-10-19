@@ -16,7 +16,7 @@ export class FakeProductGateway implements ProductGateway {
     this.listCalls.push(criteria);
     return Promise.resolve({
       data: this.products,
-      pagination: { page: criteria.page, limit: criteria.limit, total: this.products.length, totalPages: 1 },
+      pagination: { limit: criteria.limit, nextCursor: null, previousCursor: null },
     });
   }
 

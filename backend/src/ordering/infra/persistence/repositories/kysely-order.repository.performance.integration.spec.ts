@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { createPostgresPool } from '../../../../shared-kernel/infra/database/postgres';
 import { resetDatabase } from '../../../../shared-kernel/infra/database/testing/test-database';
+import { encodeCursor } from '../../../../shared-kernel/application/pagination/cursor';
 import { InMemoryEventMediator } from '../../../../shared-kernel/infra/events/in-memory-event-mediator';
 import {
   ListOrdersUseCase,
@@ -17,10 +18,7 @@ import { KyselyOrderingUnitOfWork } from '../unit-of-work/kysely-ordering-unit-o
 const MAX_LIST_RESPONSE_MS = 200;
 
 const TOTAL_ORDERS = 10_200;
-/** Status por n % 5; `pending` quando n % 5 = 0: 2.040 pedidos. */
-const PENDING_ORDERS = 2_040;
-/** Um pedido por minuto a partir de 01/01 00:00 em São Paulo: 1.440 no dia 02/01. */
-const ORDERS_ON_JAN_2 = 1_440;
+const PAGE = 20;
 
 /** Guarda o SQL de cada consulta executada, para rodar o EXPLAIN do SQL real. */
 const executedQueries: CompiledQuery[] = [];
@@ -34,13 +32,13 @@ const listOrders = new ListOrdersUseCase(new KyselyOrderingUnitOfWork(db, new In
 
 type Measured = {
   elapsedMs: number;
-  total: number;
+  count: number;
   /** Plano escolhido pelo PostgreSQL para a consulta de página de `orders` (EXPLAIN JSON). */
   plan: string;
 };
 
 /**
- * Mede o caso de uso inteiro (página, total, itens, histórico e entregadores)
+ * Mede o caso de uso inteiro (página, itens, histórico e entregadores)
  * e devolve o plano da consulta de página.
  */
 async function measureList(input: ListOrdersInput): Promise<Measured> {
@@ -58,10 +56,12 @@ async function measureList(input: ListOrdersInput): Promise<Measured> {
   const { rows } = await db.executeQuery<{ 'QUERY PLAN': unknown }>(
     CompiledQuery.raw(`EXPLAIN (FORMAT JSON) ${pageQuery.sql}`, [...pageQuery.parameters]),
   );
-  return { elapsedMs, total: page.pagination.total, plan: JSON.stringify(rows[0]?.['QUERY PLAN']) };
+  return { elapsedMs, count: page.data.length, plan: JSON.stringify(rows[0]?.['QUERY PLAN']) };
 }
 
 describe(`ListOrders com ${TOTAL_ORDERS} pedidos no PostgreSQL`, () => {
+  let deepCursor: string;
+
   beforeAll(async () => {
     await resetDatabase(db);
     const raw = db as unknown as Kysely<unknown>;
@@ -104,6 +104,17 @@ describe(`ListOrders com ${TOTAL_ORDERS} pedidos no PostgreSQL`, () => {
 
     // Aquece conexão e cache de planos: a primeira consulta não representa o regime.
     await listOrders.execute({});
+
+    // O cursor da última página (a que o OFFSET 10.180 pagaria lendo tudo antes dela).
+    const deep = await sql<{ created_at: Date; id: string }>`
+      SELECT created_at, id FROM orders ORDER BY created_at DESC, id DESC OFFSET ${TOTAL_ORDERS - PAGE - 1} LIMIT 1
+    `.execute(db);
+    const row = deep.rows[0];
+    if (row === undefined) throw new Error('Linha do cursor profundo não encontrada');
+    deepCursor = encodeCursor(
+      { field: 'createdAt', direction: 'desc' },
+      { direction: 'after', value: row.created_at.getTime(), id: row.id },
+    );
   });
 
   afterAll(async () => {
@@ -112,39 +123,46 @@ describe(`ListOrders com ${TOTAL_ORDERS} pedidos no PostgreSQL`, () => {
   });
 
   it.each([
-    ['mais recentes primeiro (padrão)', {}, 'idx_orders_created_at', TOTAL_ORDERS],
-    ['mais antigos primeiro', { sortOrder: 'asc' }, 'idx_orders_created_at', TOTAL_ORDERS],
-    ['filtro por status', { status: 'pending' }, 'idx_orders_status_created', PENDING_ORDERS],
+    ['mais recentes primeiro (padrão)', {}, 'idx_orders_created_at'],
+    ['mais antigos primeiro', { sortOrder: 'asc' }, 'idx_orders_created_at'],
+    ['filtro por status', { status: 'pending' }, 'idx_orders_status_created'],
     [
       'ordenado por valor',
       { sortBy: 'totalAmount', sortOrder: 'asc' },
       'idx_orders_total_amount',
-      TOTAL_ORDERS,
     ],
     [
       'filtro por dia de criação',
       { startDate: '2025-01-02', endDate: '2025-01-02' },
       'idx_orders_created_at',
-      ORDERS_ON_JAN_2,
     ],
-  ] satisfies [string, ListOrdersInput, string, number][])(
+    ['status + ordenação por valor', { status: 'ready', sortBy: 'totalAmount' }, 'idx_orders_status_total'],
+  ] satisfies [string, ListOrdersInput, string][])(
     '%s: responde em < 200ms usando o índice esperado',
-    async (_scenario, input, expectedIndex, expectedTotal) => {
-      const { elapsedMs, total, plan } = await measureList(input);
+    async (_scenario, input, expectedIndex) => {
+      const { elapsedMs, count, plan } = await measureList(input);
 
-      expect(total).toBe(expectedTotal);
+      expect(count).toBe(PAGE);
       expect(plan).toContain(`"Index Name":"${expectedIndex}"`);
       expect(plan).not.toContain('Seq Scan');
       expect(elapsedMs).toBeLessThan(MAX_LIST_RESPONSE_MS);
     },
   );
 
-  it.each([
-    ['página profunda', { page: 510, limit: 20 }],
-    ['página de 100 itens com entregadores', { status: 'delivered', limit: 100 }],
-    ['status + ordenação por valor', { status: 'ready', sortBy: 'totalAmount' }],
-  ] satisfies [string, ListOrdersInput][])('%s: responde em < 200ms', async (_scenario, input) => {
-    const { elapsedMs } = await measureList(input);
+  it('última página por cursor: continua pelo índice, sem ler as linhas anteriores', async () => {
+    const { elapsedMs, count, plan } = await measureList({ cursor: deepCursor });
+
+    expect(count).toBe(PAGE);
+    expect(plan).toContain('"Index Name":"idx_orders_created_at"');
+    expect(plan).not.toContain('Seq Scan');
+    expect(plan).not.toContain('"Node Type":"Sort"');
+    expect(elapsedMs).toBeLessThan(MAX_LIST_RESPONSE_MS);
+  });
+
+  it('página de 100 itens com entregadores: responde em < 200ms', async () => {
+    const { elapsedMs, count } = await measureList({ status: 'delivered', limit: 100 });
+
+    expect(count).toBe(100);
     expect(elapsedMs).toBeLessThan(MAX_LIST_RESPONSE_MS);
   });
 });

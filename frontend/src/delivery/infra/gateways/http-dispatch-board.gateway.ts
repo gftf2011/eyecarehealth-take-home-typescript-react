@@ -13,7 +13,7 @@ import {
 export class HttpDispatchBoardGateway implements DispatchBoardGateway {
   constructor(private readonly http: FetchHttpClient) {}
 
-  async readyOrders(options: RequestOptions = {}): Promise<{ orders: ReadyOrder[]; total: number }> {
+  async readyOrders(options: RequestOptions = {}): Promise<{ orders: ReadyOrder[]; hasMore: boolean }> {
     const body = await this.http.request(
       withSignal(
         {
@@ -24,7 +24,7 @@ export class HttpDispatchBoardGateway implements DispatchBoardGateway {
       ),
       readyOrdersSchema,
     );
-    return { orders: toReadyOrders(body), total: body.pagination.total };
+    return { orders: toReadyOrders(body), hasMore: body.pagination.nextCursor !== null };
   }
 
   async availableCouriers(options: RequestOptions = {}): Promise<AvailableCourier[]> {

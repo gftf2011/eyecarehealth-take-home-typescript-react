@@ -13,7 +13,9 @@ export type ProductFilterValues = {
 
 const FILTER_KEYS = ['search', 'category', 'isAvailable', 'sortBy', 'sortOrder'] as const;
 
-/** Busca, filtros e página na URL (recarregar ou compartilhar mantém a mesma visão). */
+const CURSOR_KEY = 'cursor';
+
+/** Busca, filtros e página (cursor) na URL: recarregar ou compartilhar mantém a mesma visão. */
 export function useProductFilters() {
   const [params, setParams] = useSearchParams();
 
@@ -27,9 +29,9 @@ export function useProductFilters() {
     }),
     [params],
   );
-  const page = Number(params.get('page') ?? '1');
+  const cursor = params.get(CURSOR_KEY) ?? '';
 
-  const input = useMemo<ListProductsInput>(() => ({ ...filters, page }), [filters, page]);
+  const input = useMemo<ListProductsInput>(() => ({ ...filters, cursor }), [filters, cursor]);
 
   const applyFilters = useCallback(
     (values: ProductFilterValues) =>
@@ -40,22 +42,23 @@ export function useProductFilters() {
           if (value === '') next.delete(key);
           else next.set(key, value);
         }
-        next.delete('page');
+        // O cursor é uma posição na ordenação antiga: com outros filtros, recomeça do início.
+        next.delete(CURSOR_KEY);
         return next;
       }),
     [setParams],
   );
 
-  const goToPage = useCallback(
-    (target: number) =>
+  const goToCursor = useCallback(
+    (target: string | null) =>
       setParams((current) => {
         const next = new URLSearchParams(current);
-        if (target <= 1) next.delete('page');
-        else next.set('page', String(target));
+        if (target === null) next.delete(CURSOR_KEY);
+        else next.set(CURSOR_KEY, target);
         return next;
       }),
     [setParams],
   );
 
-  return { filters, input, applyFilters, goToPage };
+  return { filters, input, applyFilters, goToCursor };
 }

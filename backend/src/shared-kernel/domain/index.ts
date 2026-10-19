@@ -26,10 +26,17 @@ export { InvalidLocalDateError } from './errors/invalid-local-date.error';
 export { InvalidMoneyError } from './errors/invalid-money.error';
 export { InvalidUniqueIdError } from './errors/invalid-unique-id.error';
 export type { JsonObject, JsonPrimitive, JsonValue } from './json';
+export {
+  keysetScanDirection,
+  toKeysetSlice,
+  type Keyset,
+  type KeysetSlice,
+  type SortKey,
+  type SortKeyValue,
+} from './keyset';
 export { Money } from './money';
 export { COURIER_PERMISSIONS, PERMISSIONS, type Permission } from './permission';
 export type { Repository } from './repository';
-export type { Slice } from './slice';
 export { SORT_DIRECTIONS, type Sort, type SortDirection } from './sort';
 export { UniqueId } from './unique-id';
 export { ValueObject } from './value-object';

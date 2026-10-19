@@ -1,6 +1,7 @@
 import {
-  PageRequest,
   collectFieldErrors,
+  parseCursor,
+  parsePageLimit,
   parseSortDirection,
   parseSortField,
   validateInput,
@@ -15,7 +16,8 @@ import { InvalidProductFilterError } from '../errors/invalid-product-filter.erro
 
 /** Busca e filtros como chegam da tela (e da URL). */
 export type ListProductsInput = {
-  readonly page?: number | undefined;
+  /** Cursor da página (`nextCursor`/`previousCursor` da API); vazio = primeira página. */
+  readonly cursor?: string | undefined;
   readonly limit?: number | undefined;
   readonly search?: string | undefined;
   readonly category?: string | undefined;
@@ -32,7 +34,8 @@ const present = (value: string | undefined): string | undefined =>
 /** Valida tudo de uma vez, com as regras e mensagens da API. */
 export function parseListProductsInput(input: ListProductsInput): ProductListCriteria {
   const validated = validateInput({
-    page: () => PageRequest.create(input.page, input.limit),
+    cursor: () => parseCursor(input.cursor),
+    limit: () => parsePageLimit(input.limit),
     search: () => {
       const search = present(input.search) ?? null;
       if (search !== null && search.length > MAX_SEARCH_LENGTH) {
@@ -50,8 +53,8 @@ export function parseListProductsInput(input: ListProductsInput): ProductListCri
   });
 
   return {
-    page: validated.page.page,
-    limit: validated.page.limit,
+    cursor: validated.cursor,
+    limit: validated.limit,
     search: validated.search,
     category: validated.category,
     isAvailable: validated.isAvailable,

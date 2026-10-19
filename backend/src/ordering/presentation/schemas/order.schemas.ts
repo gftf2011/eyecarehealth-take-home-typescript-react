@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { SORT_DIRECTIONS } from '../../../shared-kernel/domain';
-import { isoDateTime, optionalIntegerQuery, PAGE_DOC, pageOf, uuid } from '../../../shared-kernel/presentation';
+import { CURSOR_DOC, isoDateTime, LIMIT_DOC, optionalIntegerQuery, pageOf, uuid } from '../../../shared-kernel/presentation';
 import {
   DELIVERY_ISSUE_DECISIONS,
   DELIVERY_ISSUE_REASONS,
@@ -35,8 +35,8 @@ export const placeOrderBodySchema = z.object({
 });
 
 export const listOrdersQuerySchema = z.object({
-  page: optionalIntegerQuery.meta({ description: PAGE_DOC, minimum: 1 }),
-  limit: optionalIntegerQuery.meta({ minimum: 1, maximum: 100 }),
+  cursor: z.string().optional().meta({ description: CURSOR_DOC }),
+  limit: optionalIntegerQuery.meta({ description: LIMIT_DOC, minimum: 1, maximum: 100 }),
   status: z.string().optional().meta({ enum: [...ORDER_STATUSES] }),
   startDate: z.string().optional().meta({ ...LOCAL_DATE, description: `Criados a partir deste dia. ${LOCAL_DATE.description}` }),
   endDate: z.string().optional().meta({ ...LOCAL_DATE, description: `Criados até este dia. ${LOCAL_DATE.description}` }),

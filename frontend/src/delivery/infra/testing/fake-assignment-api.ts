@@ -47,7 +47,7 @@ export class FakeAssignmentApi {
             createdAt: '2026-10-17T15:00:00.000Z',
             updatedAt: '2026-10-17T15:00:00.000Z',
           })),
-          pagination: { page: 1, limit: 100, total: data.length, totalPages: 1 },
+          pagination: { limit: 100, nextCursor: null, previousCursor: null },
         });
       }),
 

@@ -9,8 +9,13 @@ export type { MessagePublisher, PublishedMessage, PublishOutcome } from './ports
 export { toOutboxMessage, type OutboxMessage, type OutboxWriter } from './ports/outbox-writer';
 export { InvalidTokenError, TokenExpiredError } from './errors/token-errors';
 export { InvalidPaginationError } from './pagination/invalid-pagination.error';
-export { toPage, type Page, type Pagination } from './pagination/page';
-export { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PageRequest } from './pagination/page-request';
+export {
+  CursorPageRequest,
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+  parsePageLimit,
+} from './pagination/cursor-page-request';
+export { readCursorPage, type Page, type Pagination } from './pagination/page';
 export type { RateLimitCounter, RateLimitHit } from './ports/rate-limit-counter';
 export { InvalidSortError, parseSortDirection, parseSortField } from './sorting/sort';
 export type { Stopwatch } from './stopwatch';

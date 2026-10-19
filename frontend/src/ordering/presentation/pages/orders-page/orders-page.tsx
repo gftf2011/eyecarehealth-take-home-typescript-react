@@ -17,11 +17,18 @@ import styles from './orders-page.module.css';
 
 /** Painel de pedidos: filtros na URL, lista paginada, ações de status e detalhe em modal. */
 export function OrdersPage() {
-  const { filters, input, openOrderId, applyFilters, goToPage, openOrder, closeOrder } = useOrderFilters();
+  const { filters, input, openOrderId, applyFilters, goToCursor, openOrder, closeOrder } = useOrderFilters();
   const orders = useOrders(input);
   useOrderLiveUpdates();
   const page = orders.data;
   const filtered = Object.values(filters).some((value) => value !== '');
+  // Um link de página antigo (cursor) pode não valer mais: sempre há o caminho de volta ao início.
+  const backToStart =
+    input.cursor === '' ? undefined : (
+      <Button variant="secondary" size="sm" onClick={() => goToCursor(null)}>
+        Primeira página
+      </Button>
+    );
 
   return (
     <section className={styles.page} aria-labelledby="orders-title">
@@ -43,6 +50,7 @@ export function OrdersPage() {
           <Button variant="secondary" size="sm" onClick={() => void orders.refetch()}>
             Tentar novamente
           </Button>
+          {backToStart}
         </Alert>
       ) : null}
 
@@ -56,13 +64,19 @@ export function OrdersPage() {
               ? 'Ajuste o status ou o período para ver outros pedidos.'
               : 'Os pedidos aparecem aqui assim que forem criados.'
           }
+          action={backToStart}
         />
       ) : null}
 
       {page !== undefined && page.data.length > 0 ? (
         <div className={styles.results} aria-busy={orders.isFetching}>
           <OrderList orders={page.data} onOpen={openOrder} />
-          <Pagination pagination={page.pagination} onPageChange={goToPage} itemLabel="pedidos" />
+          <Pagination
+            pagination={page.pagination}
+            count={page.data.length}
+            onCursorChange={goToCursor}
+            itemLabel="pedidos"
+          />
         </div>
       ) : null}
 

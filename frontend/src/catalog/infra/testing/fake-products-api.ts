@@ -1,5 +1,6 @@
 import { http, HttpResponse, type HttpHandler } from 'msw';
 
+import { fakeCursorPage } from '../../../shared-kernel/infra/testing/fake-cursor-page';
 import { apiUrl } from '../../../shared-kernel/infra/testing/test-api';
 import type { ProductBodyFixture } from '../../domain/product/testing/product.fixture';
 
@@ -33,8 +34,6 @@ export class FakeProductsApi {
         const search = query.get('search')?.toLowerCase();
         const category = query.get('category');
         const available = query.get('isAvailable');
-        const page = Number(query.get('page') ?? '1');
-        const limit = Number(query.get('limit') ?? '20');
 
         const matching = this.products.filter(
           (product) =>
@@ -42,10 +41,7 @@ export class FakeProductsApi {
             (category === null || product.category === category) &&
             (available === null || String(product.isAvailable) === available),
         );
-        return HttpResponse.json({
-          data: matching.slice((page - 1) * limit, page * limit),
-          pagination: { page, limit, total: matching.length, totalPages: Math.ceil(matching.length / limit) },
-        });
+        return HttpResponse.json(fakeCursorPage(matching, query));
       }),
 
       http.post(apiUrl('/products'), async ({ request }) => {

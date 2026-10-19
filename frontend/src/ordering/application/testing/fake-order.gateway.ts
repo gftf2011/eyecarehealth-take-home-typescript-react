@@ -16,7 +16,7 @@ export class FakeOrderGateway implements OrderGateway {
     this.listCalls.push(criteria);
     return Promise.resolve({
       data: this.orders,
-      pagination: { page: criteria.page, limit: criteria.limit, total: this.orders.length, totalPages: 1 },
+      pagination: { limit: criteria.limit, nextCursor: null, previousCursor: null },
     });
   }
 

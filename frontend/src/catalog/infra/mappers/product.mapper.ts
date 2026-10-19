@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { paginationSchema } from '../../../shared-kernel/infra';
 import {
   ImageUrl,
   PreparationTime,
@@ -31,12 +32,7 @@ export type ProductBody = z.output<typeof productSchema>;
 
 export const productPageSchema = z.object({
   data: z.array(productSchema),
-  pagination: z.object({
-    page: z.number().int(),
-    limit: z.number().int(),
-    total: z.number().int(),
-    totalPages: z.number().int(),
-  }),
+  pagination: paginationSchema,
 });
 
 /** Corpo da API → agregado, passando pelos mesmos Value Objects (dados fora das regras viram erro). */

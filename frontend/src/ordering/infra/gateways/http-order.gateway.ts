@@ -14,7 +14,7 @@ export class HttpOrderGateway implements OrderGateway {
         {
           path: '/orders',
           query: {
-            page: criteria.page,
+            cursor: criteria.cursor,
             limit: criteria.limit,
             status: criteria.status,
             startDate: criteria.createdOn.start?.toString(),

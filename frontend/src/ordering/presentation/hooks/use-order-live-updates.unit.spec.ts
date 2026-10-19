@@ -17,7 +17,7 @@ const courierSwap = event({ type: 'order.delivery-person-assigned', orderId: 'o1
 
 describe('orderListAffectedBy', () => {
   it('sem filtro de status, todo evento conta', () => {
-    expect(orderListAffectedBy(placed, orderQueryKeys.list({ page: 2 }))).toBe(true);
+    expect(orderListAffectedBy(placed, orderQueryKeys.list({ cursor: 'abc' }))).toBe(true);
   });
 
   it('com filtro, só o pedido que entra no status ou sai dele', () => {

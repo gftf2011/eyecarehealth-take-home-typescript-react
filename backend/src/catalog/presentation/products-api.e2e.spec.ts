@@ -183,7 +183,7 @@ describe('API de produtos (/api/products)', () => {
 
       const response = await testApp.app.inject({
         method: 'GET',
-        url: '/api/products?search=suco&isAvailable=true&limit=1&page=1&sortBy=name&sortOrder=asc',
+        url: '/api/products?search=suco&isAvailable=true&limit=1&sortBy=name&sortOrder=asc',
         headers: bearer(VIEWER_TOKEN),
       });
 
@@ -192,7 +192,7 @@ describe('API de produtos (/api/products)', () => {
       expect(body.data.map((product: { name: string }) => product.name)).toEqual([
         'Suco de Laranja Natural',
       ]);
-      expect(body.pagination).toEqual({ page: 1, limit: 1, total: 1, totalPages: 1 });
+      expect(body.pagination).toEqual({ limit: 1, nextCursor: null, previousCursor: null });
     });
 
     it('400 para limite acima de 100', async () => {

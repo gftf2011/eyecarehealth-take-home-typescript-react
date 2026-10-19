@@ -6,13 +6,14 @@ import styles from './ready-orders-panel.module.css';
 /** Pedidos prontos aguardando entregador, mais antigos primeiro. */
 export function ReadyOrdersPanel({
   orders,
-  total,
+  hasMore,
 }: {
   readonly orders: readonly ReadyOrder[];
-  readonly total: number;
+  /** Há mais pedidos prontos que os desta página. */
+  readonly hasMore: boolean;
 }) {
   return (
-    <BoardPanel title="Pedidos prontos" count={total} empty="Nenhum pedido pronto aguardando entregador.">
+    <BoardPanel title="Pedidos prontos" count={orders.length} empty="Nenhum pedido pronto aguardando entregador.">
       <ul className={styles.list}>
         {orders.map((order) => (
           <li key={order.id} className={styles.item}>
@@ -33,9 +34,9 @@ export function ReadyOrdersPanel({
           </li>
         ))}
       </ul>
-      {total > orders.length ? (
+      {hasMore ? (
         <p className={styles.more}>
-          Mostrando {orders.length} de {total}; a sugestão considera todos.
+          Mostrando os {orders.length} mais antigos; há mais prontos, e a sugestão considera todos.
         </p>
       ) : null}
     </BoardPanel>

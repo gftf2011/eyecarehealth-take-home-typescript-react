@@ -6,7 +6,9 @@ import {
   connectToTestDatabase,
   resetDatabase,
 } from '../../../../shared-kernel/infra/database/testing/test-database';
+import type { Keyset } from '../../../../shared-kernel/domain';
 import {
+  PRODUCT_SORT_KEYS,
   ProductCategory,
   ProductName,
   ProductPrice,
@@ -44,8 +46,8 @@ async function save(...products: Product[]): Promise<void> {
 }
 
 const baseCriteria: ProductListCriteria = {
-  offset: 0,
   limit: 20,
+  keyset: null,
   search: null,
   category: null,
   isAvailable: null,
@@ -209,13 +211,33 @@ describe('KyselyProductRepository', () => {
       ]);
     });
 
-    it('pagina com offset/limit e devolve o total geral', async () => {
-      const { items, total } = await unitOfWork.transaction(({ products }) =>
-        products.list({ ...baseCriteria, offset: 2, limit: 2, sort: { field: 'name', direction: 'asc' } }),
-      );
+    it.each([
+      ['nome', { field: 'name', direction: 'asc' }],
+      ['preço, com empate desfeito pelo ID', { field: 'price', direction: 'desc' }],
+      ['criação', { field: 'createdAt', direction: 'desc' }],
+    ] as const)('percorre as páginas por keyset (%s) nos dois sentidos', async (_label, sort) => {
+      await save(product('Água com Gás', 12.5, 'drink', '2025-01-06T10:00:00Z'));
+      const everything = await listNames({ sort });
+      const list = (keyset: Keyset | null) =>
+        unitOfWork.transaction(({ products }) => products.list({ ...baseCriteria, limit: 2, sort, keyset }));
+      const keyOf = (item: Product, direction: Keyset['direction']): Keyset => ({
+        direction,
+        value: PRODUCT_SORT_KEYS[sort.field].of(item),
+        id: item.id.value,
+      });
 
-      expect(items.map((item) => item.name.value)).toEqual(['Pudim de Leite', 'Suco de Laranja']);
-      expect(total).toBe(5);
+      const pages: Product[][] = [];
+      let page = await list(null);
+      pages.push([...page.items]);
+      while (page.hasMore) {
+        page = await list(keyOf(page.items.at(-1) as Product, 'after'));
+        pages.push([...page.items]);
+      }
+      expect(pages.flat().map((item) => item.name.value)).toEqual(everything);
+
+      const back = await list(keyOf(pages[1]?.[0] as Product, 'before'));
+      expect(back.items.map((item) => item.name.value)).toEqual(pages[0]?.map((item) => item.name.value));
+      expect(back.hasMore).toBe(false);
     });
   });
 });

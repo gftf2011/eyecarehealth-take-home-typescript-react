@@ -2,7 +2,7 @@
 
 Este documento registra as decisões técnicas do projeto: por que cada biblioteca foi escolhida, como funciona o algoritmo de atribuição de entregadores, as decisões de arquitetura (no formato de ADRs, com alternativas e consequências), as mudanças no esquema de referência e as dificuldades encontradas.
 
-> **Escopo:** o projeto inteiro — o backend ([`backend/`](backend), instruções em [`backend/README.md`](backend/README.md)), o painel ([`frontend/`](frontend), instruções em [`frontend/README.md`](frontend/README.md)) e o [`docker-compose.yml`](docker-compose.yml) da raiz, que sobe tudo com `docker compose up --build`. As ADRs 01–13 tratam do backend e da infraestrutura; as ADRs 14–21, do painel.
+> **Escopo:** o projeto inteiro — o backend ([`backend/`](backend), instruções em [`backend/README.md`](backend/README.md)), o painel ([`frontend/`](frontend), instruções em [`frontend/README.md`](frontend/README.md)) e o [`docker-compose.yml`](docker-compose.yml) da raiz, que sobe tudo com `docker compose up --build`. As ADRs 01–13 tratam do backend e da infraestrutura; as ADRs 14–21, do painel; as seguintes, de mudanças que passam pelos dois.
 
 ## Sumário
 
@@ -452,7 +452,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   | Estado | Onde | Por quê |
   |---|---|---|
   | Dados da API | **TanStack Query** | Cache, deduplicação, cancelamento, *retry*, invalidação por prefixo (o tempo real só invalida), atualização otimista |
-  | Filtros, página, pedido aberto | **URL** (`useSearchParams`) | Recarregar, voltar e compartilhar o link mantêm a mesma visão |
+  | Filtros, página (cursor), pedido aberto | **URL** (`useSearchParams`) | Recarregar, voltar e compartilhar o link mantêm a mesma visão |
   | Sessão | Store observável do Identity (`useSyncExternalStore`) | Muda por eventos (login, renovação, expiração), não por consultas |
   | Formulários, modais | Estado local (`useState`) | Ninguém fora do componente precisa dele |
 
@@ -807,6 +807,29 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➕ Os relatórios não mudam: o cancelado depois da falha conta como cancelado.
   - ➖ O pedido fica parado em `delivering` até o gestor decidir. Sem um alerta por tempo, depende de alguém olhar o painel (o selo chega ao vivo).
 
+### ADR-32 — Paginação por cursor (keyset), sem OFFSET e sem contagem
+
+- **Contexto.** As listagens de pedidos e produtos usavam `LIMIT/OFFSET` e um `COUNT(*)` com os mesmos filtros a cada página. Com 10 mil registros cabia nos 200 ms do enunciado, mas o custo crescia com o volume: o `OFFSET` lê e descarta todas as linhas antes da página (a última página de 10 mil pedidos lia os 10 mil), e o `COUNT(*)` percorre tudo o que casa com o filtro, em toda requisição, inclusive nas recargas do tempo real. Além disso, um pedido novo entre duas páginas empurrava os itens: o último da página 1 reaparecia no topo da página 2.
+- **Decisão.**
+  1. **Keyset.** A consulta continua do último item visto: `WHERE (coluna, id) < (valor, id)` (ou `>`, conforme a direção), `ORDER BY coluna, id` na mesma direção e `LIMIT n + 1`. O item a mais só diz se há outra página. O mesmo índice B-tree `(coluna, id)` atende a ordenação e o ponto de partida, então o custo é o de ler `n + 1` linhas, em qualquer página.
+  2. **Cursor opaco nos dois sentidos.** A API devolve `nextCursor` e `previousCursor` (base64url de um JSON curto com a ordenação, o sentido, o valor e o ID do item). A página anterior percorre o índice ao contrário e inverte o resultado. Se voltar até o começo render menos que o limite (itens removidos), a API devolve a primeira página inteira.
+  3. **O cursor fica preso à ordenação.** Um cursor gerado com `sortBy=createdAt` usado com `sortBy=totalAmount` é recusado (`400`, campo `cursor`), porque a posição só vale na ordenação em que foi gerada. Os filtros vêm de novo na query; o painel volta ao início quando eles mudam.
+  4. **Sem `total`.** O painel mostra anterior, próxima e início, e quantos itens há na página. O quadro de atribuição, que mostrava "100 de N prontos", passou a dizer só que há mais.
+  5. **Desempate na mesma direção.** O ID desempata na direção da ordenação (antes, nos produtos, sempre ascendente). Com direções misturadas, a comparação de tuplas não serve e o índice não atende o keyset.
+  6. **Precisão de milissegundos.** `created_at` virou `timestamptz(3)`. O cursor carrega o `Date` do JavaScript (ms); com microssegundos no banco, dois registros no mesmo milissegundo podiam ser pulados.
+  7. **Índices** `(name, id)`, `(price, id)` e `(created_at, id)` nos produtos (parciais, sem removidos) e `(status, total_amount DESC, id DESC)` nos pedidos. Os outros de pedidos já tinham o ID.
+- **Alternativas.**
+  - *Manter OFFSET e só otimizar o COUNT* (estimativa por `pg_class.reltuples`, ou contagem limitada, como "mais de 1.000"): continua lendo as linhas puladas, e a estimativa não serve com filtros.
+  - *Cursor só para frente, com a pilha de cursores no painel*: mais simples na API, mas o link de uma página não funcionaria sozinho (recarregar ou compartilhar perderia o "anterior").
+  - *Cursor assinado (HMAC)*: impede adulteração, mas o cursor só posiciona a leitura dentro do que o usuário já pode ver; um cursor forjado não revela nada. A API valida formato, tipos, UUID e a ordenação.
+  - *Paginação por número de página*: o usuário não pode pular para a página 37. Num painel operacional, a navegação real é "próxima" e os filtros; ir longe se faz filtrando por período.
+- **Consequências.**
+  - ➕ O custo de uma página não cresce com o volume nem com a profundidade: o teste de desempenho mede a **última** página de 10 mil pedidos e de 10 mil produtos e confere no `EXPLAIN` que a consulta usa o índice, sem `Sort` e sem `Seq Scan`.
+  - ➕ Nenhum item se repete nem some quando pedidos chegam durante a navegação, que é o caso normal com o tempo real.
+  - ➖ Sem total e sem "ir para a página N". Se o produto pedir um total, o caminho é um contador mantido por evento, não um `COUNT(*)` por requisição.
+  - ➖ Mudou o contrato: `page` deixou de existir (é ignorado) e `pagination` trocou de forma. O painel e o Swagger foram atualizados juntos.
+  - ➖ A busca parcial por nome (`ILIKE`) continua sendo um filtro: com poucos resultados, o índice trigram resolve; com muitos, o PostgreSQL percorre o índice da ordenação e filtra. Em escala maior, o caminho é a busca textual em um serviço próprio.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -838,6 +861,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 | `order_items` | `product_name` (snapshot) | O pedido mostra o produto como era na compra, mesmo que ele seja renomeado ou removido |
 | `order_items` | sem `created_at` | É sempre igual ao `created_at` do pedido |
 | `orders` | `CHECK` de que `delivering`/`delivered` exigem `delivery_person_id` | A mesma regra do agregado, também no banco |
+| `orders`, `products` | `created_at` em `timestamptz(3)` (milissegundos) | A mesma precisão do cursor da paginação; com microssegundos, registros no mesmo milissegundo podiam ser pulados ([ADR-32](#adr-32--paginação-por-cursor-keyset-sem-offset-e-sem-contagem)) |
 | `order_status_history` | `reason varchar(200)`, nula, com `CHECK` de 3 a 200 caracteres | O motivo da entrega devolvida para a atribuição ([ADR-29](#adr-29--entrega-devolvida-para-a-atribuição-decisão-do-gestor-com-motivo)); as outras transições ficam sem |
 | várias | `CHECK` de tamanho de textos e formato de telefone `(11) 99999-1234` | As mesmas regras dos value objects, como defesa em profundidade |
 
@@ -847,8 +871,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 |---|---|
 | Índices de `products` com `WHERE deleted_at IS NULL` | As listagens nunca olham removidos: índices menores |
 | `idx_products_name_trgm` (GIN, `pg_trgm`) | A busca parcial (`ILIKE '%termo%'`) não usa B-tree |
-| `idx_products_price`, `idx_orders_total_amount` | Ordenação por preço e por valor |
-| `(created_at DESC, id DESC)` e `(status, created_at DESC, id DESC)` | Paginação estável (desempate pelo ID) atendida pelo índice nas duas direções |
+| `(coluna, id)` para cada ordenação: `name`, `price` e `created_at` nos produtos; `created_at`, `total_amount`, `(status, created_at)` e `(status, total_amount)` nos pedidos | Paginação por keyset ([ADR-32](#adr-32--paginação-por-cursor-keyset-sem-offset-e-sem-contagem)): o mesmo índice atende a ordenação, o ponto de partida do cursor e as duas direções |
 | `uq_orders_one_delivery_per_person` (único parcial) | Um entregador nunca tem duas entregas ([ADR-08](#adr-08--concorrência-locks-pessimistas-e-índice-único-parcial)) |
 | `uq_order_items_order_product` | O agregado une linhas do mesmo produto; também substitui `idx_order_items_order_id` |
 | `idx_order_status_history_to_changed` | Relatórios por período de entrega |
@@ -959,6 +982,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
+- **Leituras num único banco.** As listagens já não dependem do volume ([ADR-32](#adr-32--paginação-por-cursor-keyset-sem-offset-e-sem-contagem)), mas leem do mesmo PostgreSQL que grava, sem cache de leitura, e cada página traz os pedidos completos (itens e histórico). Com muito mais tráfego de leitura, os próximos passos seriam uma réplica para as listagens e um formato resumido da lista (o detalhe completo só no modal).
 - **Escala do otimizador.** O cálculo grande não trava mais a API ([ADR-24](#adr-24--otimizador-de-atribuição-fora-da-thread-da-api)), mas continua O(k²·K): ~2 s com 1000 × 1000, e no máximo 2 ao mesmo tempo por instância. Para escalas maiores, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
 - **Tempo real sem histórico.** A fila SQS segura o evento até uma réplica do gateway repassá-lo, mas o Redis pub/sub não guarda mensagens: o painel que estava desconectado recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams ou guardar os últimos eventos por tópico.
 - **Observabilidade local, não de produção.** O `otel-lgtm` guarda os dados enquanto o contêiner existe e não tem alertas configurados. Em produção, o caminho é apontar o `OTEL_EXPORTER_OTLP_ENDPOINT` para um backend gerenciado e criar alertas para: atraso do outbox acima de alguns segundos, fila morta maior que zero, p95 das listagens acima de 200 ms e recusas do otimizador.

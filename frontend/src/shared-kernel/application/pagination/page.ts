@@ -1,8 +1,9 @@
 export type Pagination = {
-  readonly page: number;
   readonly limit: number;
-  readonly total: number;
-  readonly totalPages: number;
+  /** Cursor da próxima página; `null` na última. */
+  readonly nextCursor: string | null;
+  /** Cursor da página anterior; `null` na primeira. */
+  readonly previousCursor: string | null;
 };
 
 /** Resultado paginado, no formato `{ data, pagination }` da API. */

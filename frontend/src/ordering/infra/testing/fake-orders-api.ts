@@ -1,5 +1,6 @@
 import { http, HttpResponse, type HttpHandler } from 'msw';
 
+import { fakeCursorPage } from '../../../shared-kernel/infra/testing/fake-cursor-page';
 import { apiUrl } from '../../../shared-kernel/infra/testing/test-api';
 import { OrderStatus } from '../../domain';
 import type { OrderBodyFixture } from '../../domain/order/testing/order.fixture';
@@ -38,8 +39,6 @@ export class FakeOrdersApi {
       http.get(apiUrl('/orders'), ({ request }) => {
         const query = new URL(request.url).searchParams;
         this.listQueries.push(query);
-        const page = Number(query.get('page') ?? '1');
-        const limit = Number(query.get('limit') ?? '20');
         const status = query.get('status');
         const descending = (query.get('sortOrder') ?? 'desc') === 'desc';
 
@@ -47,10 +46,7 @@ export class FakeOrdersApi {
           .filter((order) => status === null || order.status === status)
           .sort((a, b) => (descending ? -1 : 1) * a.createdAt.localeCompare(b.createdAt));
 
-        return HttpResponse.json({
-          data: matching.slice((page - 1) * limit, page * limit),
-          pagination: { page, limit, total: matching.length, totalPages: Math.ceil(matching.length / limit) },
-        });
+        return HttpResponse.json(fakeCursorPage(matching, query));
       }),
 
       http.get(apiUrl('/orders/:id'), ({ params }) => {

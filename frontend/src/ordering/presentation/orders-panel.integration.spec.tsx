@@ -69,7 +69,52 @@ describe('Painel de pedidos', () => {
       'Ver detalhes do pedido de Maria Santos',
       'Ver detalhes do pedido de Ana Costa',
     ]);
-    expect(screen.getByText('1–3 de 3 pedidos')).toBeInTheDocument();
+    // Tudo coube numa página: não há para onde navegar.
+    expect(screen.queryByRole('navigation', { name: 'Paginação' })).not.toBeInTheDocument();
+  });
+
+  it('pagina por cursor: próxima, anterior e início, com o cursor na URL', async () => {
+    const many = Array.from({ length: 25 }, (_, index) =>
+      orderBody({
+        id: `order-${index}`,
+        customerName: `Cliente ${String(index).padStart(2, '0')}`,
+        createdAt: new Date(Date.UTC(2026, 9, 18, 12, 59 - index)).toISOString(),
+      }),
+    );
+    orders = new FakeOrdersApi();
+    orders.given(...many);
+    api.server.use(...orders.handlers());
+    const view = open();
+    await rowOf('Cliente 00');
+    const pagination = screen.getByRole('navigation', { name: 'Paginação' });
+    expect(within(pagination).getByRole('button', { name: 'Anterior' })).toBeDisabled();
+
+    await view.user.click(within(pagination).getByRole('button', { name: 'Próxima' }));
+
+    await rowOf('Cliente 20');
+    expect(screen.queryByText('Cliente 00')).not.toBeInTheDocument();
+    expect(view.router.state.location.search).toBe('?cursor=i20');
+    expect(screen.getByText('5 pedidos nesta página')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Próxima' })).toBeDisabled();
+
+    await view.user.click(screen.getByRole('button', { name: 'Anterior' }));
+    await rowOf('Cliente 00');
+
+    await view.user.click(screen.getByRole('button', { name: 'Próxima' }));
+    await rowOf('Cliente 20');
+    await view.user.click(screen.getByRole('button', { name: 'Início' }));
+    await rowOf('Cliente 00');
+    expect(view.router.state.location.search).toBe('');
+  });
+
+  it('trocar o filtro volta para a primeira página (o cursor vale só para a ordenação dele)', async () => {
+    const view = open('/pedidos?cursor=i2');
+    await rowOf('Ana Costa');
+
+    await view.user.selectOptions(screen.getByLabelText('Status'), 'ready');
+
+    await rowOf('Maria Santos');
+    expect(view.router.state.location.search).toBe('?status=ready');
   });
 
   it('filtra por status, guardando o filtro na URL', async () => {

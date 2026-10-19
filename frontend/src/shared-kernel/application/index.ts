@@ -18,7 +18,7 @@ export { UnauthenticatedError } from './errors/unauthenticated.error';
 export { parseBoundedDatePeriodInput, parseDatePeriodInput } from './inputs/date-period.input';
 export { InvalidPaginationError } from './pagination/invalid-pagination.error';
 export { mapPage, type Page, type Pagination } from './pagination/page';
-export { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, PageRequest } from './pagination/page-request';
+export { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, parseCursor, parsePageLimit } from './pagination/page-request';
 export { InvalidSortError, parseSortDirection, parseSortField } from './sorting/sort';
 export type { UseCase } from './use-case';
 export { collectFieldErrors } from './validation/collect-field-errors';

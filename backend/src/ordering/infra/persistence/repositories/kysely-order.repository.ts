@@ -1,7 +1,13 @@
 import type { Selectable, Transaction } from 'kysely';
 
 import type { DomainEventBuffer } from '../../../../shared-kernel/application';
-import type { Slice } from '../../../../shared-kernel/domain';
+import {
+  keysetScanDirection,
+  toKeysetSlice,
+  type KeysetSlice,
+  type SortKeyValue,
+} from '../../../../shared-kernel/domain';
+import { centsToDecimal } from '../../../../shared-kernel/infra/database/numeric';
 import type {
   DeliveryPersonId,
   Order,
@@ -20,6 +26,12 @@ const SORT_COLUMNS = {
   createdAt: 'created_at',
   totalAmount: 'total_amount',
 } as const satisfies Record<OrderSortField, string>;
+
+/** O valor do cursor (epoch em ms, centavos) no tipo da coluna. */
+const TO_COLUMN_VALUE = {
+  createdAt: (value: SortKeyValue) => new Date(value),
+  totalAmount: (value: SortKeyValue) => centsToDecimal(Number(value)),
+} as const satisfies Record<OrderSortField, (value: SortKeyValue) => unknown>;
 
 /** Status em que o pedido ainda pode trocar (ou perder) o entregador. */
 const UNDISPATCHED_STATUSES = ['pending', 'preparing', 'ready'] as const;
@@ -120,26 +132,37 @@ export class KyselyOrderRepository implements OrderRepository {
     this.events.collectFrom(order);
   }
 
-  async list(criteria: OrderListCriteria): Promise<Slice<Order>> {
+  /**
+   * Keyset: `(coluna, id)` depois (ou antes) do cursor, no mesmo índice da
+   * ordenação. Lê um item a mais só para saber se há outra página.
+   */
+  async list(criteria: OrderListCriteria): Promise<KeysetSlice<Order>> {
     let query = this.trx.selectFrom('orders');
     if (criteria.status !== null) query = query.where('status', '=', criteria.status);
     if (criteria.createdAt.from !== null) query = query.where('created_at', '>=', criteria.createdAt.from);
     if (criteria.createdAt.to !== null) query = query.where('created_at', '<', criteria.createdAt.to);
 
-    const { direction } = criteria.sort;
-    const [counted, rows] = await Promise.all([
-      query.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow(),
-      query
-        .selectAll()
-        .orderBy(SORT_COLUMNS[criteria.sort.field], direction)
-        // Desempate estável na mesma direção: o mesmo índice atende asc e desc.
-        .orderBy('id', direction)
-        .limit(criteria.limit)
-        .offset(criteria.offset)
-        .execute(),
-    ]);
+    const { field } = criteria.sort;
+    const column = SORT_COLUMNS[field];
+    const { keyset } = criteria;
+    const scan = keysetScanDirection(criteria.sort.direction, keyset);
+    if (keyset !== null) {
+      const value = TO_COLUMN_VALUE[field](keyset.value);
+      query = query.where((eb) =>
+        eb(eb.refTuple(column, 'id'), scan === 'asc' ? '>' : '<', eb.tuple(value, keyset.id)),
+      );
+    }
 
-    return { items: await this.hydrate(rows), total: Number(counted.total) };
+    const rows = await query
+      .selectAll()
+      .orderBy(column, scan)
+      // Desempate na mesma direção: o mesmo índice atende asc, desc e o keyset.
+      .orderBy('id', scan)
+      .limit(criteria.limit + 1)
+      .execute();
+
+    const slice = toKeysetSlice(rows, criteria.limit, keyset);
+    return { items: await this.hydrate(slice.items), hasMore: slice.hasMore };
   }
 
   /** Carrega itens e histórico de todos os pedidos de uma vez e monta os agregados. */

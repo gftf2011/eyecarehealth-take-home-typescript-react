@@ -368,8 +368,25 @@ describe('API de pedidos (/api/orders)', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().data.map((order: { id: string }) => order.id)).toEqual([second]);
-      expect(response.json().pagination).toEqual({ page: 1, limit: 1, total: 2, totalPages: 2 });
-      expect(first).not.toBe(second);
+      const { nextCursor } = response.json().pagination;
+      expect(response.json().pagination).toEqual({ limit: 1, nextCursor: expect.any(String), previousCursor: null });
+
+      const next = await request('GET', `/api/orders?limit=1&cursor=${nextCursor}`);
+      expect(next.json().data.map((order: { id: string }) => order.id)).toEqual([first]);
+      expect(next.json().pagination).toEqual({ limit: 1, nextCursor: null, previousCursor: expect.any(String) });
+    });
+
+    it('400 para cursor de outra ordenação ou adulterado', async () => {
+      await placeOrder();
+      testApp.clock.advanceBy(60_000);
+      await placeOrder();
+      const { nextCursor } = (await request('GET', '/api/orders?limit=1')).json().pagination;
+
+      for (const url of [`/api/orders?sortBy=totalAmount&cursor=${nextCursor}`, '/api/orders?cursor=xyz']) {
+        const response = await request('GET', url);
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.details).toEqual([{ field: 'cursor', message: expect.any(String) }]);
+      }
     });
 
     it('filtra por status e por dia de criação', async () => {

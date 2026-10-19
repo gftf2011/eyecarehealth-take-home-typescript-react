@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { listProductsInputErrors, parseListProductsInput } from './list-products.input';
 
 describe('parseListProductsInput', () => {
-  it('padrões: página 1, todos os produtos, mais recentes primeiro', () => {
+  it('padrões: primeira página, todos os produtos, mais recentes primeiro', () => {
     expect(parseListProductsInput({})).toEqual({
-      page: 1,
+      cursor: null,
       limit: 20,
       search: null,
       category: null,
@@ -33,6 +33,7 @@ describe('parseListProductsInput', () => {
     [{ isAvailable: 'sim' }, 'isAvailable'],
     [{ sortBy: 'category' }, 'sortBy'],
     [{ limit: 0 }, 'limit'],
+    [{ cursor: 'cursor/editado' }, 'cursor'],
   ])('recusa %j no campo %s', (input, field) => {
     expect(listProductsInputErrors(input)).toHaveProperty(field);
   });

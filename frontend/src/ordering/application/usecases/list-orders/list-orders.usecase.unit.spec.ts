@@ -10,10 +10,10 @@ describe('ListOrdersUseCase', () => {
     const gateway = new FakeOrderGateway();
     gateway.orders = [buildOrder({ status: 'ready' })];
 
-    const page = await new ListOrdersUseCase(gateway).execute({ status: 'ready', page: 1 });
+    const page = await new ListOrdersUseCase(gateway).execute({ status: 'ready', cursor: 'abc' });
 
-    expect(gateway.listCalls[0]).toMatchObject({ status: 'ready', page: 1, limit: 20 });
-    expect(page.pagination.total).toBe(1);
+    expect(gateway.listCalls[0]).toMatchObject({ status: 'ready', cursor: 'abc', limit: 20 });
+    expect(page.pagination).toEqual({ limit: 20, nextCursor: null, previousCursor: null });
     expect(page.data[0]).toMatchObject({
       status: 'ready',
       totalCents: 7830,

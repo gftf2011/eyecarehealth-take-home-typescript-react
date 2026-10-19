@@ -42,21 +42,38 @@ describe('ListOrdersUseCase', () => {
 
     const page = await listOrders.execute({});
 
-    expect(page.pagination).toEqual({ page: 1, limit: 20, total: 25, totalPages: 2 });
+    expect(page.pagination).toMatchObject({ limit: 20, nextCursor: expect.any(String), previousCursor: null });
     expect(page.data[0]?.id).toBe(orders[24]?.id.value);
     expect(page.data).toHaveLength(20);
   });
 
-  it('pagina com page e limit', async () => {
+  it('pagina por cursor nos dois sentidos, na ordenação pedida', async () => {
     const orders = ['10:00', '11:00', '12:00', '13:00', '14:00'].map((time) =>
       orderAt(`2025-01-20T${time}:00Z`),
     );
     unitOfWork.givenOrders(...orders);
 
-    const page = await listOrders.execute({ page: 2, limit: 2, sortOrder: 'asc' });
+    const first = await listOrders.execute({ limit: 2, sortOrder: 'asc' });
+    const second = await listOrders.execute({ limit: 2, sortOrder: 'asc', cursor: first.pagination.nextCursor ?? '' });
+    const third = await listOrders.execute({ limit: 2, sortOrder: 'asc', cursor: second.pagination.nextCursor ?? '' });
+    const back = await listOrders.execute({ limit: 2, sortOrder: 'asc', cursor: third.pagination.previousCursor ?? '' });
 
-    expect(ids(page.data)).toEqual([orders[2]?.id.value, orders[3]?.id.value]);
-    expect(page.pagination).toEqual({ page: 2, limit: 2, total: 5, totalPages: 3 });
+    expect(ids(second.data)).toEqual([orders[2]?.id.value, orders[3]?.id.value]);
+    expect(ids(third.data)).toEqual([orders[4]?.id.value]);
+    expect(third.pagination.nextCursor).toBeNull();
+    expect(back).toEqual(second);
+  });
+
+  it('o cursor mantém os filtros da consulta, que vêm de novo na query', async () => {
+    const orders = ['10:00', '11:00', '12:00'].map((time) => orderAt(`2025-01-20T${time}:00Z`));
+    orders[1]?.changeStatus(OrderStatus.of('cancelled'), new Date('2025-01-20T12:30:00Z'));
+    unitOfWork.givenOrders(...orders);
+
+    const first = await listOrders.execute({ limit: 1, status: 'pending' });
+    const second = await listOrders.execute({ limit: 1, status: 'pending', cursor: first.pagination.nextCursor ?? '' });
+
+    expect(ids([...first.data, ...second.data])).toEqual([orders[2]?.id.value, orders[0]?.id.value]);
+    expect(second.pagination.nextCursor).toBeNull();
   });
 
   it('filtra por status', async () => {
@@ -143,12 +160,11 @@ describe('ListOrdersUseCase', () => {
   it('lista vazia devolve página vazia', async () => {
     const page = await listOrders.execute({});
 
-    expect(page).toEqual({ data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+    expect(page).toEqual({ data: [], pagination: { limit: 20, nextCursor: null, previousCursor: null } });
   });
 
   it('rejeita parâmetros inválidos listando todos, sem abrir transação', async () => {
     const attempt = listOrders.execute({
-      page: 0,
       limit: 101,
       status: 'shipped',
       startDate: '2025-02-30',
@@ -160,7 +176,6 @@ describe('ListOrdersUseCase', () => {
     await expect(attempt).rejects.toBeInstanceOf(InputValidationError);
     await expect(attempt).rejects.toMatchObject({
       details: [
-        { field: 'page', message: 'A página deve ser um inteiro maior ou igual a 1' },
         { field: 'limit', message: 'O limite deve ser um inteiro entre 1 e 100' },
         {
           field: 'status',

@@ -24,7 +24,7 @@ export type AvailableCourier = {
 /** O que a tela de atribuição mostra antes da sugestão. */
 export type DispatchBoard = {
   readonly readyOrders: readonly ReadyOrder[];
-  /** Total de pedidos prontos (a lista pode vir limitada a uma página). */
-  readonly readyOrdersTotal: number;
+  /** Há mais pedidos prontos além dos listados (a lista vem limitada a uma página). */
+  readonly hasMoreReadyOrders: boolean;
   readonly availableCouriers: readonly AvailableCourier[];
 };

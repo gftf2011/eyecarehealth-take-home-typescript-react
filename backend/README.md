@@ -265,7 +265,7 @@ As regras valem para o código de produção: testes e pastas `testing/` podem a
 
 ### Performance e concorrência (também automatizados)
 
-- **Listagens < 200 ms com 10.000 registros**, com `EXPLAIN` confirmando o índice usado: `kysely-product.repository.performance.integration.spec.ts`, `kysely-order.repository.performance.integration.spec.ts`, `kysely-report-queries.performance.integration.spec.ts`.
+- **Listagens < 200 ms com 10.000 registros**, inclusive a última página por cursor, com `EXPLAIN` confirmando o índice usado (e, na página profunda, sem `Sort` nem `Seq Scan`): `kysely-product.repository.performance.integration.spec.ts`, `kysely-order.repository.performance.integration.spec.ts`, `kysely-report-queries.performance.integration.spec.ts`.
 - **Otimização < 2 s com 50 pedidos e 30 entregadores**, em memória e no PostgreSQL: `suggest-assignment.usecase.unit.spec.ts`, `kysely-delivery-unit-of-work.integration.spec.ts`.
 - **Concorrência real** (transações em paralelo): sem lost update na mudança de status, nunca duas entregas para o mesmo entregador, remoção de entregador esperando o despacho, relays em paralelo sem duplicar mensagens.
 
@@ -403,7 +403,23 @@ sequenceDiagram
 
 ## Recursos da API
 
-Todas as rotas têm o prefixo `/api` e respondem JSON. Formato de listagem paginada: `{ "data": [...], "pagination": { "page", "limit", "total", "totalPages" } }`.
+Todas as rotas têm o prefixo `/api` e respondem JSON.
+
+**Listagens paginadas (produtos e pedidos)** usam cursor (keyset), não número de página:
+
+```json
+{ "data": [...], "pagination": { "limit": 20, "nextCursor": "eyJmIjoi…", "previousCursor": null } }
+```
+
+- Para a próxima página, repita a mesma consulta com `cursor=<nextCursor>`; para a anterior, com `cursor=<previousCursor>`. `null` = não há página naquele sentido.
+- O cursor é opaco e vale só com a **mesma ordenação** (`sortBy`/`sortOrder`); de outra → `400` no campo `cursor`. Trocando filtros, comece sem cursor.
+- Não há `total` nem `totalPages`: contar todos os registros a cada página é o que deixa a listagem lenta com muito volume ([ADR-32](../DECISIONS.md#adr-32--paginação-por-cursor-keyset-sem-offset-e-sem-contagem)).
+- Pedidos ou produtos criados durante a navegação não fazem itens se repetirem nem sumirem entre as páginas.
+
+```bash
+curl -s "http://localhost:3001/api/orders?limit=2" -H "Authorization: Bearer $TOKEN" | jq .pagination
+curl -s "http://localhost:3001/api/orders?limit=2&cursor=<nextCursor>" -H "Authorization: Bearer $TOKEN"
+```
 
 **Permissões**: `admin` tem todas as do painel; `viewer` tem `products:read`, `orders:read` e `reports:read`; `courier` (o entregador) tem só `my-deliveries:read` e `my-deliveries:write`, sobre as próprias entregas.
 
@@ -420,7 +436,7 @@ Todas as rotas têm o prefixo `/api` e respondem JSON. Formato de listagem pagin
 
 | Método | Rota | Permissão | Descrição |
 |---|---|---|---|
-| `GET` | `/products` | `products:read` | `page`, `limit` (≤ 100), `search` (parcial, sem diferenciar maiúsculas), `category`, `isAvailable`, `sortBy` (`name`, `price`, `createdAt`), `sortOrder` |
+| `GET` | `/products` | `products:read` | `cursor`, `limit` (≤ 100), `search` (parcial, sem diferenciar maiúsculas), `category`, `isAvailable`, `sortBy` (`name`, `price`, `createdAt`), `sortOrder` |
 | `GET` | `/products/:id` | `products:read` | Detalhe (`404 PRODUCT_NOT_FOUND`) |
 | `POST` | `/products` | `products:write` | Cria → `201` |
 | `PUT` | `/products/:id` | `products:write` | Atualização parcial (inclui `isAvailable`) |
@@ -430,7 +446,7 @@ Todas as rotas têm o prefixo `/api` e respondem JSON. Formato de listagem pagin
 
 | Método | Rota | Permissão | Descrição |
 |---|---|---|---|
-| `GET` | `/orders` | `orders:read` | `page`, `limit`, `status`, `startDate`/`endDate` (dia de criação), `sortBy` (`createdAt`, `totalAmount`), `sortOrder` |
+| `GET` | `/orders` | `orders:read` | `cursor`, `limit`, `status`, `startDate`/`endDate` (dia de criação), `sortBy` (`createdAt`, `totalAmount`), `sortOrder` |
 | `GET` | `/orders/:id` | `orders:read` | Detalhe com itens, `deliveryPerson: { id, name } \| null`, `statusHistory` (`from`, `to`, `changedAt`, `reason`) `deliveryIssues` (tentativas que falharam) e `deliveryIssueDecisions` (o que o gestor pode decidir agora: `retry`, `return`, `cancel`) |
 | `POST` | `/orders` | `orders:write` | `{ customerName, customerPhone, deliveryAddress, latitude, longitude, items: [{ productId, quantity }] }` → `201`, total calculado pelo backend |
 | `PATCH` | `/orders/:id/status` | `orders:write` | `{ status }`; transição inválida → `422 INVALID_STATUS_TRANSITION` |
