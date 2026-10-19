@@ -1,6 +1,4 @@
-export const VEHICLE_TYPES = ['bicycle', 'motorcycle', 'car'] as const;
-
-export type VehicleType = (typeof VEHICLE_TYPES)[number];
+import type { VehicleTypeValue } from '../delivery-person/value-objects/vehicle-type';
 
 /** Pedido `ready` aguardando entregador, como o Delivery precisa enxergá-lo. */
 export type ReadyOrder = {
@@ -18,7 +16,7 @@ export type ReadyOrder = {
 export type AvailableCourier = {
   readonly id: string;
   readonly name: string;
-  readonly vehicleType: VehicleType;
+  readonly vehicleType: VehicleTypeValue;
   /** Sem localização, ele não entra no cálculo de distâncias. */
   readonly hasLocation: boolean;
 };

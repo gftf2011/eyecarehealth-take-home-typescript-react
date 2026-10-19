@@ -33,6 +33,7 @@ type ProductInput = {
 
 export type CreatedProduct = { id: string; name: string; isAvailable: boolean };
 export type CreatedOrder = { id: string; customerName: string; status: string };
+export type CreatedDeliveryPerson = { id: string; name: string };
 
 /** Cliente da API para preparar dados de teste (fora do navegador, com o próprio token). */
 export class FastMealsApi {
@@ -97,6 +98,36 @@ export class FastMealsApi {
       data: { status },
     });
     expect(response.ok(), `mudar status para ${status}`).toBe(true);
+  }
+
+  /** Entregador ativo e livre, criado só para o teste. */
+  async registerDeliveryPerson(name: string): Promise<CreatedDeliveryPerson> {
+    const response = await this.request.post('/api/delivery-persons', {
+      headers: this.#auth(),
+      data: {
+        name,
+        phone: '(11) 97777-1234',
+        vehicleType: 'motorcycle',
+        currentLatitude: -23.5614,
+        currentLongitude: -46.6559,
+      },
+    });
+    expect(response.status(), `cadastrar entregador ${name}`).toBe(201);
+    return (await response.json()) as CreatedDeliveryPerson;
+  }
+
+  async removeDeliveryPerson(id: string): Promise<void> {
+    const response = await this.request.delete(`/api/delivery-persons/${id}`, { headers: this.#auth() });
+    expect(response.status(), 'remover entregador').toBe(204);
+  }
+
+  /** Despacha um pedido `ready` com o entregador (o pedido vai para `delivering`). */
+  async dispatch(orderId: string, deliveryPersonId: string): Promise<void> {
+    const response = await this.request.post(`/api/orders/${orderId}/dispatch`, {
+      headers: this.#auth(),
+      data: { deliveryPersonId },
+    });
+    expect(response.ok(), 'despachar pedido').toBe(true);
   }
 
   #auth(): Record<string, string> {

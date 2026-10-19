@@ -9,6 +9,7 @@
  * mensagem a uma delas, e o Redis a leva a todas.
  */
 import { PRODUCT_UPDATES_TOPIC } from '../catalog/application/messages/product-update.message';
+import { DELIVERY_PERSON_UPDATES_TOPIC } from '../delivery/application/messages/delivery-person-update.message';
 import { makeTokenAuthenticator } from '../identity/main/token-authenticator.factory';
 import { ORDER_UPDATES_TOPIC } from '../ordering/application/messages/order-update.message';
 import { RealtimeHub } from '../realtime/application/realtime-hub';
@@ -36,8 +37,8 @@ async function main(): Promise<void> {
 
   // O logger do Fastify só existe depois do app: até lá, avisos vão ao console.
   let warn = (message: string, error?: unknown): void => console.warn(message, error);
-  // Tópicos públicos que o painel acompanha: pedidos e cardápio.
-  const topics = [ORDER_UPDATES_TOPIC, PRODUCT_UPDATES_TOPIC];
+  // Tópicos públicos que o painel acompanha: pedidos, cardápio e entregadores.
+  const topics = [ORDER_UPDATES_TOPIC, PRODUCT_UPDATES_TOPIC, DELIVERY_PERSON_UPDATES_TOPIC];
   const subscription = await RedisSubscription.open(env.REDIS_URL, topics.map((topic) => channelOf(topic)), {
     connectionName: 'fastmeals-realtime-gateway',
     onMessage: (_channel, body) => {

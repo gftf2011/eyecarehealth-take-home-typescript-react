@@ -6,7 +6,9 @@ test.describe('Produtos', () => {
   });
 
   test('lista o cardápio do seed com categoria, preço e disponibilidade', async ({ page }) => {
-    await page.goto('/produtos');
+    // Pela busca: os outros testes criam produtos (os pedidos também), e a
+    // primeira página, dos mais recentes, deixa de mostrar o seed.
+    await page.goto('/produtos?search=X-Burger');
 
     const burger = page.getByRole('row', { name: /X-Burger Especial/ });
     await expect(burger).toContainText('Refeição');

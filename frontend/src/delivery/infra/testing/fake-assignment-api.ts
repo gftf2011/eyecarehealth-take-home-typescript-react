@@ -1,7 +1,7 @@
 import { http, HttpResponse, type HttpHandler } from 'msw';
 
 import { apiUrl } from '../../../shared-kernel/infra/testing/test-api';
-import type { VehicleType } from '../../domain';
+import type { VehicleTypeValue } from '../../domain';
 
 export type FakeReadyOrder = {
   id: string;
@@ -13,7 +13,7 @@ export type FakeReadyOrder = {
 export type FakeCourier = {
   id: string;
   name: string;
-  vehicleType: VehicleType;
+  vehicleType: VehicleTypeValue;
   location: { latitude: number; longitude: number } | null;
 };
 

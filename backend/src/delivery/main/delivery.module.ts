@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely';
 
-import type { Clock, EventMediator } from '../../shared-kernel/application';
+import type { Clock } from '../../shared-kernel/application';
+import type { InMemoryEventMediator } from '../../shared-kernel/infra/events/in-memory-event-mediator';
 import type { Route } from '../../shared-kernel/presentation';
 import { ListDeliveryPersonsUseCase } from '../application/usecases/list-delivery-persons/list-delivery-persons.usecase';
 import { RegisterDeliveryPersonUseCase } from '../application/usecases/register-delivery-person/register-delivery-person.usecase';
@@ -14,6 +15,7 @@ import { ListDeliveryPersonsController } from '../presentation/controllers/list-
 import { RegisterDeliveryPersonController } from '../presentation/controllers/register-delivery-person.controller';
 import { RemoveDeliveryPersonController } from '../presentation/controllers/remove-delivery-person.controller';
 import { SuggestAssignmentController } from '../presentation/controllers/suggest-assignment.controller';
+import { subscribeDeliveryEventHandlers } from './delivery-event-handlers';
 import { UpdateDeliveryPersonController } from '../presentation/controllers/update-delivery-person.controller';
 import { listDeliveryPersonsRoute } from '../presentation/routes/list-delivery-persons.route';
 import { registerDeliveryPersonRoute } from '../presentation/routes/register-delivery-person.route';
@@ -24,14 +26,18 @@ import { updateDeliveryPersonRoute } from '../presentation/routes/update-deliver
 export type DeliveryModuleDependencies = {
   readonly db: Kysely<DeliveryDatabase>;
   readonly clock: Clock;
-  /** Recebe os eventos de domínio do Delivery e os entrega aos handlers inscritos. */
-  readonly events: EventMediator;
+  /**
+   * Recebe os eventos de domínio do Delivery e os entrega aos handlers; o
+   * Delivery também inscreve os próprios (ex.: atualizações para o painel).
+   */
+  readonly events: InMemoryEventMediator;
   /** Onde roda o otimizador de atribuição (ver `makeDispatchPlanner`). */
   readonly planner: DispatchPlanner;
 };
 
 /** Composition root do Delivery: liga infra → casos de uso → controllers → rotas. */
 export function makeDeliveryRoutes({ db, clock, events, planner }: DeliveryModuleDependencies): Route[] {
+  subscribeDeliveryEventHandlers(events);
   const unitOfWork = new KyselyDeliveryUnitOfWork(db, events);
 
   return [

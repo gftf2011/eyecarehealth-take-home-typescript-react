@@ -10,7 +10,7 @@ import { VEHICLE_TYPES } from '../../domain';
 
 const deliveryPersonFields = {
   name: z.string().meta({ minLength: 3, maxLength: 100, examples: ['Carlos Santos'] }),
-  phone: z.string().meta({ description: 'Formato `(DD) 9XXXX-XXXX` ou `(DD) XXXX-XXXX`', examples: ['(11) 91234-5678'] }),
+  phone: z.string().meta({ description: 'Formato `(XX) XXXXX-XXXX`', examples: ['(11) 91234-5678'] }),
   vehicleType: z.string().meta({ enum: [...VEHICLE_TYPES], examples: ['motorcycle'] }),
   isActive: z.boolean().optional().meta({ description: 'Padrão `true` no cadastro' }),
   currentLatitude: z

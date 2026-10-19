@@ -1,5 +1,6 @@
 import type { LiveEvent } from '../../../shared-kernel/application';
 import { useLiveInvalidation } from '../../../shared-kernel/presentation';
+import { DELIVERY_PERSON_UPDATES_TOPIC } from './use-delivery-person-live-updates';
 import { DISPATCH_BOARD_QUERY_KEY } from './use-dispatch-board';
 
 /** Tópico público das atualizações de pedidos (contrato do backend). */
@@ -28,9 +29,13 @@ export function dispatchBoardAffectedBy(event: LiveEvent): boolean {
   }
 }
 
-/** Um pedido ficou pronto ou foi despachado em outro lugar: o quadro recarrega sozinho. */
+/**
+ * Um pedido ficou pronto ou foi despachado em outro lugar, ou um entregador
+ * foi cadastrado, desativado ou removido: o quadro recarrega sozinho.
+ */
 export function useDispatchBoardLiveUpdates(): void {
   useLiveInvalidation([
     { topic: ORDER_UPDATES_TOPIC, queryKey: DISPATCH_BOARD_QUERY_KEY, affects: dispatchBoardAffectedBy },
+    { topic: DELIVERY_PERSON_UPDATES_TOPIC, queryKey: DISPATCH_BOARD_QUERY_KEY },
   ]);
 }

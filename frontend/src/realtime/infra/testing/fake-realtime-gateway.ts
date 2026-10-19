@@ -4,6 +4,7 @@ import { TEST_REALTIME_URL } from '../../../shared-kernel/infra/testing/test-api
 
 const ORDER_UPDATES_TOPIC = 'ordering.order-updates';
 const PRODUCT_UPDATES_TOPIC = 'catalog.product-updates';
+const DELIVERY_PERSON_UPDATES_TOPIC = 'delivery.delivery-person-updates';
 
 type Client = Parameters<Parameters<ReturnType<typeof ws.link>['addEventListener']>[1]>[0]['client'];
 
@@ -67,6 +68,11 @@ export class FakeRealtimeGateway {
   /** Publica uma mudança no cardápio para todos os painéis conectados. */
   publishProductUpdate(payload: Record<string, unknown>, id?: string): void {
     this.publish(PRODUCT_UPDATES_TOPIC, payload, id);
+  }
+
+  /** Publica uma mudança na frota para todos os painéis conectados. */
+  publishDeliveryPersonUpdate(payload: Record<string, unknown>, id?: string): void {
+    this.publish(DELIVERY_PERSON_UPDATES_TOPIC, payload, id);
   }
 
   publish(topic: string, payload: Record<string, unknown>, id = `evt-${(this.#sequence += 1)}`): void {

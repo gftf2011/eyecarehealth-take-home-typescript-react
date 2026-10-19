@@ -6,6 +6,7 @@
  * mesmos recursos na infraestrutura como código.
  */
 import { PRODUCT_UPDATES_TOPIC } from '../catalog/application/messages/product-update.message';
+import { DELIVERY_PERSON_UPDATES_TOPIC } from '../delivery/application/messages/delivery-person-update.message';
 import { ORDER_UPDATES_TOPIC } from '../ordering/application/messages/order-update.message';
 import { createSnsClient, createSqsClient } from '../shared-kernel/infra/messaging/aws/aws-clients';
 import { ensureMessagingTopology } from '../shared-kernel/infra/messaging/aws/messaging-topology';
@@ -25,7 +26,7 @@ async function main(): Promise<void> {
     maxReceiveCount: env.REALTIME_MAX_RECEIVE_COUNT,
     visibilityTimeoutSeconds: env.REALTIME_VISIBILITY_TIMEOUT_SECONDS,
     // A fila do tempo real só recebe o que o painel acompanha.
-    topics: [ORDER_UPDATES_TOPIC, PRODUCT_UPDATES_TOPIC],
+    topics: [ORDER_UPDATES_TOPIC, PRODUCT_UPDATES_TOPIC, DELIVERY_PERSON_UPDATES_TOPIC],
   };
 
   // O emulador pode ainda estar subindo: tenta até o prazo.

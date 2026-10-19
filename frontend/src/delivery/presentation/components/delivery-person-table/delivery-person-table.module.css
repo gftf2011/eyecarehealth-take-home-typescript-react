@@ -1,0 +1,151 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.scroller {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.table {
+  width: 100%;
+  min-width: 46rem;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.table th,
+.table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table thead th {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr {
+  transition: background-color var(--duration-fast) var(--easing);
+}
+
+.table tbody tr:hover {
+  background: color-mix(in srgb, var(--color-surface-muted) 50%, transparent);
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 14rem;
+  font-weight: var(--font-weight-regular);
+}
+
+.avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-soft);
+  color: var(--color-brand);
+  font-weight: var(--font-weight-bold);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.name {
+  font-weight: var(--font-weight-medium);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.inactive .name,
+.inactive .avatar {
+  opacity: 0.55;
+}
+
+.badge {
+  --tone: var(--color-success);
+  --tone-soft: var(--color-success-soft);
+
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.125rem var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--tone-soft);
+  color: var(--tone);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.badge::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  content: '';
+}
+
+/* Em entrega: outra cor e o ponto pulsando (a leitura não depende só da cor). */
+.delivering {
+  --tone: var(--color-info);
+  --tone-soft: var(--color-info-soft);
+}
+
+.delivering::before {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.off {
+  --tone: var(--color-text-muted);
+  --tone-soft: var(--color-surface-muted);
+}
+
+.off::before {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delivering::before {
+    animation: none;
+  }
+}
