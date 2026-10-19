@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 import { Button, SelectField, TextField, useDebouncedValue } from '../../../../shared-kernel/presentation';
 import { listProductsInputErrors } from '../../../application';
@@ -51,9 +51,11 @@ export function ProductFilters({
     if (Object.keys(listProductsInputErrors(next)).length === 0 && !sameFilters(next, value)) onApply(next);
   };
 
+  // Só a busca digitada dispara daqui (os outros filtros aplicam no próprio
+  // onChange); o evento lê `value` e `apply` atuais sem virar dependência.
+  const applySearch = useEffectEvent((search: string) => apply({ ...value, search }));
   useEffect(() => {
-    apply({ ...value, search: debouncedSearch });
-    // Só a busca digitada dispara daqui; os outros filtros aplicam no próprio onChange.
+    applySearch(debouncedSearch);
   }, [debouncedSearch]);
 
   const change = (patch: Partial<ProductFilterValues>): void => {

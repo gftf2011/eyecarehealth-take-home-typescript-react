@@ -127,6 +127,7 @@ npm run test:architecture  # regras de arquitetura (ArchUnitTS)
 npm run test:e2e           # navegador de verdade contra o sistema inteiro (Playwright; exige Docker)
 npm run typecheck          # tsc --noEmit (strict)
 npm run typecheck:e2e      # tipos dos testes de ponta a ponta
+npm run lint               # oxlint: regras de tipo, React (hooks) e acessibilidade (jsx-a11y)
 ```
 
 | Sufixo | O que cobre |
@@ -170,3 +171,4 @@ Cada teste entra pela API com **a própria sessão**: reaproveitar um cookie sal
 | `npm test`, `test:unit`, `test:integration`, `test:architecture`, `test:watch` | Testes (Vitest) |
 | `npm run test:e2e`, `test:e2e:ui`, `test:e2e:report` | Testes de ponta a ponta (Playwright), modo interativo e relatório |
 | `npm run typecheck` / `npm run typecheck:e2e` | Verificação de tipos do painel / dos testes de ponta a ponta |
+| `npm run lint` | Oxlint em `src/` e `e2e/` ([`.oxlintrc.json`](.oxlintrc.json)); falha em qualquer aviso |

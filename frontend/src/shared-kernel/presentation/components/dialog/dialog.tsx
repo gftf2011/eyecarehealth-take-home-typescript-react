@@ -72,6 +72,8 @@ export function Dialog({
   return createPortal(
     <div
       className={styles.overlay}
+      // Só o fundo: clicar fora fecha (pelo teclado, o Esc, tratado no documento).
+      role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

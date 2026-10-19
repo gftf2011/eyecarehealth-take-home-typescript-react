@@ -43,11 +43,10 @@ describe('LoginUseCase', () => {
     const attempt = login.execute({ email: 'invalido', password: '' });
 
     await expect(attempt).rejects.toThrow(InputValidationError);
-    await attempt.catch((error: InputValidationError) => {
-      expect(error.messagesByField()).toEqual({
-        email: 'Informe um email válido',
-        password: 'Informe a senha',
-      });
+    const error = await attempt.catch((caught: unknown) => caught);
+    expect(error instanceof InputValidationError ? error.messagesByField() : null).toEqual({
+      email: 'Informe um email válido',
+      password: 'Informe a senha',
     });
     expect(gateway.logins).toHaveLength(0);
   });

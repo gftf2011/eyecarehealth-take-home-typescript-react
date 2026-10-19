@@ -1,0 +1,58 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Lint do painel (ADR-25): as mesmas regras com tipo do backend, mais hooks
+  // do React e acessibilidade; `--deny-warnings` no script.
+  "plugins": ["typescript", "oxc", "import", "unicorn", "react", "jsx-a11y", "vitest"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "eqeqeq": "error",
+    "no-shadow": "error",
+    "no-unmodified-loop-condition": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/unbound-method": "error",
+    "typescript/no-base-to-string": "error",
+    "typescript/require-array-sort-compare": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "react/jsx-key": "error",
+    "react/no-danger": "error",
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-role": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+    // O foco dos diálogos é gerenciado por código (e devolvido ao fechar).
+    "jsx-a11y/no-autofocus": "error",
+    "vitest/valid-expect": "error",
+    "vitest/no-standalone-expect": "error",
+    "vitest/no-conditional-expect": "error",
+    // `role="status"`/`role="group"` explícitos são ARIA válido e já testados;
+    // trocar por <output>/<fieldset> mudaria o CSS sem ganho de acessibilidade.
+    "jsx-a11y/prefer-tag-over-role": "off",
+    // Cópias defensivas de listeners e mapas percorridos enquanto mudam.
+    "unicorn/no-useless-spread": "off",
+    "unicorn/no-new-array": "off",
+    // Estilo: os mocks já são tipados pelo uso.
+    "vitest/require-mock-type-parameters": "off"
+  },
+  "overrides": [
+    {
+      // O `use` dos fixtures do Playwright não é o hook do React.
+      "files": ["e2e/**"],
+      "rules": { "react-hooks/rules-of-hooks": "off" }
+    },
+    {
+      // `expect(mock.metodo).toHaveBeenCalled()` é o uso normal de um mock.
+      "files": ["**/*.spec.ts", "**/*.spec.tsx", "**/testing/**"],
+      "rules": { "typescript/unbound-method": "off" }
+    }
+  ],
+  "ignorePatterns": ["dist/**", "node_modules/**", "playwright-report/**", "test-results/**"]
+}

@@ -27,7 +27,9 @@ const baseName = (file: FileInfo): string => fileNameOf(file).replace(/\.(tsx?|m
 describe('Convenções de código', () => {
   it('imports sem extensão .js e sem /index (moduleResolution Bundler)', async () => {
     const importsAreClean = (file: FileInfo): boolean =>
-      importSpecifiers(file).every((specifier) => !/\.jsx?$/.test(specifier) && !/\/index$/.test(specifier));
+      importSpecifiers(file).every(
+        (specifier) => !specifier.endsWith('.js') && !specifier.endsWith('.jsx') && !specifier.endsWith('/index'),
+      );
 
     const check = projectFiles()
       .inPath('src/**/*.{ts,tsx}')

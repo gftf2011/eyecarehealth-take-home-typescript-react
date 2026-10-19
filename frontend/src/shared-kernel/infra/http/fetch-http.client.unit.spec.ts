@@ -22,7 +22,7 @@ type Call = { url: string; init: RequestInit };
 function fakeFetch(...responses: Response[]) {
   const calls: Call[] = [];
   const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({ url: String(input), init: init ?? {} });
+    calls.push({ url: input instanceof Request ? input.url : input.toString(), init: init ?? {} });
     const next = responses.shift();
     return next === undefined ? Promise.reject(new Error('sem resposta')) : Promise.resolve(next);
   });

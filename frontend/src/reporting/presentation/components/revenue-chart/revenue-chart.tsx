@@ -47,7 +47,7 @@ export function RevenueChart({ report }: { readonly report: RevenueReport }) {
             />
             <Tooltip
               formatter={(value) => [formatCents(Math.round(Number(value) * 100)), 'Receita']}
-              labelFormatter={(label) => formatShortDay(String(label))}
+              labelFormatter={(label) => (typeof label === 'string' ? formatShortDay(label) : '')}
               contentStyle={{ background: colors.surface, borderColor: colors.border, color: colors.text }}
             />
             <Area

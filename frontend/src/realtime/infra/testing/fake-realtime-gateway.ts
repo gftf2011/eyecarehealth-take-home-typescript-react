@@ -23,7 +23,8 @@ export class FakeRealtimeGateway {
     return this.#link.addEventListener('connection', ({ client }) => {
       this.connections += 1;
       client.addEventListener('message', (message) => {
-        const parsed = JSON.parse(String(message.data)) as { type?: string; accessToken?: string };
+        if (typeof message.data !== 'string') return;
+        const parsed = JSON.parse(message.data) as { type?: string; accessToken?: string };
         if (parsed.type !== 'auth' || parsed.accessToken === undefined) return;
         this.authTokens.push(parsed.accessToken);
         const ready = () => {
