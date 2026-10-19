@@ -74,6 +74,31 @@ test.describe('Entregadores', () => {
     await expect(page.getByRole('rowheader', { name: new RegExp(courier.name) })).toHaveCount(0);
   });
 
+  test('desativar um entregador devolve os pedidos dele à atribuição, ao vivo', async ({ page, api }) => {
+    const courier = await api.registerDeliveryPerson(unique('Entregador Desativado'));
+    const customer = unique('Cliente Atribuído');
+    const order = await api.placeOrder(customer);
+    await api.changeStatus(order.id, 'preparing');
+    await api.changeStatus(order.id, 'ready');
+    await api.assign(order.id, courier.id);
+    await signIn(page);
+    await page.goto('/atribuicao');
+    await expect(page.getByRole('status', { name: /Ao vivo/ })).toBeVisible();
+    const ready = page.getByRole('region', { name: 'Pedidos prontos' }).getByRole('listitem').filter({ hasText: customer });
+    await expect(ready).toContainText(`Atribuído a ${courier.name}`);
+
+    // Outro gestor desativa o entregador.
+    await api.setDeliveryPersonActive(courier.id, false);
+
+    // Delivery → outbox → SNS → fila do Ordering → event-consumers → pedido sem entregador → WebSocket.
+    await expect.poll(() => api.assignedDeliveryPersonId(order.id), { timeout: 15_000 }).toBeNull();
+    await expect(ready).not.toContainText('Atribuído a');
+    await expect(ready).toBeVisible();
+
+    await api.changeStatus(order.id, 'cancelled');
+    await api.removeDeliveryPerson(courier.id);
+  });
+
   test('perfil somente leitura não tem a tela de entregadores', async ({ page }) => {
     await signIn(page, USERS.viewer);
     await page.goto('/entregadores');

@@ -21,6 +21,12 @@ export const realtimeQueueEnvShape = {
   REALTIME_DLQ_NAME: fifoName('fastmeals-realtime-dlq.fifo'),
 };
 
+/** Nomes da fila do Ordering (mudanças na frota) e da fila morta dela. */
+export const orderingQueueEnvShape = {
+  ORDERING_QUEUE_NAME: fifoName('fastmeals-ordering.fifo'),
+  ORDERING_DLQ_NAME: fifoName('fastmeals-ordering-dlq.fifo'),
+};
+
 export function awsClientConfig(env: { AWS_REGION: string; AWS_ENDPOINT_URL?: string | undefined }): AwsClientConfig {
   return { region: env.AWS_REGION, endpoint: env.AWS_ENDPOINT_URL };
 }
@@ -29,6 +35,7 @@ export function awsClientConfig(env: { AWS_REGION: string; AWS_ENDPOINT_URL?: st
 const messagingSetupEnvSchema = z.object({
   ...awsEnvShape,
   ...realtimeQueueEnvShape,
+  ...orderingQueueEnvShape,
   EVENTS_TOPIC_NAME: fifoName('fastmeals-events.fifo'),
   /** Recebimentos sem sucesso até a mensagem ir para a fila morta. */
   REALTIME_MAX_RECEIVE_COUNT: z.coerce.number().int().min(1).max(1_000).default(5),
@@ -38,8 +45,8 @@ const messagingSetupEnvSchema = z.object({
   MESSAGING_SETUP_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(60_000),
 });
 
-/** CLI da fila morta do SQS. */
-const eventsDeadLettersEnvSchema = z.object({ ...awsEnvShape, ...realtimeQueueEnvShape });
+/** CLI das filas mortas do SQS. */
+const eventsDeadLettersEnvSchema = z.object({ ...awsEnvShape, ...realtimeQueueEnvShape, ...orderingQueueEnvShape });
 
 export type MessagingSetupEnv = z.output<typeof messagingSetupEnvSchema>;
 export type EventsDeadLettersEnv = z.output<typeof eventsDeadLettersEnvSchema>;

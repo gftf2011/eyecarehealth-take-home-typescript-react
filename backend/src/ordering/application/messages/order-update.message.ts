@@ -37,4 +37,11 @@ export type OrderUpdateMessage =
       readonly deliveryPersonId: string;
       readonly previousDeliveryPersonId: string | null;
       readonly occurredAt: string;
+    }
+  | {
+      /** O entregador atribuído foi desativado ou removido: o pedido volta para a atribuição. */
+      readonly type: 'order.delivery-person-unassigned';
+      readonly orderId: string;
+      readonly previousDeliveryPersonId: string;
+      readonly occurredAt: string;
     };

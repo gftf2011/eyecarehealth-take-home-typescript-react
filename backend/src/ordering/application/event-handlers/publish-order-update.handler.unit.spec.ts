@@ -98,6 +98,24 @@ describe('PublishOrderUpdateHandler (inscrito pelo Ordering no mediador)', () =>
     ]);
   });
 
+  it('publica a perda do entregador (desativado ou removido): o pedido volta para a atribuição', async () => {
+    const order = buildOrderIn('ready');
+    order.assignDeliveryPerson(availableCourier(), LATER);
+    order.pullDomainEvents();
+    order.releaseDeliveryPerson(LATER);
+
+    await publish(order.pullDomainEvents());
+
+    expect(appended.map((message) => message.payload)).toEqual([
+      {
+        type: 'order.delivery-person-unassigned',
+        orderId: order.id.value,
+        previousDeliveryPersonId: COURIER_ID,
+        occurredAt: LATER.toISOString(),
+      },
+    ]);
+  });
+
   it('usa o eventId como id da mensagem (idempotência) e mantém a ordem dos eventos', async () => {
     const order = buildOrderIn('ready');
     order.assignDeliveryPerson(availableCourier(), LATER);

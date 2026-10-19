@@ -3,6 +3,7 @@ import type { Selectable, Transaction } from 'kysely';
 import type { DomainEventBuffer } from '../../../../shared-kernel/application';
 import type { Slice } from '../../../../shared-kernel/domain';
 import type {
+  DeliveryPersonId,
   Order,
   OrderId,
   OrderListCriteria,
@@ -21,6 +22,9 @@ const SORT_COLUMNS = {
   createdAt: 'created_at',
   totalAmount: 'total_amount',
 } as const satisfies Record<OrderSortField, string>;
+
+/** Status em que o pedido ainda pode trocar (ou perder) o entregador. */
+const UNDISPATCHED_STATUSES = ['pending', 'preparing', 'ready'] as const;
 
 /**
  * Repositório de Order em PostgreSQL. Só existe dentro de uma transação aberta
@@ -46,6 +50,18 @@ export class KyselyOrderRepository implements OrderRepository {
       .forUpdate()
       .executeTakeFirst();
     return row === undefined ? null : ((await this.hydrate([row]))[0] ?? null);
+  }
+
+  async findUndispatchedAssignedToForUpdate(deliveryPersonId: DeliveryPersonId): Promise<Order[]> {
+    const rows = await this.trx
+      .selectFrom('orders')
+      .selectAll()
+      .where('delivery_person_id', '=', deliveryPersonId.value)
+      .where('status', 'in', UNDISPATCHED_STATUSES)
+      .orderBy('id')
+      .forUpdate()
+      .execute();
+    return this.hydrate(rows);
   }
 
   /**

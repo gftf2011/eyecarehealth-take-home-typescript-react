@@ -15,6 +15,7 @@ import { InMemoryEventMediator } from '../../../../shared-kernel/infra/events/in
 import { ChangeOrderStatusUseCase } from '../../../application/usecases/change-order-status/change-order-status.usecase';
 import { ListOrdersUseCase } from '../../../application/usecases/list-orders/list-orders.usecase';
 import { PlaceOrderUseCase } from '../../../application/usecases/place-order/place-order.usecase';
+import { ReleaseDeliveryPersonOrdersUseCase } from '../../../application/usecases/release-delivery-person-orders/release-delivery-person-orders.usecase';
 import {
   DeliveryPersonId,
   DeliveryPersonUnavailableError,
@@ -301,6 +302,67 @@ describe('KyselyOrderingUnitOfWork', () => {
         DeliveryPersonUnavailableError,
       );
       expect((await find(second))?.status.value).toBe('ready');
+    });
+  });
+
+  describe('entregador desativado: pedidos voltam para a atribuição', () => {
+    const release = new ReleaseDeliveryPersonOrdersUseCase(unitOfWork, new FixedClock(NOW));
+    const deactivate = (id: string) => sql`UPDATE delivery_persons SET is_active = false WHERE id = ${id}`.execute(raw);
+
+    it('tira o entregador só dos pedidos que não saíram e avisa o painel pelo outbox', async () => {
+      const ready = readyOrderAssignedTo(COURIER_ID);
+      const preparing = buildOrderIn('preparing');
+      preparing.assignDeliveryPerson(availableCourier(COURIER_ID), LATER);
+      preparing.pullDomainEvents();
+      const delivering = buildOrderIn('delivering');
+      const otherCourier = readyOrderAssignedTo(OTHER_COURIER_ID);
+      await save(ready, preparing, delivering, otherCourier);
+      await deactivate(COURIER_ID);
+      await sql`DELETE FROM outbox_events`.execute(raw);
+
+      const result = await release.execute({ deliveryPersonId: COURIER_ID });
+
+      expect([...result.releasedOrderIds].sort()).toEqual([ready.id.value, preparing.id.value].sort());
+      expect((await find(ready))?.deliveryPersonId).toBeNull();
+      expect((await find(preparing))?.deliveryPersonId).toBeNull();
+      expect((await find(delivering))?.deliveryPersonId?.value).toBe(COURIER_ID);
+      expect((await find(otherCourier))?.deliveryPersonId?.value).toBe(OTHER_COURIER_ID);
+      const outbox = await db.selectFrom('outbox_events').select(['event_name', 'payload']).execute();
+      expect(outbox).toHaveLength(2);
+      expect(outbox.every((row) => row.payload['type'] === 'order.delivery-person-unassigned')).toBe(true);
+    });
+
+    it('entregador ativo (reativado depois da mensagem) continua com os pedidos', async () => {
+      const ready = readyOrderAssignedTo(COURIER_ID);
+      await save(ready);
+
+      expect((await release.execute({ deliveryPersonId: COURIER_ID })).releasedOrderIds).toEqual([]);
+      expect((await find(ready))?.deliveryPersonId?.value).toBe(COURIER_ID);
+    });
+
+    it('despacho concorrente espera a liberação e não sai com o entregador desativado', async () => {
+      const ready = readyOrderAssignedTo(COURIER_ID);
+      await save(ready);
+      await deactivate(COURIER_ID);
+      const changeStatus = new ChangeOrderStatusUseCase(unitOfWork, new FixedClock(NOW));
+
+      // A liberação segura o pedido (e o entregador); o despacho chega ao lock do pedido e espera.
+      const blocked = await unitOfWork.transaction(async ({ orders, deliveryPersons }) => {
+        const assigned = await orders.findUndispatchedAssignedToForUpdate(DeliveryPersonId.from(COURIER_ID));
+        await deliveryPersons.availabilityOf(DeliveryPersonId.from(COURIER_ID));
+        const waiting = await startBlocked(() => changeStatus.execute({ id: ready.id.value, status: 'delivering' }));
+        for (const order of assigned) {
+          order.releaseDeliveryPerson(NOW);
+          await orders.save(order);
+        }
+        return waiting;
+      });
+      const dispatch = await blocked.outcome;
+
+      // O despacho viu o pedido já sem entregador: não há com quem despachar.
+      expect(dispatch.status).toBe('rejected');
+      expect(dispatch.status === 'rejected' && dispatch.reason).toBeInstanceOf(InvalidStatusTransitionError);
+      expect((await find(ready))?.status.value).toBe('ready');
     });
   });
 

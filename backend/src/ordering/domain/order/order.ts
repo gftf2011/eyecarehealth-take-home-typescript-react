@@ -8,7 +8,7 @@ import {
   InvalidStatusTransitionError,
   UnavailableProductError,
 } from './errors';
-import { DeliveryPersonAssigned, OrderPlaced, OrderStatusChanged } from './events';
+import { DeliveryPersonAssigned, DeliveryPersonUnassigned, OrderPlaced, OrderStatusChanged } from './events';
 import type { OrderId } from './order-id';
 import type { CustomerName } from './value-objects/customer-name';
 import type { DeliveryAddress } from './value-objects/delivery-address';
@@ -285,6 +285,22 @@ export class Order extends AggregateRoot<OrderId> {
         previousDeliveryPersonId: previous?.value ?? null,
       }),
     );
+  }
+
+  /**
+   * Tira o entregador de um pedido que ainda não saiu (`pending`, `preparing`
+   * ou `ready`): ele foi desativado ou removido e não pode mais levá-lo. O
+   * pedido volta para a fila de atribuição. Sem entregador, não faz nada.
+   */
+  releaseDeliveryPerson(now: Date): void {
+    const { status, deliveryPersonId: previous } = this.#state;
+    if (previous === null) return;
+    if (!ASSIGNABLE_STATUSES.includes(status.value)) {
+      throw new DeliveryPersonAssignmentNotAllowedError(status.value);
+    }
+
+    this.#state = { ...this.#state, deliveryPersonId: null, updatedAt: new Date(now.getTime()) };
+    this.addDomainEvent(new DeliveryPersonUnassigned(this.id, now, { previousDeliveryPersonId: previous.value }));
   }
 
   /** O mesmo produto repetido vira uma única linha com as quantidades somadas. */

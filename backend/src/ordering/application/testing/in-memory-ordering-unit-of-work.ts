@@ -133,6 +133,19 @@ class InMemoryOrderRepository implements OrderRepository {
     return this.findById(id);
   }
 
+  async findUndispatchedAssignedToForUpdate(deliveryPersonId: DeliveryPersonId): Promise<Order[]> {
+    const found = [...new Map([...this.committed, ...this.staged])]
+      .map(([id, snapshot]) => Order.reconstitute(OrderId.from(id), snapshot))
+      .filter(
+        (order) =>
+          order.deliveryPersonId?.equals(deliveryPersonId) === true &&
+          (['pending', 'preparing', 'ready'] as const).some((status) => order.status.is(status)),
+      )
+      .sort((a, b) => a.id.value.localeCompare(b.id.value));
+    this.lockedOrderIds.push(...found.map((order) => order.id.value));
+    return found;
+  }
+
   async save(order: Order): Promise<void> {
     this.staged.set(order.id.value, order.snapshot());
     this.stagedEvents.push(...order.pullDomainEvents());

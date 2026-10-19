@@ -11,12 +11,14 @@ const ORDER_UPDATES_TOPIC = 'ordering.order-updates';
 /**
  * Dos pedidos, a lista só depende de quem está em entrega: muda quando um
  * pedido entra em `delivering` (despacho) ou sai dele (entregue, cancelado).
- * Pedido novo e troca de entregador num pedido pronto não mexem nela.
+ * Pedido novo e troca (ou perda) de entregador num pedido que não saiu não
+ * mexem nela.
  */
 export function deliveryPersonListAffectedBy(event: LiveEvent): boolean {
   switch (event.payload['type']) {
     case 'order.placed':
     case 'order.delivery-person-assigned':
+    case 'order.delivery-person-unassigned':
       return false;
     case 'order.status-changed':
       return event.payload['status'] === 'delivering' || event.payload['previousStatus'] === 'delivering';

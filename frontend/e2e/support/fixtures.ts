@@ -121,6 +121,31 @@ export class FastMealsApi {
     expect(response.status(), 'remover entregador').toBe(204);
   }
 
+  async setDeliveryPersonActive(id: string, isActive: boolean): Promise<void> {
+    const response = await this.request.put(`/api/delivery-persons/${id}`, {
+      headers: this.#auth(),
+      data: { isActive },
+    });
+    expect(response.ok(), isActive ? 'ativar entregador' : 'desativar entregador').toBe(true);
+  }
+
+  /** Atribui o entregador a um pedido ainda não despachado (o pedido continua no mesmo status). */
+  async assign(orderId: string, deliveryPersonId: string): Promise<void> {
+    const response = await this.request.patch(`/api/orders/${orderId}/assign`, {
+      headers: this.#auth(),
+      data: { deliveryPersonId },
+    });
+    expect(response.ok(), 'atribuir entregador').toBe(true);
+  }
+
+  /** Id do entregador atribuído ao pedido agora (`null` sem entregador). */
+  async assignedDeliveryPersonId(orderId: string): Promise<string | null> {
+    const response = await this.request.get(`/api/orders/${orderId}`, { headers: this.#auth() });
+    expect(response.ok(), 'ler pedido').toBe(true);
+    const order = (await response.json()) as { deliveryPerson: { id: string } | null };
+    return order.deliveryPerson?.id ?? null;
+  }
+
   /** Despacha um pedido `ready` com o entregador (o pedido vai para `delivering`). */
   async dispatch(orderId: string, deliveryPersonId: string): Promise<void> {
     const response = await this.request.post(`/api/orders/${orderId}/dispatch`, {

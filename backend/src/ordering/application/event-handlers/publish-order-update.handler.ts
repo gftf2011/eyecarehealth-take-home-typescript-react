@@ -2,6 +2,7 @@ import { toOutboxMessage, type DomainEventHandler, type EventHandlingScope } fro
 import { Money } from '../../../shared-kernel/domain';
 import {
   DeliveryPersonAssigned,
+  DeliveryPersonUnassigned,
   OrderPlaced,
   OrderStatusChanged,
   type OrderDomainEvent,
@@ -55,6 +56,13 @@ function toOrderUpdate(event: OrderDomainEvent): OrderUpdateMessage {
       type: 'order.delivery-person-assigned',
       ...base,
       deliveryPersonId: event.payload.deliveryPersonId,
+      previousDeliveryPersonId: event.payload.previousDeliveryPersonId,
+    };
+  }
+  if (event instanceof DeliveryPersonUnassigned) {
+    return {
+      type: 'order.delivery-person-unassigned',
+      ...base,
       previousDeliveryPersonId: event.payload.previousDeliveryPersonId,
     };
   }

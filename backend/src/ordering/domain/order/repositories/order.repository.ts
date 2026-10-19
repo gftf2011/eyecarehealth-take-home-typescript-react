@@ -1,6 +1,7 @@
 import type { Repository, Slice } from '../../../../shared-kernel/domain';
 import type { Order } from '../order';
 import type { OrderId } from '../order-id';
+import type { DeliveryPersonId } from '../value-objects/delivery-person-id';
 import type { OrderListCriteria } from './order-list-criteria';
 
 /**
@@ -20,6 +21,14 @@ export interface OrderRepository extends Repository<Order> {
    * existente deve usar este método.
    */
   findByIdForUpdate(id: OrderId): Promise<Order | null>;
+
+  /**
+   * Pedidos que ainda não saíram (`pending`, `preparing`, `ready`) com este
+   * entregador atribuído, travados para alteração como em
+   * `findByIdForUpdate`, em ordem de id (dois processos travando o mesmo
+   * conjunto não se bloqueiam em ordens opostas).
+   */
+  findUndispatchedAssignedToForUpdate(deliveryPersonId: DeliveryPersonId): Promise<Order[]>;
 
   /** Página de pedidos que atendem aos critérios, com o total geral. */
   list(criteria: OrderListCriteria): Promise<Slice<Order>>;

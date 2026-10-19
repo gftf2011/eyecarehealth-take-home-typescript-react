@@ -1,8 +1,9 @@
 /**
  * Cria a topologia de mensageria no Floci (desenvolvimento) ou numa conta
- * AWS: tópico SNS de eventos, fila do tempo real com fila morta e a
- * assinatura entre eles. Pode rodar de novo sem efeito; roda uma vez antes
- * do relay e do gateway, como o `migrate`. Em produção, prefira declarar os
+ * AWS: tópico SNS de eventos e, para cada consumidor (o tempo real e o
+ * Ordering), uma fila com fila morta e a assinatura com filtro. Pode rodar
+ * de novo sem efeito; roda uma vez antes do relay, do gateway e dos
+ * consumidores, como o `migrate`. Em produção, prefira declarar os
  * mesmos recursos na infraestrutura como código.
  */
 import { PRODUCT_UPDATES_TOPIC } from '../catalog/application/messages/product-update.message';
@@ -19,7 +20,7 @@ async function main(): Promise<void> {
   const config = awsClientConfig(env);
   const sns = createSnsClient(config);
   const sqs = createSqsClient(config);
-  const spec = {
+  const realtime = {
     topicName: env.EVENTS_TOPIC_NAME,
     queueName: env.REALTIME_QUEUE_NAME,
     deadLetterQueueName: env.REALTIME_DLQ_NAME,
@@ -28,16 +29,26 @@ async function main(): Promise<void> {
     // A fila do tempo real só recebe o que o painel acompanha.
     topics: [ORDER_UPDATES_TOPIC, PRODUCT_UPDATES_TOPIC, DELIVERY_PERSON_UPDATES_TOPIC],
   };
+  // Cada consumidor tem a própria fila (e fila morta) no mesmo tópico.
+  const ordering = {
+    ...realtime,
+    queueName: env.ORDERING_QUEUE_NAME,
+    deadLetterQueueName: env.ORDERING_DLQ_NAME,
+    // O Ordering só reage à frota: entregador desativado ou removido.
+    topics: [DELIVERY_PERSON_UPDATES_TOPIC],
+  };
 
   // O emulador pode ainda estar subindo: tenta até o prazo.
   const deadline = Date.now() + env.MESSAGING_SETUP_TIMEOUT_MS;
   try {
     for (;;) {
       try {
-        const topology = await ensureMessagingTopology(sns, sqs, spec);
-        console.info(`Tópico      ${topology.topicArn}`);
-        console.info(`Fila        ${topology.queue.arn} (até ${spec.maxReceiveCount} recebimentos)`);
-        console.info(`Fila morta  ${topology.deadLetterQueue.arn}`);
+        for (const spec of [realtime, ordering]) {
+          const topology = await ensureMessagingTopology(sns, sqs, spec);
+          console.info(`Tópico      ${topology.topicArn}`);
+          console.info(`Fila        ${topology.queue.arn} (até ${spec.maxReceiveCount} recebimentos)`);
+          console.info(`Fila morta  ${topology.deadLetterQueue.arn}`);
+        }
         return;
       } catch (error) {
         if (Date.now() > deadline) throw error;

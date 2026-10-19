@@ -16,6 +16,7 @@ export default defineConfig({
     // Worker do otimizador: carregado pelo server.js a partir do mesmo diretório.
     'dispatch-planner.worker': 'src/delivery/infra/dispatch/dispatch-planner.worker.ts',
     'realtime-gateway': 'src/main/realtime-gateway.ts',
+    'event-consumers': 'src/main/event-consumers.ts',
     migrate: 'src/main/database/migrate.ts',
     // Em contêiner, o arquivo vem de SEED_FILE (o caminho padrão é relativo a src/).
     seed: 'src/main/seed/seed.ts',

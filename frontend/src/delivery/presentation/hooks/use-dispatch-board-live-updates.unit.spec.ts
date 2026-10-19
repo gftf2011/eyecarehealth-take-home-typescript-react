@@ -21,6 +21,7 @@ describe('dispatchBoardAffectedBy', () => {
     ['pedido entrou em preparo', changed('pending', 'preparing'), false],
     ['pedido novo nasce pending', event({ type: 'order.placed', orderId: 'o1', status: 'pending' }), false],
     ['troca de entregador', event({ type: 'order.delivery-person-assigned', orderId: 'o1' }), true],
+    ['pedido pronto perdeu o entregador desativado', event({ type: 'order.delivery-person-unassigned', orderId: 'o1' }), true],
     ['tipo desconhecido, na dúvida recarrega', event({ type: 'order.algo-novo', orderId: 'o1' }), true],
   ])('%s → %s', (_, liveEvent, affected) => {
     expect(dispatchBoardAffectedBy(liveEvent)).toBe(affected);

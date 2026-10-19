@@ -41,6 +41,8 @@ x-aws-env: &aws-env
   EVENTS_TOPIC_NAME: ${EVENTS_TOPIC_NAME:-fastmeals-events.fifo}
   REALTIME_QUEUE_NAME: ${REALTIME_QUEUE_NAME:-fastmeals-realtime.fifo}
   REALTIME_DLQ_NAME: ${REALTIME_DLQ_NAME:-fastmeals-realtime-dlq.fifo}
+  ORDERING_QUEUE_NAME: ${ORDERING_QUEUE_NAME:-fastmeals-ordering.fifo}
+  ORDERING_DLQ_NAME: ${ORDERING_DLQ_NAME:-fastmeals-ordering-dlq.fifo}
 
 # OpenTelemetry dos processos do backend: traces, métricas e logs por OTLP
 # para o otel-lgtm (Collector + Prometheus + Loki + Tempo + Grafana). Para
@@ -236,6 +238,24 @@ services:
       timeout: 3s
       retries: 10
 
+  # Consumidores de eventos dos contextos, cada um com a própria fila: hoje,
+  # o Ordering tira dos pedidos o entregador desativado ou removido.
+  event-consumers:
+    <<: *backend
+    command: ["node", "--import", "./dist/instrumentation.js", "dist/event-consumers.js"]
+    environment:
+      <<: [*backend-env, *aws-env, *otel-env]
+      OTEL_SERVICE_NAME: fastmeals-event-consumers
+      EVENT_CONSUMERS_HEALTH_PORT: "3004"
+    depends_on:
+      messaging-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3004/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   # Painel: build estático servido por nginx, que faz o proxy de /api e
   # /realtime para o backend na mesma origem (ver frontend/nginx/).
   frontend:
@@ -252,6 +272,9 @@ services:
         condition: service_healthy
       # Sem o relay, as mudanças ficam no outbox e o painel não recebe nada em tempo real.
       outbox-relay:
+        condition: service_healthy
+      # Sem eles, um entregador desativado continua atribuído aos pedidos prontos.
+      event-consumers:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
