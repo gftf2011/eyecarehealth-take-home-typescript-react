@@ -6,3 +6,9 @@ coverage
 .env.*
 *.log
 **/.DS_Store
+
+# Testes de ponta a ponta (Playwright): o navegador não entra na imagem.
+e2e
+playwright.config.ts
+playwright-report
+test-results

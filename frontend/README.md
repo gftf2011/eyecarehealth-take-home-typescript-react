@@ -124,7 +124,9 @@ npm test                   # todas as suítes
 npm run test:unit          # domínio, casos de uso, infra e componentes
 npm run test:integration   # telas inteiras com a API simulada (MSW)
 npm run test:architecture  # regras de arquitetura (ArchUnitTS)
+npm run test:e2e           # navegador de verdade contra o sistema inteiro (Playwright; exige Docker)
 npm run typecheck          # tsc --noEmit (strict)
+npm run typecheck:e2e      # tipos dos testes de ponta a ponta
 ```
 
 | Sufixo | O que cobre |
@@ -133,7 +135,30 @@ npm run typecheck          # tsc --noEmit (strict)
 | `*.integration.spec.tsx` | O painel inteiro, montado como em `main.tsx`, com roteador em memória e a API atendida pelo **MSW**: login válido e inválido, retorno à página pedida, sessão restaurada no reload, sessão revogada → login com aviso, logout |
 | `*.architecture.spec.ts` | Camadas, isolamento entre contextos, domínio sem bibliotecas, aplicação sem React/HTTP/APIs do navegador, segurança (sem storage, sem HTML cru, sem `document.cookie`), convenções de nomes e pastas |
 
-Nenhum teste chama a rede: o MSW recusa qualquer requisição sem handler.
+Nenhum teste do Vitest chama a rede: o MSW recusa qualquer requisição sem handler.
+
+### Ponta a ponta (Playwright)
+
+Os testes em [`e2e/`](e2e) abrem o Chromium contra o **sistema inteiro**: nginx, API, gateway, relay, PostgreSQL, Redis e Floci. A pilha é **isolada**: o `global-setup` sobe o projeto `fastmeals-e2e` do mesmo `docker-compose.yml`, com portas próprias (painel em http://localhost:3100) e banco novo com o seed a cada rodada. No fim, apaga tudo. Os dados e a stack de desenvolvimento não são tocados.
+
+```bash
+npx playwright install chromium        # uma vez
+npm run test:e2e                       # sobe a stack, roda e derruba (~1,5 min)
+E2E_KEEP_STACK=1 npm run test:e2e      # mantém a stack no fim, para depurar
+E2E_BASE_URL=http://localhost:3100 npm run test:e2e   # usa uma stack já de pé
+npm run test:e2e:report                # relatório HTML (trace, vídeo e screenshot das falhas)
+```
+
+| Arquivo | Cobre |
+|---|---|
+| `auth.e2e.ts` | Login inválido e válido, logout encerrando a sessão no servidor, retorno à página pedida, sessão que sobrevive ao reload (cookie `httpOnly`, nada no `localStorage`), perfil somente leitura |
+| `products.e2e.ts` | Cardápio do seed, criação com validação em tempo real, busca com filtro na URL, edição, pausar persistindo após o reload, exclusão confirmada |
+| `orders.e2e.ts` | Lista e filtro por status pela URL, só transições válidas no detalhe, despacho que exige entregador |
+| `assignment.e2e.ts` | Quadro de prontos e entregadores livres (o que está em entrega não aparece), sugestão pelo Húngaro com distâncias, aceitar despacha |
+| `reports.e2e.ts` | As quatro métricas com os dados do seed, troca de período |
+| `realtime.e2e.ts` | Dois gestores em navegadores separados: o produto pausado por um aparece pausado para o outro; pedido novo e mudança de status chegam sem recarregar, passando por outbox → SNS FIFO → SQS FIFO → gateway → WebSocket |
+
+Cada teste entra pela API com **a própria sessão**: reaproveitar um cookie salvo (o `storageState` do Playwright) entre testes dispararia a detecção de reuso do refresh token rotativo, que revoga a sessão. Os testes que alteram dados criam os próprios pela API (com nomes únicos) e rodam em sequência sobre o mesmo banco.
 
 ## Scripts
 
@@ -142,5 +167,6 @@ Nenhum teste chama a rede: o MSW recusa qualquer requisição sem handler.
 | `npm run dev` | Servidor de desenvolvimento em http://localhost:3000, com proxy para a API |
 | `npm run build` | Build de produção em `dist/` |
 | `npm run preview` | Serve o build de produção (com o mesmo proxy) |
-| `npm test`, `test:unit`, `test:integration`, `test:architecture`, `test:watch` | Testes |
-| `npm run typecheck` | Verificação de tipos |
+| `npm test`, `test:unit`, `test:integration`, `test:architecture`, `test:watch` | Testes (Vitest) |
+| `npm run test:e2e`, `test:e2e:ui`, `test:e2e:report` | Testes de ponta a ponta (Playwright), modo interativo e relatório |
+| `npm run typecheck` / `npm run typecheck:e2e` | Verificação de tipos do painel / dos testes de ponta a ponta |

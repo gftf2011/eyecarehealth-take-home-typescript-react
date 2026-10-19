@@ -15,7 +15,11 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:architecture": "vitest run --project architecture",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck:e2e": "tsc --noEmit -p e2e",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.4",
@@ -26,6 +30,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "~1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
