@@ -233,9 +233,9 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 97 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 100 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 21 |
-| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 14 |
+| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 15 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
 
 ### Testes de arquitetura
@@ -258,7 +258,7 @@ As regras valem para o código de produção: testes e pastas `testing/` podem a
 |---|---|
 | Autenticação (token válido / inválido) | `identity/presentation/auth-api.e2e.spec.ts`, `catalog/presentation/products-api.e2e.spec.ts` |
 | CRUD de produtos (criação válida / validação) | `catalog/presentation/products-api.e2e.spec.ts`, `catalog/application/usecases/*/*.unit.spec.ts` |
-| Transição de status (válida / inválida) | `ordering/domain/order/order-status-transitions.unit.spec.ts` (as 36 combinações), `ordering/presentation/orders-api.e2e.spec.ts` |
+| Transição de status (válida / inválida) | `ordering/domain/order/order-status-transitions.unit.spec.ts` (as 36 combinações), `ordering/presentation/orders-api.e2e.spec.ts`, `ordering/presentation/order-state-matrix.e2e.spec.ts` (10 estados × 13 ações do gestor e do entregador, contra a API: cada célula espera 200, 422 ou 404, nunca 500) |
 | Algoritmo (com solução / sem entregadores) | `delivery/domain/dispatch/**/*.unit.spec.ts` (comparado com força bruta), `delivery/application/usecases/suggest-assignment/*.unit.spec.ts`, `delivery/presentation/optimize-assignment-api.e2e.spec.ts` |
 | Relatórios (receita por período / mais vendidos) | `reporting/application/usecases/**/*.unit.spec.ts`, `reporting/infra/persistence/queries/*.integration.spec.ts`, `reporting/presentation/reports-api.e2e.spec.ts` |
 
@@ -300,15 +300,17 @@ Todas as rotas têm o prefixo `/api` e respondem JSON. Formato de listagem pagin
 | Método | Rota | Permissão | Descrição |
 |---|---|---|---|
 | `GET` | `/orders` | `orders:read` | `page`, `limit`, `status`, `startDate`/`endDate` (dia de criação), `sortBy` (`createdAt`, `totalAmount`), `sortOrder` |
-| `GET` | `/orders/:id` | `orders:read` | Detalhe com itens, `deliveryPerson: { id, name } \| null` e `statusHistory` (`from`, `to`, `changedAt`, `reason`) |
+| `GET` | `/orders/:id` | `orders:read` | Detalhe com itens, `deliveryPerson: { id, name } \| null`, `statusHistory` (`from`, `to`, `changedAt`, `reason`) `deliveryIssues` (tentativas que falharam) e `deliveryIssueDecisions` (o que o gestor pode decidir agora: `retry`, `return`, `cancel`) |
 | `POST` | `/orders` | `orders:write` | `{ customerName, customerPhone, deliveryAddress, latitude, longitude, items: [{ productId, quantity }] }` → `201`, total calculado pelo backend |
 | `PATCH` | `/orders/:id/status` | `orders:write` | `{ status }`; transição inválida → `422 INVALID_STATUS_TRANSITION` |
 | `PATCH` | `/orders/:id/assign` | `orders:write` | `{ deliveryPersonId }`; entregador inativo/ocupado → `422 DELIVERY_PERSON_UNAVAILABLE` |
 | `POST` | `/orders/:id/dispatch` | `orders:write` | `{ deliveryPersonId }`: atribui e passa para `delivering` numa transação (o "aceitar" da sugestão) |
+| `POST` | `/orders/:id/delivery-issue/retry` | `orders:write` | Entrega com problema relatado: o entregador tenta de novo (o problema termina; o pedido segue `delivering`). Não vale se o cliente recusou nem depois de 2 novas tentativas (`422 DECISION_NOT_ALLOWED`) |
+| `POST` | `/orders/:id/delivery-issue/cancel` | `orders:write` | Entrega com problema relatado: cancela o pedido (`delivering → cancelled`, com o motivo no histórico); sem problema aberto → `422 NO_OPEN_DELIVERY_ISSUE` |
 | `POST` | `/orders/:id/return-to-assignment` | `orders:write` | `{ reason }` (3 a 200 caracteres): a entrega em andamento volta para `ready`, sem entregador, e o motivo entra no histórico; fora de `delivering` → `422 INVALID_STATUS_TRANSITION` |
 | `POST` | `/orders/optimize-assignment` | `orders:write` | Sugere a atribuição pedido → entregador de menor distância total (não altera nada) |
 
-Transições válidas: `pending → preparing | cancelled`, `preparing → ready | cancelled`, `ready → delivering | cancelled` (exige entregador ativo e livre), `delivering → delivered`. Qualquer outra é recusada. A única volta é `delivering → ready`, e só pela rota `return-to-assignment`, com motivo: é uma decisão do gestor (o entregador sumiu, a moto quebrou), nunca automática, porque a comida está com o entregador.
+Transições válidas: `pending → preparing | cancelled`, `preparing → ready | cancelled`, `ready → delivering | cancelled` (exige entregador ativo e livre), `delivering → delivered`. Pelo `PATCH /status`, qualquer outra é recusada. Além de `delivered`, `delivering` só tem saídas por rotas próprias e com motivo: `delivering → cancelled` pela `delivery-issue/cancel`, quando o entregador relatou que não conseguiu entregar; e `delivering → ready` pela `return-to-assignment`, que também encerra um problema aberto. A volta para `ready` é uma decisão do gestor (o entregador sumiu, a moto quebrou), nunca automática, porque a comida está com o entregador.
 
 Resposta da otimização:
 
@@ -362,6 +364,7 @@ O entregador vem do usuário do **token**, nunca da requisição: cada um só v�
 |---|---|---|---|
 | `GET` | `/me/deliveries` | `my-deliveries:read` | `{ deliveryPerson, inProgress, upcoming }`: a entrega em andamento e as próximas, com cliente, telefone, endereço e itens |
 | `POST` | `/me/deliveries/:id/delivered` | `my-deliveries:write` | Confirma a própria entrega (`delivering → delivered`); pedido de outro entregador → `404 ORDER_NOT_FOUND` |
+| `POST` | `/me/deliveries/:id/issue` | `my-deliveries:write` | `{ reason, note? }`: não conseguiu entregar (`customer_absent`, `address_not_found`, `refused` ou `other`, este com `note`). O pedido segue com ele e fica parado até o gestor decidir: nem ele nem o painel concluem a entrega (`422 DELIVERY_ISSUE_OPEN`). Um problema aberto por vez (`422 DELIVERY_ISSUE_ALREADY_OPEN`) |
 | `PUT` | `/me/location` | `my-deliveries:write` | `{ latitude, longitude }`: a própria posição, usada na próxima sugestão de atribuição |
 
 Usuário `courier` sem entregador vinculado → `404 DELIVERY_PERSON_NOT_LINKED`. O vínculo fica no Delivery (`delivery_persons.user_id`); hoje só o seed o cria.
@@ -467,7 +470,7 @@ Endpoint: `ws://localhost:3002/realtime`. A origem do navegador precisa estar em
 
 Tópicos e tipos de `payload.type`:
 
-- `ordering.order-updates`: `order.placed`, `order.status-changed` (com `previousStatus`, `status`, `deliveryPersonId`), `order.delivery-person-assigned` e `order.delivery-person-unassigned` (com `previousDeliveryPersonId`: o entregador foi desativado ou removido). Dados pessoais do cliente não trafegam pelo canal.
+- `ordering.order-updates`: `order.placed`, `order.status-changed` (com `previousStatus`, `status`, `deliveryPersonId`), `order.delivery-person-assigned`, `order.delivery-person-unassigned` (com `previousDeliveryPersonId`: o entregador foi desativado ou removido), `order.delivery-issue-reported` (com `reason` e `deliveryPersonId`) e `order.delivery-issue-resolved` (com `resolution`: `retried`, `returned` ou `cancelled`). Dados pessoais do cliente não trafegam pelo canal.
 - `catalog.product-updates`: `product.created`, `product.updated`, `product.price-changed`, `product.availability-changed` (com `isAvailable`) e `product.removed`, todos com `productId`. O painel recarrega os dados pela API.
 - `delivery.delivery-person-updates`: `delivery-person.registered`, `delivery-person.updated`, `delivery-person.relocated`, `delivery-person.activation-changed` (com `isActive`) e `delivery-person.removed`, todos com `deliveryPersonId`. Sem nome, telefone nem coordenadas: o canal é o mesmo para todos os perfis, e os dados vêm pela API, que exige `delivery-persons:read`.
 

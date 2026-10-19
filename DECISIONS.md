@@ -409,9 +409,9 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 97 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 100 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 21 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
-  | `*.e2e.spec.ts` | 14 | API HTTP (`app.inject`) e clientes WebSocket reais |
+  | `*.e2e.spec.ts` | 15 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
 
   Os testes de performance (listagens < 200 ms com 10 mil registros, com `EXPLAIN` confirmando o índice; otimização < 2 s) e de concorrência são automatizados.
@@ -525,10 +525,10 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
-  | `*.unit.spec.ts(x)` | 63 | 399 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 10 | 82 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, a tela do entregador, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
+  | `*.unit.spec.ts(x)` | 65 | 431 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 10 | 92 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, a tela do entregador, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
-  | `e2e/*.e2e.ts` (Playwright) | 8 | 28 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, o entregador logado, relatórios e tempo real entre dois navegadores |
+  | `e2e/*.e2e.ts` (Playwright) | 8 | 30 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, o entregador logado, relatórios e tempo real entre dois navegadores |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
 - **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Playwright para tudo**: mais realista, mas lento para cobrir cada caso de borda. Ele fica no topo da pirâmide, com poucos testes por fluxo principal, e os casos de borda continuam no Vitest. *Playwright contra o dev server com a API simulada*: rápido, mas repetiria os testes de integração; o valor dele é exercitar a stack de verdade (nginx, cookies, WebSocket, SNS/SQS). *`storageState` compartilhado entre testes*: o refresh token rotativo com detecção de reuso revogaria a sessão no segundo teste, então cada teste entra pela API com a própria sessão.
@@ -762,7 +762,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   2. **O vínculo usuário ↔ entregador é do Delivery**: `delivery_persons.user_id`, único entre os não removidos. O Identity continua sem saber o que é um entregador, e o token não muda: o `sub` basta. O Ordering descobre "quem sou eu" pela ACL que já tinha para o Delivery (`deliveryPersonOfUser`).
   3. **Rotas `/api/me/...`**: `GET /me/deliveries` (Ordering), `POST /me/deliveries/:id/delivered` (Ordering) e `PUT /me/location` (Delivery). O entregador vem sempre do token, nunca da requisição.
   4. **Autorização por dono do recurso**, além da permissão. O caso de uso confere que o pedido é do entregador logado, e o pedido de outro responde `404`, como se não existisse: um `403` revelaria que o id é válido.
-  5. **Tela `/minhas-entregas`, pensada para o celular.** A página inicial passou a depender do perfil: a primeira tela do menu que ele pode abrir. A posição vem da geolocalização do navegador; o `Permissions-Policy` do nginx passou de `geolocation=()` para `geolocation=(self)`.
+  5. **Tela `/minhas-entregas`, pensada para o celular.** Depois do login, nunca se cai na tela de outro perfil: "Sair" não lembra a página (quem entra depois pode ser outra pessoa), e uma página lembrada que o perfil não pode abrir leva à tela inicial dele (o guard de permissão reconhece a navegação feita logo após o login). A página inicial passou a depender do perfil: a primeira tela do menu que ele pode abrir. A posição vem da geolocalização do navegador; o `Permissions-Policy` do nginx passou de `geolocation=()` para `geolocation=(self)`.
   6. **Tempo real.** O gateway aceita quem tem `orders:read` **ou** `my-deliveries:read`. As mensagens já não levam dados pessoais, só ids e status. A tela do entregador só recarrega com eventos que mencionam o id dele ou um pedido que já está na tela dele.
   7. **Seed.** `entregador@fastmeals.com` entra como Carlos Santos, que já tem uma entrega em andamento. O arquivo valida o vínculo: só `courier` tem `deliveryPersonIndex`, o entregador existe e não tem dois usuários.
 - **Alternativas.**
@@ -775,6 +775,37 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➕ Contextos continuam independentes: o Identity não mudou além do novo perfil.
   - ➖ O gestor ainda não cria o login do entregador pela tela: hoje só o seed faz o vínculo.
   - ➖ A posição só é enviada quando o entregador toca no botão; sem envio contínuo, não há como detectar "entrega sem contato" sozinho.
+
+### ADR-31 — Entrega que falhou: o entregador relata, o gestor decide
+
+- **Contexto.** Com o entregador no sistema ([ADR-30](#adr-30--o-entregador-entra-no-sistema-perfil-courier-e-autorização-por-dono)), faltava o caso mais comum da rua: cliente ausente, endereço que não existe, recusa. A tela dele só tinha "Confirmar entrega", e de `delivering` só se ia para `delivered`.
+- **Decisão.**
+  1. **O entregador relata, não decide.** "Não consegui entregar", com motivo (`customer_absent`, `address_not_found`, `refused` ou `other`, este com observação obrigatória). O pedido continua `delivering`, com ele.
+  2. **Com problema aberto, a entrega fica parada até o gestor decidir.** Nem o entregador (`POST /me/deliveries/:id/delivered`) nem o painel (`PATCH /status`) a concluem: `422 DELIVERY_ISSUE_OPEN`. Se o cliente aparecer, o entregador avisa o gestor, que manda tentar de novo; só então ele confirma. A tela dele mostra "Aguardando a decisão do gestor", sem botões.
+  3. **O gestor decide, ao vivo, entre as saídas que o motivo permite.** O pedido ganha o selo "Problema na entrega" e, no detalhe, só os botões permitidos (a API devolve a lista em `deliveryIssueDecisions`, e é ela quem barra: `422 DECISION_NOT_ALLOWED`):
+
+     | Motivo | Tentar de novo | Devolver para a atribuição | Cancelar |
+     |---|---|---|---|
+     | Cliente ausente | ✓ | ✓ | ✓ |
+     | Endereço não encontrado | ✓ | ✓ | ✓ |
+     | Cliente recusou | ✗ | ✗ | ✓ |
+     | Outro | ✓ | ✓ | ✓ |
+
+     - **Tentar de novo** no máximo **2 vezes por pedido** (`MAX_DELIVERY_RETRIES`); depois, só devolver ([ADR-29](#adr-29--entrega-devolvida-para-a-atribuição-decisão-do-gestor-com-motivo)) ou cancelar.
+     - **Cliente que recusou** não recebe de novo nem tem o pedido redespachado: a única saída é cancelar.
+  4. **Um desvio consciente da máquina de estados:** `delivering → cancelled` passa a existir, mas só por essa rota, com um problema relatado, e o motivo vai para o histórico. O `PATCH /status` continua recusando.
+  5. **As tentativas ficam registradas** em `order_delivery_issues`, entidade do agregado Order, como itens e histórico. Cada uma guarda motivo, observação, quem relatou, quando e como terminou (`retried`, `returned` ou `cancelled`: sempre uma decisão do gestor). O banco garante no máximo um problema aberto por pedido. No domínio, o registro é imutável (`DeliveryIssueLog`): relatar e resolver devolvem um novo, o que também manteve o agregado abaixo das 400 linhas da convenção.
+  6. **Dono do recurso**, como no ADR-30: o entregador só relata problema no próprio pedido (`404` no de outro). As decisões exigem `orders:write`.
+  7. **Tempo real.** `order.delivery-issue-reported` e `order.delivery-issue-resolved` atualizam a lista, o detalhe e a tela do entregador. O quadro de atribuição e a lista da frota ignoram esses eventos, porque o entregador continua ocupado. Cancelar e devolver mudam o status e chegam a eles pelo `status-changed`.
+- **Alternativas.**
+  - *O entregador cancela ou devolve sozinho*: a decisão afeta o cliente e a receita, e o gestor pode ter informação que ele não tem (o cliente ligou, o endereço foi corrigido).
+  - *Um status novo* (`delivery_failed`): mudaria o enunciado, os filtros e os relatórios. O problema é um fato sobre a entrega em andamento, não um estágio do pedido.
+  - *O problema como coluna do pedido*: perderia as tentativas anteriores quando o gestor manda tentar de novo.
+  - *Deixar o entregador confirmar se o cliente aparecer*: era a primeira versão. Com o problema aberto, porém, ele poderia confirmar uma entrega que relatou como recusada, e a decisão do gestor deixaria de ser o caminho único. Ficou mais restrito: o gestor libera com "tentar de novo".
+- **Consequências.**
+  - ➕ O caso comum da rua tem fluxo próprio, com histórico de cada tentativa e decisão registrada.
+  - ➕ Os relatórios não mudam: o cancelado depois da falha conta como cancelado.
+  - ➖ O pedido fica parado em `delivering` até o gestor decidir. Sem um alerta por tempo, depende de alguém olhar o painel (o selo chega ao vivo).
 
 ---
 
@@ -789,6 +820,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 | `order_status_history` | Uma linha por transição (`position`, `from_status`, `to_status`, `changed_at`). Dá a data real de entrega para receita, mais vendidos e tempo médio de entrega ([ADR-09](#adr-09--dinheiro-em-centavos-datas-no-fuso-de-são-paulo-e-relatórios-pela-data-da-entrega)) e serve de auditoria. A PK `(order_id, position)` torna o salvamento idempotente. |
 | `refresh_sessions` | Sessões de refresh com rotação, expiração, revogação e motivo (`logout`, `reuse-detected`). Guarda só o SHA-256 do token ([ADR-06](#adr-06--access-token-em-memória-e-refresh-token-rotativo-em-cookie-httponly)). |
 | `outbox_events` | Transactional outbox, com índice parcial dos pendentes ([ADR-04](#adr-04--eventos-de-domínio-com-mediator-em-memória-e-transactional-outbox)). |
+| `order_delivery_issues` | Tentativas de entrega que falharam, parte do agregado Order: motivo, observação, quem relatou, quando, e como terminou. Índice único parcial: no máximo um problema aberto por pedido ([ADR-31](#adr-31--entrega-que-falhou-o-entregador-relata-o-gestor-decide)). |
 
 ### Colunas alteradas ou novas
 
@@ -910,6 +942,13 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 39. **Testes de ponta a ponta que dependiam do estado deixado por outros.** Os testes rodam em sequência sobre o mesmo banco. O de filtro de pedidos procurava o pedido pronto do seed, que o teste de atribuição (que roda antes) despacha. O de produtos procurava um produto do seed na primeira página, que os pedidos criados pelos outros testes empurram para a segunda. Os dois passavam ou falhavam conforme a ordem e a quantidade de testes. **Solução:** o filtro de pedidos cria os próprios pedidos, o cardápio do seed é procurado pela busca, e os testes de entregadores removem o que criam (um entregador livre a mais mudaria a sugestão da atribuição).
 
 40. **Geolocalização bloqueada pelo próprio nginx.** O cabeçalho `Permissions-Policy` do painel tinha `geolocation=()`, que desliga a geolocalização no site inteiro: o botão "Atualizar minha localização" do entregador falharia sempre como "sem permissão", mesmo com o usuário permitindo no navegador. **Solução:** `geolocation=(self)`, só para a própria origem (câmera, microfone e pagamento continuam desligados). O Playwright concede a permissão ao navegador e confere a posição enviada contra a stack com o nginx real.
+
+41. **Entregador caindo na tela de pedidos.** O admin saía de `/pedidos`, o entregador entrava no mesmo navegador e via "Acesso negado": o guard lembrava a página onde a sessão terminou e o login voltava a ela, sem olhar quem tinha entrado. **Solução:** "Sair" não lembra a página; a navegação logo depois do login vai marcada, e o guard de permissão manda uma página proibida para a tela inicial do perfil. O aviso de acesso negado (link direto) ganhou o caminho de volta. Um teste isola cada regra: sem a primeira, o admin que sai de `/produtos` e entra de novo voltaria a `/produtos`.
+
+42. **Estados e botões conferidos em matriz, dos dois lados.** Com devolver, relatar problema, tentar de novo e cancelar a entrega, as combinações de status, entregador e problema aberto já não cabiam em testes avulsos. **Solução:**
+    - **Na API**, `order-state-matrix.e2e.spec.ts` monta pelas rotas reais 10 estados (pendente, em preparo, pronto com e sem entregador, em entrega, os três tipos de problema aberto, entregue, cancelado) e chama em cada um as 13 ações do gestor e do entregador. Cada célula espera exatamente 200, 422 ou 404, nunca 500. Uma mutação na regra (deixar "tentar de novo" quando o cliente recusou) derruba as células certas.
+    - **No painel**, `order-buttons-by-state.unit.spec.tsx` renderiza o detalhe nos mesmos 10 estados e confere os botões, habilitados ou não, do gestor e do perfil somente leitura: cada botão habilitado é uma célula 200 da API.
+    - A conferência achou uma divergência: o "Excluir" de um entregador em entrega ficava habilitado, e a API sempre recusaria (`409`). Agora fica desabilitado, com o motivo.
 
 ---
 
