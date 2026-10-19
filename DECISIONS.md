@@ -117,6 +117,7 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 | **Floci** | SNS e SQS locais (Compose e testes) | Emulador da AWS MIT, em uma imagem com healthcheck HTTP; tem redrive (`RedrivePolicy`, `StartMessageMoveTask`), filtro de assinatura e entrega crua. Alternativa: LocalStack, cuja edição gratuita passou a exigir token. |
 | **Testcontainers** | PostgreSQL, Redis e Floci reais nos testes | Constraints, locks, `EXPLAIN`, fusos e concorrência só são testados de verdade no banco real. Os containers sobem uma vez por execução e são destruídos ao final. Nada a configurar à mão. |
 | **ArchUnitTS** | Testes de arquitetura | As regras de camadas, contextos e convenções viram testes do Vitest, com mensagens claras. Alternativas: **dependency-cruiser** (configuração JSON fora da suíte de testes) e **eslint-plugin-boundaries** (só dependências, sem regras de conteúdo como "todo caso de uso implementa `UseCase`"). |
+| **Oxlint** + **oxlint-tsgolint** | Lint | Lê TypeScript sozinho e faz a análise com tipos sobre o TypeScript 7 nativo, que o `typescript-eslint` não suporta (ver [ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)). Roda o projeto inteiro em segundos. |
 
 ### Frontend — produção
 
@@ -138,6 +139,8 @@ Sem biblioteca de componentes nem de CSS ([ADR-19](#adr-19--estilo-css-modules-d
 | **Vitest + Testing Library** | Testes | Os mesmos *projects* do backend (unit / integration / architecture). Testing Library consulta por papel e nome acessível (`getByRole('button', { name: 'Entrar' })`), então os testes também verificam a acessibilidade. |
 | **MSW 3** | API e WebSocket simulados nos testes | Intercepta o `fetch` **e o WebSocket** no Node: as telas são testadas inteiras, com o cliente HTTP, a renovação de token e a conexão em tempo real reais. Requisição sem handler falha o teste, então nada sai para a rede. |
 | **ArchUnitTS** | Testes de arquitetura | As mesmas regras do backend, mais regras do navegador ([ADR-14](#adr-14--o-painel-com-a-mesma-arquitetura-do-backend)). |
+| **Playwright** | Testes de ponta a ponta | Chromium contra a stack completa e isolada no Docker. Contextos de navegador independentes permitem testar o tempo real entre dois gestores, e o relatório guarda trace, vídeo e screenshot das falhas. |
+| **Oxlint** | Lint | As mesmas regras com tipo do backend, mais hooks do React e acessibilidade (`jsx-a11y`). |
 
 `npm audit` está zerado nos dois projetos. A única vulnerabilidade herdada (via ArchUnitTS, sem correção publicada) foi neutralizada com um `overrides` restrito ([dificuldade 9](#6-dificuldades-encontradas-e-como-foram-resolvidas)).
 
@@ -395,7 +398,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 84 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 85 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 20 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
   | `*.e2e.spec.ts` | 10 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
@@ -596,6 +599,46 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➖ Cálculos acima de 2 ao mesmo tempo esperam ou recebem 503.
   - ➖ A cópia das entradas entre threads custa milissegundos, desprezível perto do cálculo grande, e é por isso que os pequenos não vão para o pool.
 
+### ADR-25 — Esteira no GitHub Actions e lint com Oxlint
+
+- **Contexto.** A cada commit na `main`, backend e frontend precisam passar por instalação, lint, testes e build, sem um esperar o outro. O projeto não tinha lint: o `typescript-eslint`, base do lint de TypeScript, exige `typescript < 6.1`, e o projeto usa o TypeScript 7 nativo, que não expõe a API JavaScript do compilador da qual ele depende.
+- **Decisão.**
+  1. **[Workflow](.github/workflows/ci.yml)** em `push` e `pull_request` para a `main`, com duas esteiras paralelas de jobs encadeados por `needs`, cada etapa visível no grafo do GitHub:
+
+     ```
+     backend:  instalar → lint → [unitários + arquitetura ‖ integração + e2e (Docker)] → build
+     frontend: instalar → lint → [Vitest ‖ Playwright (stack Docker isolada)]         → build
+     ```
+     - **Instalar:** `npm ci` uma vez por projeto e `npm audit --audit-level=high`. O `node_modules` vai para o cache, indexado pelo `package-lock.json`, e as etapas seguintes o restauram com `fail-on-cache-miss` (nunca reinstalam em silêncio).
+     - **Lint:** `tsc` estrito e Oxlint (no frontend, também os tipos dos testes de ponta a ponta).
+     - **Testes:** as duas metades correm em paralelo. Integração, e2e do backend e Playwright usam o Docker do runner (Testcontainers e a stack `fastmeals-e2e`), e o relatório do Playwright é publicado quando falha.
+     - **Build:** `dist/` de cada projeto publicado como artefato por 7 dias.
+     - **Segurança e custo:** actions fixadas por SHA (com a versão ao lado), `permissions: contents: read` e cancelamento da execução anterior num push novo da mesma branch.
+  2. **[Oxlint](https://oxc.rs)** nos dois projetos ([backend](backend/.oxlintrc.json), [frontend](frontend/.oxlintrc.json)). É escrito em Rust e lê TypeScript sozinho; as regras com tipo vêm do `tsgolint`, construído sobre o próprio TypeScript nativo. A política:
+     - a categoria **correctness** inteira;
+     - um conjunto escolhido de regras que pegam bugs: promises esquecidas ou mal usadas, `any`, `unbound-method`, `[object Object]` em strings, `sort()` sem comparador, sombreamento, `expect` condicional ou fora de teste;
+     - no frontend, também as regras de hooks do React e de acessibilidade (`jsx-a11y`);
+     - `--deny-warnings`: nada fica como aviso eterno.
+  3. A categoria **suspicious** fica de fora: na primeira rodada, a maior parte do que ela apontou era estilo ou código deliberado, por exemplo construtores públicos sobre um `protected` da classe base (`no-useless-constructor`) e `sort()` em vez de `toSorted()`. As poucas regras ligadas por padrão que brigavam com código deliberado foram desligadas **com o motivo comentado no próprio `.oxlintrc.json`**:
+     - `no-new-array`: o Húngaro aloca vetores de tamanho fixo;
+     - no frontend, `prefer-tag-over-role`: ARIA explícito e já testado;
+     - `no-useless-spread`: cópias defensivas de listas que mudam durante a iteração;
+     - `require-mock-type-parameters`: estilo.
+- **Alternativas.**
+  - *ESLint com `typescript-eslint`:* exigiria rebaixar o compilador para o 6.x só por causa do lint.
+  - *Biome:* bom formatador e linter, mas sem regras com tipo equivalentes a `no-floating-promises`, que é a que mais pega bug neste código (promises de cache, de WebSocket e de outbox).
+  - *Um job só por projeto:* mais simples, mas as etapas ficariam escondidas dentro dele e não haveria testes em paralelo.
+  - *Reinstalar em cada job:* mais lento, e duas instalações podem divergir.
+- **Consequências.**
+  - ➕ Cada commit na `main` prova as quatro etapas nos dois projetos.
+  - ➕ O lint pegou e corrigiu problemas reais:
+    - mensagens fragmentadas do WebSocket, que viravam texto com vírgulas no gateway;
+    - `sort()` sem comparador nos testes, que ordenava por texto;
+    - um efeito do React com dependências implícitas, agora com `useEffectEvent`.
+  - ➖ O Oxlint tem menos regras que o ecossistema do ESLint.
+  - ➖ A esteira do frontend leva mais tempo por causa do Playwright, que constrói as imagens e sobe a stack inteira.
+  - ➖ O primeiro run sem cache baixa as imagens do Testcontainers e do compose.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -706,11 +749,15 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 29. **O limite de requisições derrubaria a suíte.** Todos os testes saem do mesmo IP, e o painel faz muitas consultas (cada tela, cada relatório, cada renovação); os 100 por minuto da API seriam estourados. **Solução:** a stack de testes sobe com `RATE_LIMIT_MAX` alto, exposto no compose, sem mexer no padrão de desenvolvimento e produção.
 
+30. **O ESLint não roda com o TypeScript 7.** O `typescript-eslint` depende da API JavaScript do compilador e exige `typescript < 6.1`; o TypeScript 7 do projeto é o compilador nativo, que só traz o binário. **Solução:** Oxlint, cuja análise com tipos (`tsgolint`) é construída sobre o próprio TypeScript nativo. A primeira rodada apontou 125 itens no backend e 36 no frontend. Os poucos que eram bugs foram corrigidos, e as regras de estilo que brigavam com código deliberado foram desligadas com justificativa.
+
+31. **Um efeito do React que o lint acusou com razão.** O filtro de produtos aplicava a busca num `useEffect` que dependia só do texto digitado, mas lia `value` e `apply` sem declará-los. Declarar as dependências reaplicaria a busca a cada mudança de filtro. **Solução:** `useEffectEvent` (React 19), que lê os valores atuais sem virar dependência: correto e sem desligar a regra.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
 
-- **CI** (GitHub Actions com testes e lint): não implementado. Os testes de ponta a ponta com Playwright existem, mas só rodam localmente, só no Chromium e sem regressão visual. Também não há ESLint configurado; o TypeScript estrito e os testes de arquitetura cobrem parte do que ele pegaria.
+- **Esteira sem deploy.** O [GitHub Actions](.github/workflows/ci.yml) instala, faz lint, testa e gera o build a cada commit na `main` ([ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)), mas não publica imagens nem faz deploy. Os testes de ponta a ponta rodam só no Chromium e sem regressão visual.
 - **Tela de entregadores (CRUD).** A API tem as rotas, mas o enunciado não lista a tela, e ela não foi feita. Os entregadores vêm do seed.
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
