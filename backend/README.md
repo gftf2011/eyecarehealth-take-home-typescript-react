@@ -143,7 +143,7 @@ Sobe, nesta ordem: `postgres`, `redis` e `floci` → `migrate` (aplica as migrat
 | Floci (SNS/SQS) | http://localhost:4566 (credenciais `test` / `test`) |
 | Grafana (métricas, logs e traces) | http://localhost:3300/d/fastmeals |
 
-O seed é idempotente: num segundo `up`, ele só avisa que o banco já tem dados. Para recriar tudo do zero, use `npm run docker:reset`.
+O seed é idempotente: num segundo `up`, ele só avisa que o banco já tem dados. Para recriar tudo do zero, use `npm run docker:reset` (é assim que um banco criado antes ganha usuários novos do seed, como o entregador).
 
 > Os padrões do `docker-compose.yml` são de **desenvolvimento local** (segredos de exemplo, cookie sem `Secure` por ser HTTP). Para outro ambiente, defina as variáveis num `.env` **na raiz**, que o Compose lê automaticamente (ver [`.env.example`](../.env.example)).
 >
@@ -187,8 +187,9 @@ npm run dev:consumers          # consumidores de eventos (ex.: entregador desati
 |---|---|---|
 | `admin@fastmeals.com` | `Admin@123` | admin (acesso total) |
 | `viewer@fastmeals.com` | `Viewer@123` | viewer (somente leitura) |
+| `entregador@fastmeals.com` | `Entregador@123` | courier: o entregador **Carlos Santos**, que já tem uma entrega em andamento |
 
-O seed também cria 15 produtos, 6 entregadores e 12 pedidos em todos os status, passando pelos mesmos casos de uso da API. Os horários são realistas: pedidos finalizados espalhados pelas últimas duas semanas e pedidos em andamento nas últimas horas, para os relatórios terem dados.
+O seed também cria 15 produtos, 6 entregadores (um deles ligado ao usuário `courier`) e 12 pedidos em todos os status, passando pelos mesmos casos de uso da API. Os horários são realistas: pedidos finalizados espalhados pelas últimas duas semanas e pedidos em andamento nas últimas horas, para os relatórios terem dados.
 
 ### Teste rápido com curl
 
@@ -232,9 +233,9 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 94 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 97 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 21 |
-| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 13 |
+| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 14 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
 
 ### Testes de arquitetura
@@ -273,7 +274,7 @@ As regras valem para o código de produção: testes e pastas `testing/` podem a
 
 Todas as rotas têm o prefixo `/api` e respondem JSON. Formato de listagem paginada: `{ "data": [...], "pagination": { "page", "limit", "total", "totalPages" } }`.
 
-**Permissões**: `admin` tem todas; `viewer` tem `products:read`, `orders:read` e `reports:read`.
+**Permissões**: `admin` tem todas as do painel; `viewer` tem `products:read`, `orders:read` e `reports:read`; `courier` (o entregador) tem só `my-deliveries:read` e `my-deliveries:write`, sobre as próprias entregas.
 
 ### Autenticação
 
@@ -353,6 +354,18 @@ Desativar (ou remover) um entregador **não** mexe na entrega que ele já está 
 
 Antes disso terminar, nada sai errado: despachar com o entregador inativo já é recusado (`422 DELIVERY_PERSON_UNAVAILABLE`), e a sugestão do otimizador só considera entregadores ativos.
 
+### Minhas entregas (entregador)
+
+O entregador vem do usuário do **token**, nunca da requisição: cada um só vê e altera o que é dele.
+
+| Método | Rota | Permissão | Descrição |
+|---|---|---|---|
+| `GET` | `/me/deliveries` | `my-deliveries:read` | `{ deliveryPerson, inProgress, upcoming }`: a entrega em andamento e as próximas, com cliente, telefone, endereço e itens |
+| `POST` | `/me/deliveries/:id/delivered` | `my-deliveries:write` | Confirma a própria entrega (`delivering → delivered`); pedido de outro entregador → `404 ORDER_NOT_FOUND` |
+| `PUT` | `/me/location` | `my-deliveries:write` | `{ latitude, longitude }`: a própria posição, usada na próxima sugestão de atribuição |
+
+Usuário `courier` sem entregador vinculado → `404 DELIVERY_PERSON_NOT_LINKED`. O vínculo fica no Delivery (`delivery_persons.user_id`); hoje só o seed o cria.
+
 ### Relatórios
 
 | Método | Rota | Parâmetros | Base de data |
@@ -397,6 +410,8 @@ Para testar pelo navegador: em **Autenticação → `POST /api/auth/login`**, *E
 3. `POST /api/auth/refresh` (com o cookie) rotaciona a sessão: o refresh token antigo deixa de valer. Reusar um token já rotacionado revoga a sessão inteira (sinal de roubo).
 
 Respostas: `401 INVALID_TOKEN` / `TOKEN_EXPIRED` sem token, com token inválido ou vencido; `403 FORBIDDEN` sem permissão.
+
+Nas rotas `/api/me/...`, a autorização é por permissão **e por dono do recurso**: o caso de uso descobre o entregador pelo usuário do token e trata o pedido de outro entregador como inexistente (`404`), para não revelar que ele existe.
 
 Proteções:
 - Senhas em **bcrypt** (custo mínimo 10, checado também por constraint no banco).
@@ -462,7 +477,7 @@ Tópicos e tipos de `payload.type`:
 |---|---|
 | `4400` | Mensagem fora do protocolo |
 | `4401` | Sem autenticação no prazo, token inválido ou expirado |
-| `4403` | Sem permissão `orders:read` |
+| `4403` | Sem `orders:read` (painel) nem `my-deliveries:read` (entregador) |
 | `1012` | Servidor reiniciando (reconectar) |
 | `1013` | Cliente lento demais (reconectar e recarregar) |
 

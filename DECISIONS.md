@@ -409,9 +409,9 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 94 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 97 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 21 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
-  | `*.e2e.spec.ts` | 13 | API HTTP (`app.inject`) e clientes WebSocket reais |
+  | `*.e2e.spec.ts` | 14 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
 
   Os testes de performance (listagens < 200 ms com 10 mil registros, com `EXPLAIN` confirmando o índice; otimização < 2 s) e de concorrência são automatizados.
@@ -525,10 +525,10 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
-  | `*.unit.spec.ts(x)` | 61 | 387 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 9 | 74 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
+  | `*.unit.spec.ts(x)` | 63 | 399 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 10 | 82 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, a tela do entregador, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
-  | `e2e/*.e2e.ts` (Playwright) | 7 | 25 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, relatórios e tempo real entre dois navegadores |
+  | `e2e/*.e2e.ts` (Playwright) | 8 | 28 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, o entregador logado, relatórios e tempo real entre dois navegadores |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
 - **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Playwright para tudo**: mais realista, mas lento para cobrir cada caso de borda. Ele fica no topo da pirâmide, com poucos testes por fluxo principal, e os casos de borda continuam no Vitest. *Playwright contra o dev server com a API simulada*: rápido, mas repetiria os testes de integração; o valor dele é exercitar a stack de verdade (nginx, cookies, WebSocket, SNS/SQS). *`storageState` compartilhado entre testes*: o refresh token rotativo com detecção de reuso revogaria a sessão no segundo teste, então cada teste entra pela API com a própria sessão.
@@ -754,6 +754,28 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➕ O gestor resolve o caso sem mexer no banco, e fica registrado quem saiu, quando e por quê.
   - ➖ Depende de o gestor perceber o problema. Com um app do entregador, o próximo passo é um **alerta** ("entrega sem contato há X minutos") que sugere esta ação, sem executá-la.
 
+### ADR-30 — O entregador entra no sistema: perfil `courier` e autorização por dono
+
+- **Contexto.** Até aqui só o gestor usava o sistema: era ele quem marcava o pedido como entregue, sem saber se o entregador já tinha chegado. O entregador é quem sabe quando entregou e onde está.
+- **Decisão.**
+  1. **Perfil `courier`**, com duas permissões novas e só elas: `my-deliveries:read` e `my-deliveries:write`. O `admin` continua com tudo **do painel**, mas não com estas (não faz sentido "minhas entregas" para quem gere). O `viewer` não muda.
+  2. **O vínculo usuário ↔ entregador é do Delivery**: `delivery_persons.user_id`, único entre os não removidos. O Identity continua sem saber o que é um entregador, e o token não muda: o `sub` basta. O Ordering descobre "quem sou eu" pela ACL que já tinha para o Delivery (`deliveryPersonOfUser`).
+  3. **Rotas `/api/me/...`**: `GET /me/deliveries` (Ordering), `POST /me/deliveries/:id/delivered` (Ordering) e `PUT /me/location` (Delivery). O entregador vem sempre do token, nunca da requisição.
+  4. **Autorização por dono do recurso**, além da permissão. O caso de uso confere que o pedido é do entregador logado, e o pedido de outro responde `404`, como se não existisse: um `403` revelaria que o id é válido.
+  5. **Tela `/minhas-entregas`, pensada para o celular.** A página inicial passou a depender do perfil: a primeira tela do menu que ele pode abrir. A posição vem da geolocalização do navegador; o `Permissions-Policy` do nginx passou de `geolocation=()` para `geolocation=(self)`.
+  6. **Tempo real.** O gateway aceita quem tem `orders:read` **ou** `my-deliveries:read`. As mensagens já não levam dados pessoais, só ids e status. A tela do entregador só recarrega com eventos que mencionam o id dele ou um pedido que já está na tela dele.
+  7. **Seed.** `entregador@fastmeals.com` entra como Carlos Santos, que já tem uma entrega em andamento. O arquivo valida o vínculo: só `courier` tem `deliveryPersonIndex`, o entregador existe e não tem dois usuários.
+- **Alternativas.**
+  - *O vínculo no Identity* (`users.delivery_person_id`): o Identity passaria a conhecer um conceito do Delivery.
+  - *O id do entregador no token*: evitaria uma consulta, mas o token ficaria velho se o vínculo mudasse, e o Identity precisaria perguntar ao Delivery ao emitir.
+  - *Filtrar por entregador nas rotas existentes* (`GET /orders?deliveryPersonId=me`): misturaria a regra de dono com a listagem do painel, e um erro no filtro exporia os pedidos de todos.
+  - *Responder `403` para o pedido de outro*: revelaria que o pedido existe.
+- **Consequências.**
+  - ➕ O entregador confirma a própria entrega e informa a posição, que melhora a sugestão de atribuição.
+  - ➕ Contextos continuam independentes: o Identity não mudou além do novo perfil.
+  - ➖ O gestor ainda não cria o login do entregador pela tela: hoje só o seed faz o vínculo.
+  - ➖ A posição só é enviada quando o entregador toca no botão; sem envio contínuo, não há como detectar "entrega sem contato" sozinho.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -776,6 +798,8 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 | todas | `created_at`/`updated_at` `NOT NULL`, com trigger `set_updated_at()` | O domínio é a fonte do horário (via `Clock`); o trigger só preenche quando um `UPDATE` manual esquece a coluna |
 | `users` | `password` → `password_hash varchar(60)` com `CHECK` do formato bcrypt e custo ≥ 10 | O nome diz o que é guardado; o banco recusa senha em texto puro mesmo se o código falhar |
 | `users` | `CHECK (email = lower(email))` | Unicidade sem diferenciar maiúsculas |
+| `users` | `role` aceita também `courier` | O entregador entra no sistema ([ADR-30](#adr-30--o-entregador-entra-no-sistema-perfil-courier-e-autorização-por-dono)) |
+| `delivery_persons` | `user_id` (FK para `users`), único entre os não removidos | O login do entregador; o vínculo é do Delivery, o Identity não sabe o que é um entregador |
 | `products`, `delivery_persons` | `deleted_at` | Soft delete ([ADR-10](#adr-10--soft-delete-para-produtos-e-entregadores)) |
 | `delivery_persons` | `updated_at` | Ausente na referência; necessário porque o entregador é editado |
 | `delivery_persons` | `CHECK` de que latitude e longitude são ambas nulas ou ambas preenchidas | Localização é um ponto |
@@ -885,12 +909,14 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 39. **Testes de ponta a ponta que dependiam do estado deixado por outros.** Os testes rodam em sequência sobre o mesmo banco. O de filtro de pedidos procurava o pedido pronto do seed, que o teste de atribuição (que roda antes) despacha. O de produtos procurava um produto do seed na primeira página, que os pedidos criados pelos outros testes empurram para a segunda. Os dois passavam ou falhavam conforme a ordem e a quantidade de testes. **Solução:** o filtro de pedidos cria os próprios pedidos, o cardápio do seed é procurado pela busca, e os testes de entregadores removem o que criam (um entregador livre a mais mudaria a sugestão da atribuição).
 
+40. **Geolocalização bloqueada pelo próprio nginx.** O cabeçalho `Permissions-Policy` do painel tinha `geolocation=()`, que desliga a geolocalização no site inteiro: o botão "Atualizar minha localização" do entregador falharia sempre como "sem permissão", mesmo com o usuário permitindo no navegador. **Solução:** `geolocation=(self)`, só para a própria origem (câmera, microfone e pagamento continuam desligados). O Playwright concede a permissão ao navegador e confere a posição enviada contra a stack com o nginx real.
+
 ---
 
 ## 7. Limitações conhecidas e próximos passos
 
 - **Esteira sem deploy.** O [GitHub Actions](.github/workflows/ci.yml) instala, faz lint, testa e gera o build a cada commit na `main` ([ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)), mas não publica imagens nem faz deploy. Os testes de ponta a ponta rodam só no Chromium e sem regressão visual.
-- **O entregador não usa o sistema.** A frota é gerida pelo gestor (`/entregadores`), mas não há um perfil `courier` para o próprio entregador ver a entrega dele e marcá-la como entregue. Sem isso, também não há como saber que um entregador ficou sem contato: devolver a entrega é manual ([ADR-29](#adr-29--entrega-devolvida-para-a-atribuição-decisão-do-gestor-com-motivo)). Isso pediria um vínculo entre usuário e entregador (Identity ↔ Delivery por ACL), autorização por dono do recurso (não só por permissão), rotas `/api/me/...` e uma tela pensada para o celular.
+- **Entregador sem app e sem alerta.** O entregador já entra no sistema pelo navegador do celular ([ADR-30](#adr-30--o-entregador-entra-no-sistema-perfil-courier-e-autorização-por-dono)), mas a posição só é enviada quando ele toca no botão, e não há alerta de "entrega sem contato": devolver a entrega é manual ([ADR-29](#adr-29--entrega-devolvida-para-a-atribuição-decisão-do-gestor-com-motivo)). Com um app (ou a posição enviada de tempos em tempos), o próximo passo é esse alerta. Também falta uma tela para o gestor criar o usuário de um entregador: hoje só o seed faz o vínculo.
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
