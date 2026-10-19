@@ -106,6 +106,7 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 | **@node-rs/bcrypt** | Hash de senhas (custo ≥ 10) | bcrypt nativo (Rust) que roda **fora do event loop**, com binários pré-compilados (sem `node-gyp` no Docker). Um login não trava as outras requisições. | **bcryptjs**: JavaScript puro, bloqueia o event loop e é várias vezes mais lento. **bcrypt**: nativo, mas compila com `node-gyp`. **argon2**: mais moderno, mas o enunciado pede bcrypt. |
 | **Zod 4** | Validação de entrada HTTP, variáveis de ambiente e `seed/data.json` | Esquema e tipo TypeScript da mesma fonte; mensagens em português por campo; coerção de query string. Cada processo valida o ambiente no boot e falha com mensagem clara. | **JSON Schema do Fastify** (Ajv): prenderia a validação ao framework e não daria o tipo. **class-validator**: depende de decorators e classes. |
 | **@fastify/cookie** | Cookie `httpOnly` do refresh token | Plugin oficial, com as opções `httpOnly`/`SameSite`/`Secure`/`Path`. | — |
+| **@fastify/swagger** + **@fastify/swagger-ui** | Documentação OpenAPI e Swagger UI em `/api/docs` | Plugins oficiais. O modo estático recebe um documento pronto, gerado dos mesmos schemas Zod que validam a entrada ([ADR-27](#adr-27--documentação-openapi-gerada-dos-schemas-zod-e-conferida-contra-as-respostas-reais)). | **fastify-type-provider-zod**: geraria o documento pelas rotas, mas exigiria validar pelo Fastify, que hoje não conhece os controllers. **zod-openapi** / **@asteasolutions/zod-to-openapi**: desnecessários, o Zod 4 já converte para JSON Schema. |
 | **@fastify/rate-limit** | 100 req/min por IP | Plugin oficial com `Retry-After`; aceita um *store* customizado, que aponta para o contador no Redis (limite compartilhado entre réplicas). | Middleware próprio: reimplementaria cabeçalhos e janela. |
 | **@fastify/websocket** + **ws** | Gateway em tempo real | Integra o WebSocket ao ciclo de vida do Fastify (health check, shutdown) usando `ws`, a implementação mais usada e estável em Node. `ws` é dependência direta para não ser embutida no bundle ([dificuldade 5](#6-dificuldades-encontradas-e-como-foram-resolvidas)). | **Socket.IO**: protocolo próprio, fallback para long polling e cliente obrigatório; para um painel moderno, WebSocket puro basta. **SSE**: serviria (o fluxo é só servidor → cliente), mas WebSocket deixa a reautenticação na mesma conexão. |
 
@@ -120,6 +121,7 @@ Critério geral: cada biblioteca resolve um problema concreto que não vale reim
 | **Floci** | SNS e SQS locais (Compose e testes) | Emulador da AWS MIT, em uma imagem com healthcheck HTTP; tem redrive (`RedrivePolicy`, `StartMessageMoveTask`), filtro de assinatura e entrega crua. Alternativa: LocalStack, cuja edição gratuita passou a exigir token. |
 | **Testcontainers** | PostgreSQL, Redis e Floci reais nos testes | Constraints, locks, `EXPLAIN`, fusos e concorrência só são testados de verdade no banco real. Os containers sobem uma vez por execução e são destruídos ao final. Nada a configurar à mão. |
 | **ArchUnitTS** | Testes de arquitetura | As regras de camadas, contextos e convenções viram testes do Vitest, com mensagens claras. Alternativas: **dependency-cruiser** (configuração JSON fora da suíte de testes) e **eslint-plugin-boundaries** (só dependências, sem regras de conteúdo como "todo caso de uso implementa `UseCase`"). |
+| **@apidevtools/swagger-parser** | Validar o documento OpenAPI | Confere o documento contra a especificação OpenAPI 3.1 no teste e2e. |
 | **Oxlint** + **oxlint-tsgolint** | Lint | Lê TypeScript sozinho e faz a análise com tipos sobre o TypeScript 7 nativo, que o `typescript-eslint` não suporta (ver [ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)). Roda o projeto inteiro em segundos. |
 
 ### Frontend — produção
@@ -401,9 +403,9 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 86 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 87 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 21 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
-  | `*.e2e.spec.ts` | 11 | API HTTP (`app.inject`) e clientes WebSocket reais |
+  | `*.e2e.spec.ts` | 13 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
 
   Os testes de performance (listagens < 200 ms com 10 mil registros, com `EXPLAIN` confirmando o índice; otimização < 2 s) e de concorrência são automatizados.
@@ -678,6 +680,35 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➖ A imagem `otel-lgtm` tem cerca de 1 GB e guarda os dados só enquanto o contêiner existe: é para desenvolvimento.
   - ➖ O custo por requisição é baixo, mas existe (spans e métricas em memória até a exportação).
 
+### ADR-27 — Documentação OpenAPI gerada dos schemas Zod e conferida contra as respostas reais
+
+- **Contexto.** Quem consome a API (o painel, um avaliador, outro time) precisa saber rotas, parâmetros, permissões, respostas e erros sem ler o código. Documentação escrita à parte envelhece: a primeira rota alterada sem atualizar o YAML já a torna falsa.
+- **Decisão.**
+  1. **Cada rota declara `docs`**, obrigatório no tipo `Route`: resumo, tags, schemas de parâmetros, query, cookies, corpo e uma resposta por status. Uma rota sem documentação não compila.
+  2. **Os schemas de entrada são os da validação.** Os controllers importam os schemas Zod de `<contexto>/presentation/schemas/`, e a documentação usa os mesmos. Os de resposta descrevem o que os presenters devolvem e são **estritos**.
+  3. **Gerador próprio** ([`build-openapi-document.ts`](backend/src/shared-kernel/presentation/openapi/build-openapi-document.ts)) monta o OpenAPI 3.1 com `z.toJSONSchema`:
+     - entrada pelo tipo de entrada do Zod e resposta pelo de saída;
+     - datas e UUIDs pelo `format`, sem a regex equivalente.
+     Ele também acrescenta, a partir da rota:
+     - a permissão (`x-permission`);
+     - o `bearerAuth`, ou `security: []` nas rotas públicas;
+     - os erros comuns no formato da API: `400` só se a rota valida algo, `401`/`403` só nas protegidas, `429` e `500` sempre.
+     Os erros de cada rota (`404 ORDER_NOT_FOUND`, `422 INVALID_STATUS_TRANSITION`, `503 OPTIMIZER_BUSY`…) ficam no `docs` dela.
+  4. **Servido pelo `@fastify/swagger` em modo estático** e pelo `@fastify/swagger-ui` em `/api/docs`, com o JSON em `/api/docs/json`. `API_DOCS_ENABLED=false` tira os dois do ar.
+  5. **Testes que impedem a documentação de mentir:**
+     - o documento é OpenAPI 3.1 válido;
+     - as operações documentadas são exatamente as rotas registradas;
+     - cada rota com corpo de sucesso é chamada de verdade e a resposta passa no schema estrito, e um teste final confere que nenhuma ficou de fora.
+- **Alternativas.**
+  - *YAML escrito à mão*: livre, mas nada garante que corresponde ao código.
+  - *`fastify-type-provider-zod`* (validação e documentação pelo Fastify): exigiria trocar a validação dos controllers, que não dependem do Fastify ([ADR-01](#adr-01--monólito-modular-com-bounded-contexts-e-clean-architecture)), pela do framework.
+  - *Bibliotecas Zod → OpenAPI*: o Zod 4 já converte para JSON Schema 2020-12, que é o dialeto do OpenAPI 3.1.
+- **Consequências.**
+  - ➕ A documentação muda junto com a validação, e uma resposta fora do documento derruba o teste.
+  - ➕ O Swagger UI permite testar a API pelo navegador, com Authorize pelo token do login.
+  - ➖ Os schemas de resposta são declarados à parte dos presenters: o teste de contrato os mantém em sintonia, mas o tipo não.
+  - ➖ Regras de domínio (transições de status, campos obrigatórios da receita) aparecem como descrição, não como validação do schema.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -797,6 +828,12 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 33. **Métrica de negócio que contaria o que foi desfeito.** Os handlers de eventos rodam dentro da transação, antes do commit: um pedido contado ali podia ser desfeito em seguida. **Solução:** `afterCommit` no escopo dos handlers, executado pelos Unit of Work só com a transação confirmada. Um teste e2e confere que o pedido recusado (produto indisponível, 422) não conta.
 
 34. **Contadores fracionados no Grafana.** O dashboard mostrava "5,41 logins recusados": o `increase()` do Prometheus extrapola a janela. **Solução:** os totais por período usam `round()`; os gráficos de taxa continuam sem arredondar.
+
+35. **Schemas com id que viravam `$ref` quebrado.** Dar `meta({ id })` a um schema Zod faz o `z.toJSONSchema` trocá-lo por um `$ref` para `#/$defs/...`, que não existe dentro de um documento OpenAPI (lá é `#/components/schemas`). **Solução:** sem ids, cada schema sai inline. O validador do OpenAPI no teste e2e pega a volta do problema.
+
+36. **Documentar a receita sem mudar a validação.** O relatório de receita exige as duas datas, mas quem recusa a falta delas é o caso de uso (`400 REQUIRED_FIELD`, com a mensagem dele), não o schema da query, que é compartilhado com os outros relatórios. Tornar o schema obrigatório trocaria esse erro pelo erro genérico de validação: a documentação mudaria o comportamento da API. **Solução:** um schema só para a documentação, com as datas obrigatórias, e a validação continua a mesma.
+
+37. **Documentação que podia estar errada sem ninguém perceber.** Na primeira versão, o texto do `401` citava um código (`UNAUTHENTICATED`) que a API nunca devolve, e nenhum teste olhava isso. **Solução:** o texto passou a citar os códigos reais (`INVALID_TOKEN`, `TOKEN_EXPIRED`), e o teste de contrato valida as respostas reais, de sucesso e de erro, contra os schemas documentados. Uma verificação manual (tirar um campo do schema de entregador) derrubou três testes.
 
 ---
 

@@ -20,7 +20,7 @@ Para subir **só o backend** (por exemplo, para desenvolver o painel com o Vite)
 cd backend && npm run docker:up
 ```
 
-Pronto: API em http://localhost:3001/api, WebSocket em ws://localhost:3002/realtime, login `admin@fastmeals.com` / `Admin@123`. Para parar: `npm run docker:down`.
+Pronto: API em http://localhost:3001/api (documentação Swagger em http://localhost:3001/api/docs), WebSocket em ws://localhost:3002/realtime, login `admin@fastmeals.com` / `Admin@123`. Para parar: `npm run docker:down`.
 
 ---
 
@@ -30,6 +30,7 @@ Pronto: API em http://localhost:3001/api, WebSocket em ws://localhost:3002/realt
 - [Como rodar](#como-rodar)
 - [Como testar](#como-testar)
 - [Recursos da API](#recursos-da-api)
+- [Documentação da API (Swagger)](#documentação-da-api-swagger)
 - [Autenticação e autorização](#autenticação-e-autorização)
 - [Erros](#erros)
 - [Tempo real (WebSocket)](#tempo-real-websocket)
@@ -128,6 +129,7 @@ Sobe, nesta ordem: `postgres`, `redis` e `floci` → `migrate` (aplica as migrat
 |---|---|
 | API | http://localhost:3001/api |
 | Health da API | http://localhost:3001/api/health |
+| Swagger UI / OpenAPI | http://localhost:3001/api/docs / http://localhost:3001/api/docs/json |
 | WebSocket | ws://localhost:3002/realtime |
 | Health do gateway | http://localhost:3002/health |
 | PostgreSQL | `localhost:5432` (usuário `fastmeals` / senha `fastmeals123`) |
@@ -220,9 +222,9 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 86 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 87 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 21 |
-| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 11 |
+| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 13 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
 
 ### Testes de arquitetura
@@ -339,6 +341,30 @@ Resposta da otimização:
 | `GET` | `/reports/average-delivery-time` | período opcional | Entrega |
 
 Todos exigem `reports:read`. Receita, mais vendidos e tempo de entrega consideram só pedidos `delivered`, pela data da entrega (a transição para `delivered`).
+
+---
+
+## Documentação da API (Swagger)
+
+| O quê | Onde |
+|---|---|
+| Swagger UI | http://localhost:3001/api/docs (ou http://localhost:3000/api/docs, pelo nginx do painel) |
+| OpenAPI 3.1 (JSON) | http://localhost:3001/api/docs/json |
+
+Para testar pelo navegador: em **Autenticação → `POST /api/auth/login`**, *Execute* (o exemplo já vem com o admin do seed). Copie o `accessToken` da resposta, clique em **Authorize** e cole o token. As outras rotas passam a mandar `Authorization: Bearer …`.
+
+**Gerado do código, não escrito à mão.** Cada rota declara um `docs` (resumo, tags, schemas de parâmetros, query, corpo e respostas), obrigatório no tipo `Route`: uma rota nova sem documentação não compila. Os schemas são os **mesmos schemas Zod** que os controllers usam para validar a entrada (em `<contexto>/presentation/schemas/`), convertidos para JSON Schema com `z.toJSONSchema`. O gerador ([`build-openapi-document.ts`](src/shared-kernel/presentation/openapi/build-openapi-document.ts)) acrescenta sozinho:
+
+- a permissão exigida (`x-permission` e na descrição) e o `bearerAuth`, ou `security: []` nas rotas públicas;
+- as respostas comuns no formato de erro da API: `400` (quando a rota valida algo), `401` e `403` (rotas protegidas), `429` e `500`.
+
+**Três testes impedem que a documentação minta:**
+
+| Teste | Garante |
+|---|---|
+| `api-docs.e2e.spec.ts` | O documento é OpenAPI 3.1 válido (`@apidevtools/swagger-parser`), cada rota registrada está documentada (e nada além delas), e `API_DOCS_ENABLED=false` responde `404` |
+| `api-contract.e2e.spec.ts` | Cada rota com corpo de sucesso é chamada de verdade e a resposta passa no schema **estrito** documentado: um campo a mais, a menos ou de outro tipo derruba o teste. O último caso confere que nenhuma rota ficou sem verificação |
+| `build-openapi-document.unit.spec.ts` | O gerador: caminhos `{id}`, parâmetros obrigatórios, segurança e respostas comuns |
 
 ---
 
@@ -545,6 +571,7 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `OPTIMIZER_MAX_QUEUED` | API | `4` | Sugestões esperando um worker; além disso, `503 OPTIMIZER_BUSY` |
 | `OPTIMIZER_TIMEOUT_MS` | API | `10000` | Tempo máximo de uma sugestão; depois, `503 OPTIMIZER_TIMEOUT` |
 | `OPTIMIZER_INLINE_MAX_CELLS` | API | `10000` | Até quantas células (pedidos × entregadores) calcular na thread da API |
+| `API_DOCS_ENABLED` | API | `true` | `false` tira do ar o Swagger UI e o OpenAPI (`/api/docs`) |
 | `BCRYPT_COST` | API, seed | `10` | Custo do bcrypt (10–15) |
 | `OUTBOX_POLL_INTERVAL_MS` / `OUTBOX_BATCH_SIZE` | relay | `500` / `100` | Latência máxima e tamanho do lote |
 | `OUTBOX_MAX_ATTEMPTS` | relay | `5` | Falhas permanentes de uma mensagem até a fila morta |
