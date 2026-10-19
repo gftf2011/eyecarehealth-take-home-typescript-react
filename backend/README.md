@@ -232,7 +232,7 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 91 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 94 |
 | `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 21 |
 | `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 13 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
@@ -299,14 +299,15 @@ Todas as rotas têm o prefixo `/api` e respondem JSON. Formato de listagem pagin
 | Método | Rota | Permissão | Descrição |
 |---|---|---|---|
 | `GET` | `/orders` | `orders:read` | `page`, `limit`, `status`, `startDate`/`endDate` (dia de criação), `sortBy` (`createdAt`, `totalAmount`), `sortOrder` |
-| `GET` | `/orders/:id` | `orders:read` | Detalhe com itens e `deliveryPerson: { id, name } \| null` |
+| `GET` | `/orders/:id` | `orders:read` | Detalhe com itens, `deliveryPerson: { id, name } \| null` e `statusHistory` (`from`, `to`, `changedAt`, `reason`) |
 | `POST` | `/orders` | `orders:write` | `{ customerName, customerPhone, deliveryAddress, latitude, longitude, items: [{ productId, quantity }] }` → `201`, total calculado pelo backend |
 | `PATCH` | `/orders/:id/status` | `orders:write` | `{ status }`; transição inválida → `422 INVALID_STATUS_TRANSITION` |
 | `PATCH` | `/orders/:id/assign` | `orders:write` | `{ deliveryPersonId }`; entregador inativo/ocupado → `422 DELIVERY_PERSON_UNAVAILABLE` |
 | `POST` | `/orders/:id/dispatch` | `orders:write` | `{ deliveryPersonId }`: atribui e passa para `delivering` numa transação (o "aceitar" da sugestão) |
+| `POST` | `/orders/:id/return-to-assignment` | `orders:write` | `{ reason }` (3 a 200 caracteres): a entrega em andamento volta para `ready`, sem entregador, e o motivo entra no histórico; fora de `delivering` → `422 INVALID_STATUS_TRANSITION` |
 | `POST` | `/orders/optimize-assignment` | `orders:write` | Sugere a atribuição pedido → entregador de menor distância total (não altera nada) |
 
-Transições válidas: `pending → preparing | cancelled`, `preparing → ready | cancelled`, `ready → delivering | cancelled` (exige entregador ativo e livre), `delivering → delivered`. Qualquer outra é recusada.
+Transições válidas: `pending → preparing | cancelled`, `preparing → ready | cancelled`, `ready → delivering | cancelled` (exige entregador ativo e livre), `delivering → delivered`. Qualquer outra é recusada. A única volta é `delivering → ready`, e só pela rota `return-to-assignment`, com motivo: é uma decisão do gestor (o entregador sumiu, a moto quebrou), nunca automática, porque a comida está com o entregador.
 
 Resposta da otimização:
 

@@ -409,7 +409,7 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Cobre |
   |---|---|---|
-  | `*.unit.spec.ts` | 91 | Domínio e casos de uso com fakes em memória |
+  | `*.unit.spec.ts` | 94 | Domínio e casos de uso com fakes em memória |
   | `*.integration.spec.ts` | 21 | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra PostgreSQL, Redis e Floci reais |
   | `*.e2e.spec.ts` | 13 | API HTTP (`app.inject`) e clientes WebSocket reais |
   | `*.architecture.spec.ts` | 3 | Regras de arquitetura |
@@ -525,10 +525,10 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
 
   | Tipo | Arquivos | Testes | Cobre |
   |---|---|---|---|
-  | `*.unit.spec.ts(x)` | 59 | 374 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
-  | `*.integration.spec.tsx` | 9 | 73 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
+  | `*.unit.spec.ts(x)` | 61 | 387 | Value Objects, casos de uso com gateways falsos, cliente HTTP (mapeamento de erros, renovação no `401`), provider de token, trava entre abas, agendadores com *fake timers*, `LiveConnection` com socket falso, agrupamento das recargas e regras de relevância do tempo real, componentes (renderização e interação) |
+  | `*.integration.spec.tsx` | 9 | 74 | O painel inteiro, montado como em `main.tsx`, com roteador em memória e **MSW** atendendo a API e o WebSocket: login, painel de pedidos, produtos, atribuição, entregadores, relatórios e tempo real (inclusive rajadas, aba oculta e eventos que não afetam a tela) |
   | `*.architecture.spec.ts` | 4 | 75 | Regras de arquitetura e de segurança |
-  | `e2e/*.e2e.ts` (Playwright) | 7 | 24 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, relatórios e tempo real entre dois navegadores |
+  | `e2e/*.e2e.ts` (Playwright) | 7 | 25 | Navegador de verdade contra o sistema inteiro numa stack Docker isolada: autenticação, produtos, pedidos, atribuição, entregadores, relatórios e tempo real entre dois navegadores |
 
   Os casos exigidos pelo enunciado: renderização (formulário de login, tabela de produtos), interação (validação em tempo real, aceitar/rejeitar atribuição, alternar disponibilidade) e integração de tela (fluxo de login completo, com sessão restaurada e expirada).
 - **Alternativas.** Mockar `fetch` ou os hooks: rápido, mas não exercita o cliente HTTP, a renovação de token nem a validação das respostas. **Playwright para tudo**: mais realista, mas lento para cobrir cada caso de borda. Ele fica no topo da pirâmide, com poucos testes por fluxo principal, e os casos de borda continuam no Vitest. *Playwright contra o dev server com a API simulada*: rápido, mas repetiria os testes de integração; o valor dele é exercitar a stack de verdade (nginx, cookies, WebSocket, SNS/SQS). *`storageState` compartilhado entre testes*: o refresh token rotativo com detecção de reuso revogaria a sessão no segundo teste, então cada teste entra pela API com a própria sessão.
@@ -737,6 +737,23 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➖ Mais um processo e mais uma fila para operar.
   - ➖ A liberação é eventual (em geral, menos de 1 s depois da desativação).
 
+### ADR-29 — Entrega devolvida para a atribuição: decisão do gestor, com motivo
+
+- **Contexto.** Desativar um entregador não mexe na entrega que ele já está fazendo ([ADR-28](#adr-28--entregador-desativado-ou-removido-o-ordering-reage-pela-própria-fila)). Mas o entregador pode sumir no meio dela: perdeu o sinal, sofreu um acidente, a moto quebrou. Pela máquina de estados, um pedido `delivering` só ia para `delivered`, e o gestor não tinha o que fazer.
+- **Decisão.**
+  1. **Uma operação própria**, `POST /orders/:id/return-to-assignment` (`Order.returnToAssignment`), e não uma transição a mais na máquina de estados. O `PATCH /status` continua recusando `delivering → ready`: a volta só existe com o motivo e tirando o entregador.
+  2. **Motivo obrigatório**, de 3 a 200 caracteres (`ReturnReason`), gravado na transição do histórico (nova coluna `order_status_history.reason`). A API passou a devolver `statusHistory`, e o detalhe do pedido mostra a linha do tempo com os motivos.
+  3. **Sempre manual.** O sistema não sabe quando um entregador fica offline (não há app do entregador), e voltar sozinho seria perigoso: a comida está com ele. Despachar outro sem saber o que houve poderia duplicar a entrega. O diálogo diz isso ao gestor e sugere confirmar com o entregador antes.
+  4. **Efeitos.** O pedido volta para `ready` sem entregador. O entregador fica livre: o índice único só impede duas entregas em andamento, e esta deixa de existir, então só o pedido é travado. Saem `order.status-changed` (`delivering → ready`) e `order.delivery-person-unassigned`, e o quadro de atribuição, as listas e a tela de entregadores atualizam sozinhos.
+  5. **Relatórios intactos.** Receita, mais vendidos e tempo de entrega olham só a transição para `delivered`. Um pedido devolvido e despachado de novo conta uma vez, com o tempo total até a entrega.
+- **Alternativas.**
+  - *Voltar sozinho para `ready` quando o entregador "cai"*: sem um sinal confiável, é chute, e o erro (duas entregas do mesmo pedido) é pior que o atraso.
+  - *Abrir `delivering → ready` no `PATCH /status`*: perderia o motivo e deixaria um entregador atribuído a um pedido que não é mais dele.
+  - *Cancelar e refazer o pedido*: perde o histórico e o vínculo com o cliente, e infla os cancelamentos.
+- **Consequências.**
+  - ➕ O gestor resolve o caso sem mexer no banco, e fica registrado quem saiu, quando e por quê.
+  - ➖ Depende de o gestor perceber o problema. Com um app do entregador, o próximo passo é um **alerta** ("entrega sem contato há X minutos") que sugere esta ação, sem executá-la.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -765,6 +782,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 | `order_items` | `product_name` (snapshot) | O pedido mostra o produto como era na compra, mesmo que ele seja renomeado ou removido |
 | `order_items` | sem `created_at` | É sempre igual ao `created_at` do pedido |
 | `orders` | `CHECK` de que `delivering`/`delivered` exigem `delivery_person_id` | A mesma regra do agregado, também no banco |
+| `order_status_history` | `reason varchar(200)`, nula, com `CHECK` de 3 a 200 caracteres | O motivo da entrega devolvida para a atribuição ([ADR-29](#adr-29--entrega-devolvida-para-a-atribuição-decisão-do-gestor-com-motivo)); as outras transições ficam sem |
 | várias | `CHECK` de tamanho de textos e formato de telefone `(11) 99999-1234` | As mesmas regras dos value objects, como defesa em profundidade |
 
 ### Índices
@@ -872,7 +890,7 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 ## 7. Limitações conhecidas e próximos passos
 
 - **Esteira sem deploy.** O [GitHub Actions](.github/workflows/ci.yml) instala, faz lint, testa e gera o build a cada commit na `main` ([ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)), mas não publica imagens nem faz deploy. Os testes de ponta a ponta rodam só no Chromium e sem regressão visual.
-- **O entregador não usa o sistema.** A frota é gerida pelo gestor (`/entregadores`), mas não há um perfil `courier` para o próprio entregador ver a entrega dele e marcá-la como entregue. Isso pediria um vínculo entre usuário e entregador (Identity ↔ Delivery por ACL), autorização por dono do recurso (não só por permissão), rotas `/api/me/...` e uma tela pensada para o celular.
+- **O entregador não usa o sistema.** A frota é gerida pelo gestor (`/entregadores`), mas não há um perfil `courier` para o próprio entregador ver a entrega dele e marcá-la como entregue. Sem isso, também não há como saber que um entregador ficou sem contato: devolver a entrega é manual ([ADR-29](#adr-29--entrega-devolvida-para-a-atribuição-decisão-do-gestor-com-motivo)). Isso pediria um vínculo entre usuário e entregador (Identity ↔ Delivery por ACL), autorização por dono do recurso (não só por permissão), rotas `/api/me/...` e uma tela pensada para o celular.
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
