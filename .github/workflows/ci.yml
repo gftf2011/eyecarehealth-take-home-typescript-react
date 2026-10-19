@@ -1,0 +1,307 @@
+# Esteira do FastMeals: a cada commit na main (e em pull requests para ela),
+# backend e frontend correm em paralelo, cada um em quatro etapas:
+#
+#   instalar → lint (tipos + oxlint) → testes → build
+#
+# A instalação roda uma vez por projeto e guarda o node_modules em cache; as
+# etapas seguintes restauram esse cache (falham se ele não existir, em vez de
+# instalar de novo em silêncio). Actions fixadas por SHA, com a versão ao lado.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um push novo na mesma branch cancela a execução anterior, que já ficou velha.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ─────────────────────────────── Backend ───────────────────────────────
+
+  backend-install:
+    name: Backend · instalar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Cache do node_modules
+        id: modules
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: backend/node_modules
+          key: backend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('backend/package-lock.json') }}
+      - name: Instalar dependências
+        if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Auditoria de vulnerabilidades
+        run: npm audit --audit-level=high
+
+  backend-lint:
+    name: Backend · lint
+    needs: backend-install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: backend/node_modules
+          key: backend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('backend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Tipos (tsc strict)
+        run: npm run typecheck
+      - name: Lint (oxlint com regras de tipo)
+        run: npm run lint
+
+  backend-test-unit:
+    name: Backend · testes unitários e de arquitetura
+    needs: backend-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: backend/node_modules
+          key: backend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('backend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Unitários
+        run: npm run test:unit
+      - name: Arquitetura
+        run: npm run test:architecture
+
+  backend-test-integration:
+    name: Backend · testes de integração e e2e (Docker)
+    needs: backend-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: backend/node_modules
+          key: backend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('backend/package-lock.json') }}
+          fail-on-cache-miss: true
+      # PostgreSQL, Redis e Floci (SNS/SQS) sobem pelo Testcontainers no Docker do runner.
+      - name: Integração (PostgreSQL, Redis, Floci)
+        run: npm run test:integration
+      - name: E2E (HTTP e WebSocket)
+        run: npm run test:e2e
+
+  backend-build:
+    name: Backend · build
+    needs: [backend-test-unit, backend-test-integration]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: backend/node_modules
+          key: backend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('backend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Bundles de produção (tsup)
+        run: npm run build
+      - name: Publicar o build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-dist
+          path: backend/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  # ─────────────────────────────── Frontend ──────────────────────────────
+
+  frontend-install:
+    name: Frontend · instalar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Cache do node_modules
+        id: modules
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: frontend/node_modules
+          key: frontend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('frontend/package-lock.json') }}
+      - name: Instalar dependências
+        if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Auditoria de vulnerabilidades
+        run: npm audit --audit-level=high
+
+  frontend-lint:
+    name: Frontend · lint
+    needs: frontend-install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: frontend/node_modules
+          key: frontend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('frontend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Tipos do painel (tsc strict)
+        run: npm run typecheck
+      - name: Tipos dos testes de ponta a ponta
+        run: npm run typecheck:e2e
+      - name: Lint (oxlint com regras de tipo, React e acessibilidade)
+        run: npm run lint
+
+  frontend-test:
+    name: Frontend · testes (Vitest)
+    needs: frontend-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: frontend/node_modules
+          key: frontend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('frontend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Unitários
+        run: npm run test:unit
+      - name: Integração (telas inteiras com MSW)
+        run: npm run test:integration
+      - name: Arquitetura
+        run: npm run test:architecture
+
+  frontend-e2e:
+    name: Frontend · testes de ponta a ponta (Playwright)
+    needs: frontend-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: frontend/node_modules
+          key: frontend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('frontend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Versão do Playwright
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache dos navegadores do Playwright
+        id: browsers
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Instalar o Chromium e as dependências do sistema
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Dependências do sistema do Chromium
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      # O global-setup sobe a stack isolada (projeto fastmeals-e2e) pelo docker compose da raiz.
+      - name: Ponta a ponta contra a stack completa
+        run: npm run test:e2e
+      - name: Publicar o relatório do Playwright
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
+
+  frontend-build:
+    name: Frontend · build
+    needs: [frontend-test, frontend-e2e]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: frontend/node_modules
+          key: frontend-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('frontend/package-lock.json') }}
+          fail-on-cache-miss: true
+      - name: Build de produção (Vite)
+        run: npm run build
+      - name: Publicar o build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 7
