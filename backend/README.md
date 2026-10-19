@@ -217,9 +217,9 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 82 |
-| `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 19 |
-| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 9 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 84 |
+| `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 20 |
+| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 10 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
 
 ### Testes de arquitetura
@@ -308,6 +308,14 @@ Resposta da otimização:
   "executionTimeMs": 0.42
 }
 ```
+
+**Onde o cálculo roda.** O Húngaro é O(k²·K): milissegundos para dezenas de pedidos, mas ~2 s com 1000 × 1000. Para a API não travar nesse tempo (login, listagens e o próprio health check), problemas com mais de `OPTIMIZER_INLINE_MAX_CELLS` células (pedidos × entregadores, padrão 10.000) vão para um **pool de `worker_threads`** (núcleos − 1, no máximo 2). Os pequenos continuam na thread da requisição, onde enviar para um worker custaria mais que o cálculo.
+
+- **Fila limitada:** com os workers ocupados e `OPTIMIZER_MAX_QUEUED` esperando, a resposta é `503 OPTIMIZER_BUSY` na hora.
+- **Tempo limite:** um cálculo acima de `OPTIMIZER_TIMEOUT_MS` (padrão 10 s) é interrompido (`503 OPTIMIZER_TIMEOUT`), e o worker é recriado.
+- **Pedidos simultâneos iguais** (vários gestores clicando em "Sugerir" com o mesmo quadro) dividem um só cálculo.
+- **Boot:** a API só começa a atender depois que os workers carregaram. Se o worker não subir (build sem `dist/dispatch-planner.worker.js`), a API falha no boot em vez de girar recriando workers.
+- `executionTimeMs` mede o algoritmo em si, sem fila nem transporte entre threads.
 
 ### Entregadores
 
@@ -481,6 +489,10 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `TRUST_PROXY` | API | vazio | Proxies confiáveis (IPs/CIDRs ou nº de saltos) para o IP real no rate limit |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | API | `100` / `60000` | Rate limit por IP |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_MS` | API | `5` / `60000` | Tentativas de login por email + IP |
+| `OPTIMIZER_WORKERS` | API | núcleos − 1 (máx. 2) | Workers do otimizador de atribuição |
+| `OPTIMIZER_MAX_QUEUED` | API | `4` | Sugestões esperando um worker; além disso, `503 OPTIMIZER_BUSY` |
+| `OPTIMIZER_TIMEOUT_MS` | API | `10000` | Tempo máximo de uma sugestão; depois, `503 OPTIMIZER_TIMEOUT` |
+| `OPTIMIZER_INLINE_MAX_CELLS` | API | `10000` | Até quantas células (pedidos × entregadores) calcular na thread da API |
 | `BCRYPT_COST` | API, seed | `10` | Custo do bcrypt (10–15) |
 | `OUTBOX_POLL_INTERVAL_MS` / `OUTBOX_BATCH_SIZE` | relay | `500` / `100` | Latência máxima e tamanho do lote |
 | `OUTBOX_MAX_ATTEMPTS` | relay | `5` | Falhas permanentes de uma mensagem até a fila morta |
@@ -511,7 +523,7 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `npm run messaging:setup` | Cria tópico, filas, fila morta e assinatura (Floci ou AWS) |
 | `npm run outbox:dead-letters` / `npm run outbox:redrive` | Lista / devolve à fila as mensagens mortas do outbox (ver [Duas filas mortas](#duas-filas-mortas)) |
 | `npm run events:dead-letters` / `npm run events:redrive` | Lista / devolve à fila do tempo real as mensagens mortas do SQS |
-| `npm run build` | Bundles de produção em `dist/` (`server`, `outbox-relay`, `outbox-redrive`, `realtime-gateway`, `messaging-setup`, `events-dead-letters`, `migrate`, `seed`) |
+| `npm run build` | Bundles de produção em `dist/` (`server`, `dispatch-planner.worker`, `outbox-relay`, `outbox-redrive`, `realtime-gateway`, `messaging-setup`, `events-dead-letters`, `migrate`, `seed`) |
 | `npm start`, `start:relay`, `start:realtime`, `start:migrate`, `start:seed` | Rodam os bundles de `dist/` |
 | `npm test`, `test:unit`, `test:architecture`, `test:integration`, `test:e2e`, `test:watch` | Testes |
 | `npm run typecheck` | Verificação de tipos |

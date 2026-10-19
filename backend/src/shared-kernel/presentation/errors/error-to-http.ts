@@ -7,6 +7,7 @@ import {
   DomainError,
   InvalidValueError,
   NotFoundError,
+  TemporarilyUnavailableError,
   TooManyRequestsError,
   type DomainErrorDetail,
 } from '../../domain';
@@ -60,5 +61,6 @@ function statusOf(error: DomainError): number {
   if (error instanceof ConflictError) return 409;
   if (error instanceof BusinessRuleViolationError) return 422;
   if (error instanceof TooManyRequestsError) return 429;
+  if (error instanceof TemporarilyUnavailableError) return 503;
   return 500;
 }

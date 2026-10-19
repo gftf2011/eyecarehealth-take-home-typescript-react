@@ -1,13 +1,13 @@
 import type { Kysely } from 'kysely';
 
-import type { Clock, EventMediator, Stopwatch } from '../../shared-kernel/application';
+import type { Clock, EventMediator } from '../../shared-kernel/application';
 import type { Route } from '../../shared-kernel/presentation';
 import { ListDeliveryPersonsUseCase } from '../application/usecases/list-delivery-persons/list-delivery-persons.usecase';
 import { RegisterDeliveryPersonUseCase } from '../application/usecases/register-delivery-person/register-delivery-person.usecase';
 import { RemoveDeliveryPersonUseCase } from '../application/usecases/remove-delivery-person/remove-delivery-person.usecase';
 import { SuggestAssignmentUseCase } from '../application/usecases/suggest-assignment/suggest-assignment.usecase';
+import type { DispatchPlanner } from '../application/ports/dispatch-planner';
 import { UpdateDeliveryPersonUseCase } from '../application/usecases/update-delivery-person/update-delivery-person.usecase';
-import { DispatchOptimizer } from '../domain';
 import type { DeliveryDatabase } from '../infra/persistence/schema/delivery-database';
 import { KyselyDeliveryUnitOfWork } from '../infra/persistence/unit-of-work/kysely-delivery-unit-of-work';
 import { ListDeliveryPersonsController } from '../presentation/controllers/list-delivery-persons.controller';
@@ -26,12 +26,12 @@ export type DeliveryModuleDependencies = {
   readonly clock: Clock;
   /** Recebe os eventos de domínio do Delivery e os entrega aos handlers inscritos. */
   readonly events: EventMediator;
-  /** Mede o tempo do algoritmo de otimização (`executionTimeMs`). */
-  readonly stopwatch: Stopwatch;
+  /** Onde roda o otimizador de atribuição (ver `makeDispatchPlanner`). */
+  readonly planner: DispatchPlanner;
 };
 
 /** Composition root do Delivery: liga infra → casos de uso → controllers → rotas. */
-export function makeDeliveryRoutes({ db, clock, events, stopwatch }: DeliveryModuleDependencies): Route[] {
+export function makeDeliveryRoutes({ db, clock, events, planner }: DeliveryModuleDependencies): Route[] {
   const unitOfWork = new KyselyDeliveryUnitOfWork(db, events);
 
   return [
@@ -47,7 +47,7 @@ export function makeDeliveryRoutes({ db, clock, events, stopwatch }: DeliveryMod
     ),
     suggestAssignmentRoute(
       new SuggestAssignmentController(
-        new SuggestAssignmentUseCase(unitOfWork, new DispatchOptimizer(), stopwatch),
+        new SuggestAssignmentUseCase(unitOfWork, planner),
       ),
     ),
   ];

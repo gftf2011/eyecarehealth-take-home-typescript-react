@@ -1,10 +1,11 @@
-import type { Stopwatch, UseCase } from '../../../../shared-kernel/application';
-import type { DispatchCandidate, DispatchOptimizer } from '../../../domain';
+import type { UseCase } from '../../../../shared-kernel/application';
+import type { DispatchCandidate } from '../../../domain';
 import {
   toAssignmentSuggestionDto,
   type AssignmentSuggestionDto,
 } from '../../dtos/assignment-suggestion.dto';
 import type { DeliveryUnitOfWork } from '../../ports/delivery-unit-of-work';
+import type { DispatchPlanner } from '../../ports/dispatch-planner';
 
 /**
  * Sugere a atribuição pedido → entregador que minimiza a distância total.
@@ -14,13 +15,13 @@ import type { DeliveryUnitOfWork } from '../../ports/delivery-unit-of-work';
  * - Candidatos: entregadores ativos, não removidos e sem pedido `delivering`.
  *
  * É só uma proposta: não altera nada nem trava linhas. Aceitar uma atribuição
- * é outro caso de uso, que valida tudo de novo com lock.
+ * é outro caso de uso, que valida tudo de novo com lock. O cálculo roda fora
+ * da transação (que só lê) e, se for grande, fora da thread da API.
  */
 export class SuggestAssignmentUseCase implements UseCase<void, AssignmentSuggestionDto> {
   constructor(
     private readonly unitOfWork: DeliveryUnitOfWork,
-    private readonly optimizer: DispatchOptimizer,
-    private readonly stopwatch: Stopwatch,
+    private readonly planner: DispatchPlanner,
   ) {}
 
   async execute(): Promise<AssignmentSuggestionDto> {
@@ -44,9 +45,7 @@ export class SuggestAssignmentUseCase implements UseCase<void, AssignmentSuggest
       return candidate === null ? [] : [candidate];
     });
 
-    const elapsed = this.stopwatch.start();
-    const plan = this.optimizer.plan(orders, candidates);
-    const executionTimeMs = elapsed();
+    const { plan, executionTimeMs } = await this.planner.plan(orders, candidates);
 
     return toAssignmentSuggestionDto(plan, orders, deliveryPersons, executionTimeMs);
   }

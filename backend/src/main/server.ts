@@ -1,6 +1,7 @@
 import { makeCatalogRoutes } from '../catalog/main/catalog.module';
 import type { CatalogDatabase } from '../catalog/infra/persistence/schema/catalog-database';
 import { makeDeliveryRoutes } from '../delivery/main/delivery.module';
+import { makeDispatchPlanner } from '../delivery/main/dispatch-planner.factory';
 import type { DeliveryDatabase } from '../delivery/infra/persistence/schema/delivery-database';
 import { makeIdentityModule } from '../identity/main/identity.module';
 import type { IdentityDatabase } from '../identity/infra/persistence/schema/identity-database';
@@ -10,7 +11,6 @@ import { makeReportingRoutes } from '../reporting/main/reporting.module';
 import type { ReportingDatabase } from '../reporting/infra/persistence/schema/reporting-database';
 import { RedisConnection } from '../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisRateLimitCounter } from '../shared-kernel/infra/cache/redis/redis-rate-limit.counter';
-import { PerformanceStopwatch } from '../shared-kernel/infra/clock/performance-stopwatch';
 import { SystemClock } from '../shared-kernel/infra/clock/system-clock';
 import { createKysely, createPostgresPool } from '../shared-kernel/infra/database/postgres';
 import { InMemoryEventMediator } from '../shared-kernel/infra/events/in-memory-event-mediator';
@@ -28,6 +28,14 @@ async function main(): Promise<void> {
   // O logger do Fastify só existe depois do app: até lá, erros do Redis vão ao console.
   let logRedisError = (error: Error): void => console.warn('Redis indisponível', error.message);
   const redis = RedisConnection.open(env.REDIS_URL, { onError: (error) => logRedisError(error) });
+
+  // Otimizador fora da thread da API para problemas grandes (ver ADR-24).
+  const dispatch = makeDispatchPlanner({
+    ...(env.OPTIMIZER_WORKERS !== undefined && { workers: env.OPTIMIZER_WORKERS }),
+    maxQueued: env.OPTIMIZER_MAX_QUEUED,
+    timeoutMs: env.OPTIMIZER_TIMEOUT_MS,
+    inlineMaxCells: env.OPTIMIZER_INLINE_MAX_CELLS,
+  });
 
   const catalogDb = createKysely<CatalogDatabase>(pool);
   const identityDb = createKysely<IdentityDatabase>(pool);
@@ -55,7 +63,7 @@ async function main(): Promise<void> {
       ...identity.routes,
       ...makeCatalogRoutes({ db: catalogDb, clock, events }),
       ...makeOrderingRoutes({ db: orderingDb, clock, events }),
-      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, stopwatch: new PerformanceStopwatch() }),
+      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, planner: dispatch.planner }),
       ...makeReportingRoutes({ db: reportingDb }),
     ],
     authenticator: identity.authenticator,
@@ -84,11 +92,13 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'Encerrando');
     await app.close();
-    await Promise.all([pool.end(), redis.close()]);
+    await Promise.all([pool.end(), redis.close(), dispatch.close()]);
   };
   process.once('SIGINT', () => void shutdown('SIGINT'));
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
+  // Workers carregados antes de aceitar requisições: um build sem o worker falha aqui.
+  await dispatch.ready();
   await app.listen({ host: env.HOST, port: env.PORT });
 }
 

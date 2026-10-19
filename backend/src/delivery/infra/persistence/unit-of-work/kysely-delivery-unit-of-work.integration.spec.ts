@@ -38,6 +38,7 @@ import {
 import { buildDeliveryPerson } from '../../../domain/delivery-person/testing/delivery-person.fixture';
 import type { DeliveryDatabase } from '../schema/delivery-database';
 import { KyselyDeliveryUnitOfWork } from './kysely-delivery-unit-of-work';
+import { InlineDispatchPlanner } from '../../dispatch/inline-dispatch-planner';
 
 const db = connectToTestDatabase<DeliveryDatabase>();
 const raw = db as unknown as Kysely<unknown>;
@@ -213,7 +214,7 @@ describe('KyselyDeliveryUnitOfWork', () => {
                -23.5 - (n % 13) / 100.0, -46.6 - (n % 11) / 100.0, 'ready', 45.40
         FROM generate_series(1, 50) AS n
       `.execute(db);
-      const suggest = new SuggestAssignmentUseCase(unitOfWork, new DispatchOptimizer(), new PerformanceStopwatch());
+      const suggest = new SuggestAssignmentUseCase(unitOfWork, new InlineDispatchPlanner(new DispatchOptimizer(), new PerformanceStopwatch()));
 
       const startedAt = performance.now();
       const suggestion = await suggest.execute();

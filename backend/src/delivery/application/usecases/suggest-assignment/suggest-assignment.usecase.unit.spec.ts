@@ -17,6 +17,7 @@ import { bruteForceMinCost, seededRandom } from '../../../domain/dispatch/testin
 import { orderAt, uuid } from '../../../domain/dispatch/testing/dispatch.fixture';
 import { InMemoryDeliveryUnitOfWork } from '../../testing/in-memory-delivery-unit-of-work';
 import { SuggestAssignmentUseCase } from './suggest-assignment.usecase';
+import { InlineDispatchPlanner } from '../../../infra/dispatch/inline-dispatch-planner';
 
 /** Km por grau de longitude no equador. */
 const KM_PER_DEGREE = (Math.PI * EARTH_RADIUS_KM) / 180;
@@ -37,7 +38,7 @@ describe('SuggestAssignmentUseCase', () => {
 
   beforeEach(() => {
     unitOfWork = new InMemoryDeliveryUnitOfWork();
-    suggest = new SuggestAssignmentUseCase(unitOfWork, new DispatchOptimizer(), new FixedStopwatch(12.345));
+    suggest = new SuggestAssignmentUseCase(unitOfWork, new InlineDispatchPlanner(new DispatchOptimizer(), new FixedStopwatch(12.345)));
   });
 
   it('caso com solução: minimiza a distância total (onde o guloso erraria) no formato da spec', async () => {
@@ -173,7 +174,7 @@ describe('SuggestAssignmentUseCase', () => {
       const orders = Array.from({ length: 5 }, (_, i) => orderAt(i + 11, random() * 2, random() * 2));
       unitOfWork.givenDeliveryPersons(...people);
       unitOfWork.givenReadyOrders(...orders);
-      suggest = new SuggestAssignmentUseCase(unitOfWork, new DispatchOptimizer(), new FixedStopwatch(0));
+      suggest = new SuggestAssignmentUseCase(unitOfWork, new InlineDispatchPlanner(new DispatchOptimizer(), new FixedStopwatch(0)));
 
       const suggestion = await suggest.execute();
 
@@ -208,7 +209,7 @@ describe('SuggestAssignmentUseCase', () => {
         }),
       ),
     );
-    suggest = new SuggestAssignmentUseCase(unitOfWork, new DispatchOptimizer(), new PerformanceStopwatch());
+    suggest = new SuggestAssignmentUseCase(unitOfWork, new InlineDispatchPlanner(new DispatchOptimizer(), new PerformanceStopwatch()));
 
     const startedAt = performance.now();
     const suggestion = await suggest.execute();

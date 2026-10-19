@@ -3,7 +3,9 @@ import { sql, type Kysely } from 'kysely';
 
 import { makeCatalogRoutes } from '../../../catalog/main/catalog.module';
 import type { CatalogDatabase } from '../../../catalog/infra/persistence/schema/catalog-database';
+import type { DispatchPlanner } from '../../../delivery/application/ports/dispatch-planner';
 import { makeDeliveryRoutes } from '../../../delivery/main/delivery.module';
+import { makeInlineDispatchPlanner } from '../../../delivery/main/dispatch-planner.factory';
 import type { DeliveryDatabase } from '../../../delivery/infra/persistence/schema/delivery-database';
 import { DEFAULT_AUTH_POLICY, type AuthPolicy } from '../../../identity/application/config/auth-policy';
 import { Email, Role, User, UserId, type RoleValue } from '../../../identity/domain';
@@ -22,7 +24,6 @@ import {
 } from '../../../shared-kernel/infra/cache/redis/testing/test-redis';
 import { connectToTestDatabase } from '../../../shared-kernel/infra/database/testing/test-database';
 import { InMemoryEventMediator } from '../../../shared-kernel/infra/events/in-memory-event-mediator';
-import { PerformanceStopwatch } from '../../../shared-kernel/infra/clock/performance-stopwatch';
 import type { Route } from '../../../shared-kernel/presentation';
 import { StaticAuthenticator } from '../../../shared-kernel/presentation/testing/static-authenticator';
 import { buildApp, type AppOptions, type HealthChecks, type RateLimitOptions } from '../app';
@@ -58,6 +59,8 @@ export type TestAppOverrides = Partial<Pick<AppOptions, 'trustProxy'>> & {
   readonly authPolicy?: AuthPolicy;
   readonly extraRoutes?: (clock: Clock) => Route[];
   readonly extraHealthChecks?: HealthChecks;
+  /** Otimizador de atribuição; padrão: na thread da requisição. */
+  readonly dispatchPlanner?: DispatchPlanner;
 };
 
 /**
@@ -90,7 +93,7 @@ export async function buildTestApp(overrides: TestAppOverrides = {}): Promise<Te
       ...identity.routes,
       ...makeCatalogRoutes({ db, clock, events }),
       ...makeOrderingRoutes({ db: orderingDb, clock, events }),
-      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, stopwatch: new PerformanceStopwatch() }),
+      ...makeDeliveryRoutes({ db: deliveryDb, clock, events, planner: overrides.dispatchPlanner ?? makeInlineDispatchPlanner() }),
       ...makeReportingRoutes({ db: reportingDb }),
       ...(overrides.extraRoutes?.(clock) ?? []),
     ],

@@ -64,6 +64,14 @@ const envSchema = z
     BCRYPT_COST: z.coerce.number().int().min(10).max(15).default(10),
     LOGIN_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     LOGIN_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+    /** Workers do otimizador de atribuição (padrão: núcleos − 1, no máximo 2). */
+    OPTIMIZER_WORKERS: z.coerce.number().int().min(1).max(32).optional(),
+    /** Sugestões esperando um worker livre; além disso, 503 OPTIMIZER_BUSY. */
+    OPTIMIZER_MAX_QUEUED: z.coerce.number().int().min(0).max(1_000).default(4),
+    /** Tempo máximo de uma sugestão; depois disso, 503 OPTIMIZER_TIMEOUT. */
+    OPTIMIZER_TIMEOUT_MS: z.coerce.number().int().min(100).max(120_000).default(10_000),
+    /** Até quantas células (pedidos × entregadores) calcular na thread da API. */
+    OPTIMIZER_INLINE_MAX_CELLS: z.coerce.number().int().min(0).default(10_000),
   })
   .refine((env) => env.JWT_SECRET !== env.JWT_REFRESH_SECRET, {
     path: ['JWT_REFRESH_SECRET'],

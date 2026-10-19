@@ -44,3 +44,9 @@ export abstract class AuthorizationError extends DomainError {}
 
 /** Limite de tentativas/requisições excedido; o cliente deve aguardar. */
 export abstract class TooManyRequestsError extends DomainError {}
+
+/**
+ * Um recurso de que a operação depende está sobrecarregado ou não respondeu
+ * a tempo; a mesma requisição pode dar certo daqui a pouco.
+ */
+export abstract class TemporarilyUnavailableError extends DomainError {}

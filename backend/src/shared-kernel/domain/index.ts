@@ -16,6 +16,7 @@ export {
   DomainError,
   InvalidValueError,
   NotFoundError,
+  TemporarilyUnavailableError,
   TooManyRequestsError,
   type DomainErrorDetail,
   type DomainErrorDetailValue,

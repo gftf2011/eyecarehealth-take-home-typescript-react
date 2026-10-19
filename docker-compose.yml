@@ -144,6 +144,11 @@ services:
       # valor forjado pelo cliente fica à esquerda e é ignorado). A porta da
       # API só abre em 127.0.0.1, então ninguém na rede fala direto com ela.
       TRUST_PROXY: ${TRUST_PROXY:-1}
+      # Otimizador de atribuição: problemas grandes rodam num pool de workers
+      # (a API continua respondendo durante o cálculo); ver backend/README.md.
+      OPTIMIZER_MAX_QUEUED: ${OPTIMIZER_MAX_QUEUED:-4}
+      OPTIMIZER_TIMEOUT_MS: ${OPTIMIZER_TIMEOUT_MS:-10000}
+      OPTIMIZER_INLINE_MAX_CELLS: ${OPTIMIZER_INLINE_MAX_CELLS:-10000}
     ports:
       - "127.0.0.1:${API_PORT:-3001}:3001"
     depends_on:

@@ -11,6 +11,8 @@ export default defineConfig({
     'outbox-redrive': 'src/main/outbox-redrive.ts',
     'messaging-setup': 'src/main/messaging-setup.ts',
     'events-dead-letters': 'src/main/events-dead-letters.ts',
+    // Worker do otimizador: carregado pelo server.js a partir do mesmo diretório.
+    'dispatch-planner.worker': 'src/delivery/infra/dispatch/dispatch-planner.worker.ts',
     'realtime-gateway': 'src/main/realtime-gateway.ts',
     migrate: 'src/main/database/migrate.ts',
     // Em contêiner, o arquivo vem de SEED_FILE (o caminho padrão é relativo a src/).
