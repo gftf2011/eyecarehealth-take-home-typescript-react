@@ -29,6 +29,7 @@ Pronto: API em http://localhost:3001/api (documentação Swagger em http://local
 - [Arquitetura](#arquitetura)
 - [Como rodar](#como-rodar)
 - [Como testar](#como-testar)
+- [Fluxos](#fluxos)
 - [Recursos da API](#recursos-da-api)
 - [Documentação da API (Swagger)](#documentação-da-api-swagger)
 - [Autenticação e autorização](#autenticação-e-autorização)
@@ -267,6 +268,136 @@ As regras valem para o código de produção: testes e pastas `testing/` podem a
 - **Listagens < 200 ms com 10.000 registros**, com `EXPLAIN` confirmando o índice usado: `kysely-product.repository.performance.integration.spec.ts`, `kysely-order.repository.performance.integration.spec.ts`, `kysely-report-queries.performance.integration.spec.ts`.
 - **Otimização < 2 s com 50 pedidos e 30 entregadores**, em memória e no PostgreSQL: `suggest-assignment.usecase.unit.spec.ts`, `kysely-delivery-unit-of-work.integration.spec.ts`.
 - **Concorrência real** (transações em paralelo): sem lost update na mudança de status, nunca duas entregas para o mesmo entregador, remoção de entregador esperando o despacho, relays em paralelo sem duplicar mensagens.
+
+---
+
+## Fluxos
+
+Os diagramas abaixo descrevem o que a API aceita hoje. Cada célula da tabela de estados é verificada pelo teste [`order-state-matrix.e2e.spec.ts`](src/ordering/presentation/order-state-matrix.e2e.spec.ts) (10 estados × 13 ações).
+
+### Ciclo de vida do pedido
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> pending: POST /orders
+    pending --> preparing
+    preparing --> ready
+    pending --> cancelled
+    preparing --> cancelled
+    ready --> cancelled
+
+    state ready {
+        direction LR
+        sem_entregador --> com_entregador: assign
+        com_entregador --> sem_entregador: entregador desativado ou removido
+    }
+
+    ready --> delivering: dispatch, ou status com entregador
+    delivering --> delivered: painel ou entregador confirma
+    delivering --> ready: return-to-assignment (com motivo)
+
+    state delivering {
+        direction LR
+        em_rota --> problema_aberto: entregador relata problema
+        problema_aberto --> em_rota: retry (até 2 vezes, nunca se recusou)
+    }
+
+    problema_aberto --> ready: return-to-assignment (nunca se recusou)
+    problema_aberto --> cancelled: delivery-issue/cancel
+    delivered --> [*]
+    cancelled --> [*]
+```
+
+- `pending`, `preparing` e `ready` aceitam atribuir um entregador (`PATCH /assign`); só `ready` aceita despachar (`POST /dispatch`, atribui e sai numa transação).
+- Com um **problema aberto**, a entrega fica parada: nem o painel nem o entregador concluem (`422 DELIVERY_ISSUE_OPEN`), e o entregador não relata outro problema (`422 DELIVERY_ISSUE_ALREADY_OPEN`).
+- `delivered` e `cancelled` são finais.
+
+### Decisões do gestor sobre um problema na entrega
+
+| Motivo relatado | Tentar de novo | Devolver para a atribuição | Cancelar |
+|---|---|---|---|
+| `customer_absent` (cliente ausente) | sim, até 2 vezes | sim | sim |
+| `address_not_found` (endereço não encontrado) | sim, até 2 vezes | sim | sim |
+| `other` (outro, com observação) | sim, até 2 vezes | sim | sim |
+| `refused` (cliente recusou) | não | não | sim |
+
+O detalhe do pedido traz `deliveryIssueDecisions` com o que vale agora; qualquer outra decisão → `422 DECISION_NOT_ALLOWED`.
+
+### Quem pode o quê em cada estado
+
+`admin` faz as ações do painel; `viewer` só lê (toda escrita → `403`); `courier` só age sobre a **própria** entrega (pedido de outro entregador → `404`). Um traço é recusado com `422`, salvo onde indicado.
+
+| Estado | Ações do `admin` | Ações do `courier` (dono) |
+|---|---|---|
+| `pending` | `preparing`, `cancelled`, atribuir | — (`404`: ainda não é entrega dele) |
+| `preparing` | `ready`, `cancelled`, atribuir | — (`404`) |
+| `ready` sem entregador | `cancelled`, atribuir, despachar | — (`404`) |
+| `ready` com entregador | `delivering`, `cancelled`, trocar o entregador, despachar | — |
+| `delivering` | `delivered`, devolver | confirmar, relatar problema |
+| problema aberto (ausente, endereço, outro) | tentar de novo, devolver, cancelar | — |
+| problema aberto depois de 2 novas tentativas | devolver, cancelar | — |
+| problema aberto (cliente recusou) | cancelar | — |
+| `delivered` | — | — |
+| `cancelled` | — | — (`404`) |
+
+### Entrega que falhou
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor E as Entregador
+    participant API
+    participant DB as Postgres
+    participant R as outbox-relay
+    participant G as realtime-gateway
+    actor P as Gestor (painel)
+
+    E->>API: POST /me/deliveries/:id/issue { reason, note? }
+    API->>DB: problema aberto + outbox (mesma transação)
+    API-->>E: 200 (a entrega fica parada, sem botões)
+    R->>G: order.delivery-issue-reported (SNS → SQS)
+    G-->>P: WebSocket: selo "Problema na entrega"
+    P->>API: GET /orders/:id
+    API-->>P: deliveryIssueDecisions (pelo motivo e pelas tentativas)
+    alt tentar de novo
+        P->>API: POST /orders/:id/delivery-issue/retry
+        API-->>E: (tempo real) a entrega volta a ter botões
+    else devolver para a atribuição
+        P->>API: POST /orders/:id/return-to-assignment { reason }
+        Note over API: delivering → ready, sem entregador
+    else cancelar
+        P->>API: POST /orders/:id/delivery-issue/cancel
+        Note over API: delivering → cancelled, motivo no histórico
+    end
+```
+
+### Entregador desativado ou removido
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor P as Gestor (painel)
+    participant D as API (Delivery)
+    participant R as outbox-relay
+    participant Q as SNS → fastmeals-ordering.fifo
+    participant C as event-consumers (Ordering)
+    participant G as realtime-gateway
+
+    P->>D: PUT /delivery-persons/:id { isActive: false } ou DELETE
+    D->>D: entregador + outbox (mesma transação)
+    R->>Q: delivery-person.activation-changed / removed
+    Q->>C: mensagem FIFO (DLQ depois de 5 falhas)
+    C->>C: ReleaseDeliveryPersonOrders confere o estado atual
+    alt ainda inativo ou removido
+        C->>C: pending/preparing/ready dele perdem o entregador
+        Note over C: a entrega delivering segue com ele até delivered
+        C->>G: order.delivery-person-unassigned (pelo outbox)
+        G-->>P: quadro de atribuição atualiza sozinho
+    else reativado nesse meio-tempo
+        Note over C: nada muda
+    end
+```
 
 ---
 

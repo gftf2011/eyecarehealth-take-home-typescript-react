@@ -54,6 +54,71 @@ No [`docker-compose.yml`](../docker-compose.yml) da raiz (único para o projeto 
 
 ---
 
+## Fluxos por perfil
+
+O menu e as telas seguem a mesma matriz de perfis da API (quem autoriza de fato é a API). As regras de estado de cada pedido estão em [Fluxos do backend](../backend/README.md#fluxos).
+
+| Perfil (usuário do seed) | Tela inicial | Telas no menu | O que pode fazer |
+|---|---|---|---|
+| `admin` (`admin@fastmeals.com`) | `/pedidos` | Pedidos, Produtos, Atribuição, Entregadores, Relatórios | Tudo no painel: criar e mudar pedidos, decidir problemas na entrega, gerir cardápio e frota |
+| `viewer` (`viewer@fastmeals.com`) | `/pedidos` | Pedidos, Produtos, Relatórios | Só ler: o detalhe do pedido não mostra botões, e as telas de produtos não mostram criar, editar nem excluir |
+| `courier` (`entregador@fastmeals.com`) | `/minhas-entregas` | Minhas entregas | Confirmar a própria entrega, relatar que não conseguiu entregar, enviar a posição do celular |
+
+A tela inicial é o primeiro item do menu que o perfil pode abrir.
+
+### Entrar e sair
+
+```mermaid
+flowchart TD
+    A[Abre uma página] --> B{Tem sessão?}
+    B -- sim --> C{O perfil pode abrir a página?}
+    C -- sim --> D[Mostra a página]
+    C -- não --> E["Acesso negado, com link para a tela inicial"]
+    B -- não --> F{Por que não tem?}
+    F -- "sessão expirou" --> G["/login com aviso; lembra a página"]
+    F -- "clicou em Sair" --> H["/login sem lembrar a página"]
+    F -- "nunca entrou" --> G
+    G --> I[Entra]
+    H --> I
+    I --> J{O perfil pode abrir a página lembrada?}
+    J -- sim --> D
+    J -- não --> K[Tela inicial do perfil]
+```
+
+Assim, quando o gestor sai e o entregador entra no mesmo celular, ele cai em `/minhas-entregas`, nunca em "Acesso negado" na tela de pedidos.
+
+### Gestor: do pedido à entrega
+
+```mermaid
+flowchart LR
+    P["Pedidos: pending → preparing → ready"] --> A["Atribuição: sugestão do otimizador"]
+    A -- aceitar --> D["delivering, com o entregador"]
+    D -- entregador confirma --> OK[delivered]
+    D -- "entregador relata problema" --> X["Selo 'Problema na entrega'"]
+    X -- "tentar de novo" --> D
+    X -- devolver --> A
+    X -- cancelar --> C[cancelled]
+    D -- "devolver (com motivo)" --> A
+```
+
+O detalhe do pedido mostra só os botões que a API aceita no estado atual (a matriz é verificada em [`order-buttons-by-state.unit.spec.tsx`](src/ordering/presentation/order-buttons-by-state.unit.spec.tsx)).
+
+### Entregador: minhas entregas
+
+```mermaid
+flowchart TD
+    S["/minhas-entregas"] --> Q{Tem entrega em andamento?}
+    Q -- não --> N["Próximas entregas (atribuídas, ainda não saíram)"]
+    Q -- sim --> E["Cliente, ligar, abrir no mapa, itens"]
+    E -- "Confirmar entrega" --> OK[Entregue]
+    E -- "Não consegui entregar" --> R["Motivo e observação"]
+    R --> W["Parada, sem botões: aguardando o gestor"]
+    W -- "gestor: tentar de novo" --> E
+    W -- "gestor: devolver ou cancelar" --> Q
+```
+
+A tela atualiza sozinha pelo tempo real quando o gestor despacha, troca, devolve ou decide um pedido do entregador.
+
 ## Arquitetura
 
 ### Contextos e camadas
