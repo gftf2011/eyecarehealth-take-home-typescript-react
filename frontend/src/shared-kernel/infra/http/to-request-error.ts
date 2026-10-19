@@ -13,15 +13,25 @@ import {
 } from '../../application';
 import type { DomainError } from '../../domain';
 
-/** Formato padrão de erro da API: `{ error: { code, message, details? } }`. */
+const fieldDetailSchema = z.object({ field: z.string(), message: z.string() });
+
+/**
+ * Formato padrão de erro da API: `{ error: { code, message, details? } }`.
+ * Os detalhes podem ser de outros tipos (ex.: `{ deliveryPersonId }` num
+ * `409`): só os por campo são usados, os outros não invalidam o erro.
+ */
 const errorBodySchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
     details: z
-      .array(z.object({ field: z.string(), message: z.string() }))
+      .array(z.unknown())
       .optional()
-      .default([]),
+      .default([])
+      .transform((details) => details.flatMap((detail) => {
+        const parsed = fieldDetailSchema.safeParse(detail);
+        return parsed.success ? [parsed.data] : [];
+      })),
   }),
 });
 

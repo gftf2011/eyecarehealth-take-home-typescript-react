@@ -137,6 +137,18 @@ describe('FetchHttpClient', () => {
     });
   });
 
+  it('detalhes que não são por campo não escondem o erro da API (ex.: 409 com o id do recurso)', async () => {
+    const { fetch } = fakeFetch(
+      apiError(409, 'DELIVERY_PERSON_IN_USE', [{ deliveryPersonId: 'c88e7771-d143-4efc-a71b-55fe21c5b80d' }]),
+    );
+    const client = new FetchHttpClient({ baseUrl: BASE_URL, fetch });
+
+    const error = await client.request({ path: '/x' }, productSchema).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(RequestConflictError);
+    expect(error).toMatchObject({ code: 'DELIVERY_PERSON_IN_USE' });
+  });
+
   it('429 informa quando tentar de novo', async () => {
     const { fetch } = fakeFetch(
       json(429, { error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Calma' } }, { 'Retry-After': '42' }),

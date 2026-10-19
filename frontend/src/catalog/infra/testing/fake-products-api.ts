@@ -75,7 +75,10 @@ export class FakeProductsApi {
         const id = String(params.id);
         this.writes.push({ method: 'DELETE', id, body: null });
         if (this.inUse.has(id)) {
-          return apiError(409, 'PRODUCT_IN_USE', 'O produto está em pedidos em andamento e não pode ser removido.');
+          // Mesmo formato do backend: o detalhe não é por campo.
+          return apiError(409, 'PRODUCT_IN_USE', 'O produto está em pedidos em andamento e não pode ser removido.', [
+            { productId: id },
+          ]);
         }
         this.products = this.products.filter((product) => product.id !== id);
         return new HttpResponse(null, { status: 204 });
