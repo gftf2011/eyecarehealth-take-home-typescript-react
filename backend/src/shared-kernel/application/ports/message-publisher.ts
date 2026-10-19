@@ -11,6 +11,11 @@ export type PublishedMessage = {
   readonly aggregateId: string;
   readonly payload: JsonObject;
   readonly occurredAt: Date;
+  /**
+   * Cabeçalhos de propagação de trace (W3C) da operação que gerou a mensagem;
+   * o broker os leva adiante para o consumidor continuar o mesmo trace.
+   */
+  readonly traceContext?: Readonly<Record<string, string>> | null;
 };
 
 /**

@@ -1,0 +1,10 @@
+# Provisiona o dashboard do FastMeals no Grafana do otel-lgtm.
+apiVersion: 1
+
+providers:
+  - name: FastMeals
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /otel-lgtm/fastmeals-dashboard.json
+      foldersFromFilesStructure: false

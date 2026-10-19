@@ -6,6 +6,8 @@ import { defineConfig } from 'tsup';
  */
 export default defineConfig({
   entry: {
+    // Pré-carregado com `node --import` antes dos processos (OpenTelemetry).
+    instrumentation: 'src/main/telemetry/instrumentation.ts',
     server: 'src/main/server.ts',
     'outbox-relay': 'src/main/outbox-relay.ts',
     'outbox-redrive': 'src/main/outbox-redrive.ts',

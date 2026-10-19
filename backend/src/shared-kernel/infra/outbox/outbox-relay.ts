@@ -1,7 +1,9 @@
-import { sql, type Kysely } from 'kysely';
+import { SpanKind, SpanStatusCode, trace, type Link } from '@opentelemetry/api';
+import { sql, type Kysely, type Transaction } from 'kysely';
 
 import type { Clock, MessagePublisher } from '../../application';
 import type { JsonObject } from '../../domain';
+import { contextFromCarrier, lazily, meter, tracer } from '../observability/telemetry';
 import type { OutboxDatabase } from './outbox-events.table';
 
 export type RelayBatchResult = {
@@ -42,7 +44,32 @@ type PendingRow = {
   readonly payload: JsonObject;
   readonly occurred_at: Date;
   readonly attempts: number;
+  readonly trace_context: Record<string, string> | null;
 };
+
+/** Métricas do relay (no-op sem o SDK do OpenTelemetry). */
+const instruments = lazily(() => ({
+  published: meter().createCounter('fastmeals.outbox.messages.published', {
+    description: 'Mensagens do outbox entregues ao broker',
+    unit: '{message}',
+  }),
+  failed: meter().createCounter('fastmeals.outbox.messages.failed', {
+    description: 'Mensagens que ficaram pendentes num ciclo, por motivo',
+    unit: '{message}',
+  }),
+  deadLettered: meter().createCounter('fastmeals.outbox.messages.dead_lettered', {
+    description: 'Mensagens enviadas para a fila morta do outbox',
+    unit: '{message}',
+  }),
+  deliveryLag: meter().createHistogram('fastmeals.outbox.delivery.lag', {
+    description: 'Tempo entre o evento acontecer e a mensagem sair para o broker',
+    unit: 'ms',
+  }),
+  batchDuration: meter().createHistogram('fastmeals.outbox.batch.duration', {
+    description: 'Duração de um ciclo do relay com mensagens',
+    unit: 'ms',
+  }),
+}));
 
 export const DEFAULT_OUTBOX_MAX_ATTEMPTS = 5;
 /** Teto do erro guardado na linha (a pilha inteira não ajuda a investigar). */
@@ -100,7 +127,8 @@ export class OutboxRelay implements OutboxRelayCycle {
           FROM heads
           WHERE pg_try_advisory_xact_lock(hashtextextended(aggregate_type || ':' || aggregate_id::text, 0))
         )
-        SELECT e.id, e.aggregate_type, e.aggregate_id, e.event_name, e.event_version, e.payload, e.occurred_at, e.attempts
+        SELECT e.id, e.aggregate_type, e.aggregate_id, e.event_name, e.event_version, e.payload, e.occurred_at, e.attempts,
+               e.trace_context
         FROM outbox_events e
         JOIN owned o ON o.aggregate_type = e.aggregate_type AND o.aggregate_id = e.aggregate_id
         WHERE e.published_at IS NULL AND e.dead_lettered_at IS NULL
@@ -108,7 +136,45 @@ export class OutboxRelay implements OutboxRelayCycle {
         LIMIT ${limit}
         FOR UPDATE OF e
       `.execute(trx);
+      // Ciclo vazio (a cada poucos centésimos de segundo): nem span nem métrica.
+      if (pending.length === 0) return { result: { published: 0, failed: 0 }, deadLettered: [] };
 
+      // Um span por lote, ligado aos traces das requisições que geraram cada mensagem.
+      const links = pending.flatMap((row): Link[] => {
+        const spanContext = trace.getSpanContext(contextFromCarrier(row.trace_context));
+        return spanContext === undefined ? [] : [{ context: spanContext }];
+      });
+      return tracer().startActiveSpan(
+        'outbox relay batch',
+        { kind: SpanKind.INTERNAL, links, attributes: { 'messaging.batch.message_count': pending.length } },
+        async (span) => {
+          const startedAt = performance.now();
+          try {
+            const batch = await this.#publish(trx, pending);
+            span.setAttributes({
+              'fastmeals.outbox.published': batch.result.published,
+              'fastmeals.outbox.failed': batch.result.failed,
+            });
+            if (batch.result.failed > 0) span.setStatus({ code: SpanStatusCode.ERROR, message: 'mensagens pendentes' });
+            return batch;
+          } finally {
+            instruments().batchDuration.record(performance.now() - startedAt);
+            span.end();
+          }
+        },
+      );
+    });
+    // Só depois do commit: o aviso corresponde ao que de fato ficou gravado.
+    for (const message of deadLettered) this.#onDeadLettered(message);
+    return result;
+  }
+
+  /** Publica o lote travado e grava o resultado de cada mensagem, na mesma transação. */
+  async #publish(
+    trx: Transaction<OutboxDatabase>,
+    pending: readonly PendingRow[],
+  ): Promise<{ result: RelayBatchResult; deadLettered: DeadLetteredMessage[] }> {
+    {
       const outcomes = await this.publisher.publishBatch(
         pending.map((row) => ({
           id: row.id,
@@ -118,6 +184,7 @@ export class OutboxRelay implements OutboxRelayCycle {
           aggregateId: row.aggregate_id,
           payload: row.payload,
           occurredAt: row.occurred_at,
+          traceContext: row.trace_context,
         })),
       );
       const outcomeOf = new Map(outcomes.map((outcome) => [outcome.id, outcome]));
@@ -129,8 +196,13 @@ export class OutboxRelay implements OutboxRelayCycle {
         const outcome = outcomeOf.get(row.id);
         if (outcome?.status === 'published') {
           publishedIds.push(row.id);
+          instruments().published.add(1, { 'messaging.destination.name': row.event_name });
+          instruments().deliveryLag.record(this.clock.now().getTime() - row.occurred_at.getTime(), {
+            'messaging.destination.name': row.event_name,
+          });
           continue;
         }
+        instruments().failed.add(1, { reason: outcome?.status ?? 'broker-unavailable' });
         // broker-unavailable ou deferred: pendente, sem contar tentativa.
         if (outcome?.status !== 'rejected') {
           failed += 1;
@@ -144,7 +216,10 @@ export class OutboxRelay implements OutboxRelayCycle {
           .set({ attempts, last_error: error, dead_lettered_at: dead ? this.clock.now() : null })
           .where('id', '=', row.id)
           .execute();
-        if (dead) movedToDeadLetter.push({ id: row.id, topic: row.event_name, aggregateId: row.aggregate_id, attempts, error });
+        if (dead) {
+          movedToDeadLetter.push({ id: row.id, topic: row.event_name, aggregateId: row.aggregate_id, attempts, error });
+          instruments().deadLettered.add(1, { 'messaging.destination.name': row.event_name });
+        }
         else failed += 1;
       }
 
@@ -156,10 +231,7 @@ export class OutboxRelay implements OutboxRelayCycle {
           .execute();
       }
       return { result: { published: publishedIds.length, failed }, deadLettered: movedToDeadLetter };
-    });
-    // Só depois do commit: o aviso corresponde ao que de fato ficou gravado.
-    for (const message of deadLettered) this.#onDeadLettered(message);
-    return result;
+    }
   }
 
   /** Remove mensagens já entregues antes de `instant` (retenção do outbox). */

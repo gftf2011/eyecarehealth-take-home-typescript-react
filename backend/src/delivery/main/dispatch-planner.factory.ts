@@ -6,6 +6,7 @@ import { InlineDispatchPlanner } from '../infra/dispatch/inline-dispatch-planner
 import { RoutingDispatchPlanner } from '../infra/dispatch/routing-dispatch-planner';
 import { WorkerPoolDispatchPlanner } from '../infra/dispatch/worker-pool-dispatch-planner';
 import { PerformanceStopwatch } from '../../shared-kernel/infra/clock/performance-stopwatch';
+import { meter } from '../../shared-kernel/infra/observability/telemetry';
 
 export type DispatchPlannerOptions = {
   /** Workers do pool; padrão: núcleos − 1 (a thread da API fica com um), no máximo 2. */
@@ -31,6 +32,16 @@ export function makeDispatchPlanner(options: DispatchPlannerOptions): DispatchPl
   const workers = options.workers ?? Math.min(MAX_DEFAULT_WORKERS, Math.max(1, availableParallelism() - 1));
   const pool = new WorkerPoolDispatchPlanner({ size: workers, maxQueued: options.maxQueued, timeoutMs: options.timeoutMs });
   const inline = new InlineDispatchPlanner(new DispatchOptimizer(), new PerformanceStopwatch());
+  // Ocupação do pool a cada exportação: cálculos rodando e esperando na fila.
+  meter()
+    .createObservableGauge('fastmeals.optimizer.pool.load', {
+      description: 'Sugestões no pool de workers do otimizador, por estado',
+      unit: '{request}',
+    })
+    .addCallback((result) => {
+      result.observe(pool.load.running, { state: 'running' });
+      result.observe(pool.load.queued, { state: 'queued' });
+    });
   return {
     planner: new RoutingDispatchPlanner(inline, pool, options.inlineMaxCells),
     ready: () => pool.ready(),

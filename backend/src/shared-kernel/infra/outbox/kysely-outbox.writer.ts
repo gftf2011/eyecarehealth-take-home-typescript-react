@@ -1,6 +1,7 @@
 import type { Kysely, Transaction } from 'kysely';
 
 import type { OutboxMessage, OutboxWriter } from '../../application/ports/outbox-writer';
+import { currentTraceCarrier } from '../observability/telemetry';
 import type { OutboxDatabase } from './outbox-events.table';
 
 /**
@@ -13,6 +14,8 @@ export class KyselyOutboxWriter implements OutboxWriter {
 
   async append(messages: readonly OutboxMessage[]): Promise<void> {
     if (messages.length === 0) return;
+    // O caso de uso roda dentro do trace da requisição: o relay continua dele.
+    const traceCarrier = currentTraceCarrier();
 
     await this.trx
       .insertInto('outbox_events')
@@ -25,6 +28,7 @@ export class KyselyOutboxWriter implements OutboxWriter {
           event_version: message.eventVersion,
           payload: JSON.stringify(message.payload),
           occurred_at: message.occurredAt,
+          trace_context: traceCarrier === null ? null : JSON.stringify(traceCarrier),
         })),
       )
       .execute();

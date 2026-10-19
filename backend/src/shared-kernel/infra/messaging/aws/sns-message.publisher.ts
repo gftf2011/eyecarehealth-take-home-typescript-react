@@ -1,3 +1,4 @@
+import { SpanKind, SpanStatusCode, trace, type Span } from '@opentelemetry/api';
 import {
   GetTopicAttributesCommand,
   PublishBatchCommand,
@@ -6,6 +7,7 @@ import {
 } from '@aws-sdk/client-sns';
 
 import type { MessagePublisher, PublishedMessage, PublishOutcome } from '../../../application';
+import { contextFromCarrier, currentTraceCarrier, tracer, type TraceCarrier } from '../../observability/telemetry';
 import { toMessageEnvelope } from '../message-envelope';
 
 /** Atributo SNS com o tópico lógico: filtra o que cada fila assinante recebe. */
@@ -64,9 +66,27 @@ export class SnsMessagePublisher implements MessagePublisher {
 
   async publishBatch(messages: readonly PublishedMessage[]): Promise<readonly PublishOutcome[]> {
     const outcomes = new Map<string, PublishOutcome>();
+    const spans = new Map<string, Span>();
     const lanes = Array.from({ length: Math.max(1, this.#concurrency) }, () => new Map<string, Entry[]>());
     for (const message of messages) {
-      const entry = toEntry(message);
+      // Span de produtor filho do trace da requisição que gerou o evento; o
+      // contexto dele vai nos atributos da mensagem para o consumidor continuar.
+      const parent = contextFromCarrier(message.traceContext);
+      const span = tracer().startSpan(
+        `publish ${message.topic}`,
+        {
+          kind: SpanKind.PRODUCER,
+          attributes: {
+            'messaging.system': 'aws_sns',
+            'messaging.operation.type': 'send',
+            'messaging.destination.name': message.topic,
+            'messaging.message.id': message.id,
+          },
+        },
+        parent,
+      );
+      spans.set(message.id, span);
+      const entry = toEntry(message, currentTraceCarrier(trace.setSpan(parent, span)));
       const lane = lanes[laneOf(entry.group, lanes.length)];
       const queue = lane?.get(entry.group);
       if (queue === undefined) lane?.set(entry.group, [entry]);
@@ -76,9 +96,18 @@ export class SnsMessagePublisher implements MessagePublisher {
     const state: { brokerDown: string | null } = { brokerDown: null };
     await Promise.all(lanes.filter((lane) => lane.size > 0).map((lane) => this.#drain(lane, outcomes, state)));
 
-    return messages.map(
-      (message) => outcomes.get(message.id) ?? { id: message.id, status: 'broker-unavailable', reason: 'sem resposta' },
+    const results = messages.map(
+      (message): PublishOutcome =>
+        outcomes.get(message.id) ?? { id: message.id, status: 'broker-unavailable', reason: 'sem resposta' },
     );
+    for (const outcome of results) {
+      const span = spans.get(outcome.id);
+      if (span === undefined) continue;
+      span.setAttribute('fastmeals.publish.outcome', outcome.status);
+      if (outcome.status !== 'published') span.setStatus({ code: SpanStatusCode.ERROR, message: outcome.reason });
+      span.end();
+    }
+    return results;
   }
 
   /** Lança se o tópico não existir ou o SNS não responder (boot e health check). */
@@ -191,20 +220,28 @@ export class SnsMessagePublisher implements MessagePublisher {
   }
 }
 
-function toEntry(message: PublishedMessage): Entry {
+function toEntry(message: PublishedMessage, traceCarrier: TraceCarrier | null): Entry {
   const body = JSON.stringify(toMessageEnvelope(message));
   const group = `${message.aggregateType}:${message.aggregateId}`;
+  // Tópico lógico (filtro das assinaturas) e cabeçalhos W3C do trace.
+  const attributes: Record<string, string> = { [TOPIC_ATTRIBUTE]: message.topic, ...traceCarrier };
   const request: PublishBatchRequestEntry = {
     // O id do outbox (UUID) é único no lote e aceito pelo SNS como Id.
     Id: message.id,
     Message: body,
     MessageGroupId: group,
     MessageDeduplicationId: message.id,
-    MessageAttributes: { [TOPIC_ATTRIBUTE]: { DataType: 'String', StringValue: message.topic } },
+    MessageAttributes: Object.fromEntries(
+      Object.entries(attributes).map(([name, value]) => [name, { DataType: 'String', StringValue: value }]),
+    ),
   };
   // O limite do SNS soma corpo e atributos (nome, tipo e valor).
   const bytes =
-    Buffer.byteLength(body) + Buffer.byteLength(TOPIC_ATTRIBUTE) + Buffer.byteLength('String') + Buffer.byteLength(message.topic);
+    Buffer.byteLength(body) +
+    Object.entries(attributes).reduce(
+      (total, [name, value]) => total + Buffer.byteLength(name) + Buffer.byteLength('String') + Buffer.byteLength(value),
+      0,
+    );
   return { message, group, request, bytes };
 }
 

@@ -1,7 +1,11 @@
 import type { Kysely } from 'kysely';
 
 import { DomainEventBuffer, type EventMediator } from '../../../../shared-kernel/application';
-import { publishCollectedEvents } from '../../../../shared-kernel/infra/events/publish-collected-events';
+import {
+  publishCollectedEvents,
+  runAfterCommit,
+  type AfterCommitEffects,
+} from '../../../../shared-kernel/infra/events/publish-collected-events';
 import type {
   DeliveryRepositories,
   DeliveryUnitOfWork,
@@ -21,15 +25,19 @@ export class KyselyDeliveryUnitOfWork implements DeliveryUnitOfWork {
     private readonly mediator: EventMediator,
   ) {}
 
-  transaction<TResult>(work: (repositories: DeliveryRepositories) => Promise<TResult>): Promise<TResult> {
-    return this.db.transaction().execute(async (trx) => {
+  async transaction<TResult>(work: (repositories: DeliveryRepositories) => Promise<TResult>): Promise<TResult> {
+    const effects: AfterCommitEffects = [];
+    const committed = await this.db.transaction().execute(async (trx) => {
       const events = new DomainEventBuffer();
       const result = await work({
         deliveryPersons: new KyselyDeliveryPersonRepository(trx, events),
         dispatchBoard: new KyselyDispatchBoard(trx),
       });
-      await publishCollectedEvents(this.mediator, events, trx);
+      await publishCollectedEvents(this.mediator, events, trx, effects);
       return result;
     });
+    // Só com a transação confirmada.
+    runAfterCommit(effects);
+    return committed;
   }
 }

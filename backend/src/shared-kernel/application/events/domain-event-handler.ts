@@ -8,6 +8,11 @@ import type { OutboxWriter } from '../ports/outbox-writer';
 export type EventHandlingScope = {
   /** Para eventos que precisam chegar a outro sistema. */
   readonly outbox: OutboxWriter;
+  /**
+   * Agenda um efeito para **depois do commit** (ex.: métricas): não roda se a
+   * transação for desfeita, e uma falha nele não desfaz nem derruba nada.
+   */
+  readonly afterCommit: (effect: () => void) => void;
 };
 
 /**

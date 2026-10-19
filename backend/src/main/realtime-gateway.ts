@@ -19,6 +19,7 @@ import { channelOf } from '../shared-kernel/infra/cache/redis/redis-channel';
 import { RedisConnection } from '../shared-kernel/infra/cache/redis/redis-connection';
 import { RedisSubscription } from '../shared-kernel/infra/cache/redis/redis-subscription';
 import { SystemClock } from '../shared-kernel/infra/clock/system-clock';
+import { meter } from '../shared-kernel/infra/observability/telemetry';
 import { createSqsClient } from '../shared-kernel/infra/messaging/aws/aws-clients';
 import { findQueue } from '../shared-kernel/infra/messaging/aws/messaging-topology';
 import { SqsQueueConsumer } from '../shared-kernel/infra/messaging/aws/sqs-queue-consumer';
@@ -64,6 +65,17 @@ async function main(): Promise<void> {
       ),
     clock,
   });
+
+  // Conexões abertas e autenticadas nesta réplica, lidas a cada exportação.
+  meter()
+    .createObservableGauge('fastmeals.realtime.connections', {
+      description: 'Conexões WebSocket desta réplica do gateway, por estado',
+      unit: '{connection}',
+    })
+    .addCallback((result) => {
+      result.observe(hub.connectionCount, { state: 'open' });
+      result.observe(hub.authenticatedCount, { state: 'authenticated' });
+    });
 
   const app = await buildRealtimeApp({
     hub,

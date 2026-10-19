@@ -29,6 +29,8 @@ export function compose(...args: string[]): void {
       ...PORTS,
       // Todos os testes saem do mesmo IP: o limite de 100/min da API derrubaria a suíte.
       RATE_LIMIT_MAX: '100000',
+      // A stack de testes não sobe o otel-lgtm: sem destino, os processos nem tentam exportar.
+      OTEL_SDK_DISABLED: 'true',
     },
   });
 }

@@ -6,6 +6,7 @@ import { DispatchPlannerBusyError } from '../../application/errors/dispatch-plan
 import { DispatchPlannerTimeoutError } from '../../application/errors/dispatch-planner-timeout.error';
 import type { DispatchPlanner, PlannedAssignment } from '../../application/ports/dispatch-planner';
 import type { DispatchableOrder, DispatchCandidate } from '../../domain';
+import { lazily, meter } from '../../../shared-kernel/infra/observability/telemetry';
 import { fromWirePlan, toWireCandidates, toWireOrders, type WireRequest, type WorkerMessage } from './dispatch-wire';
 
 export type WorkerPoolDispatchPlannerOptions = {
@@ -27,6 +28,13 @@ type Job = {
 
 /** `ready`: o worker terminou de carregar; até lá, não recebe cálculos. */
 type Slot = { worker: Worker; ready: boolean; job: (Job & { id: number; timer: NodeJS.Timeout }) | null };
+
+const rejections = lazily(() =>
+  meter().createCounter('fastmeals.optimizer.rejections', {
+    description: 'Sugestões recusadas pelo pool (503), por motivo',
+    unit: '{request}',
+  }),
+);
 
 /** Workers que morrem antes de carregar, seguidos: o script não sobe (build quebrado). */
 const MAX_BOOT_FAILURES = 3;
@@ -96,6 +104,7 @@ export class WorkerPoolDispatchPlanner implements DispatchPlanner {
         return;
       }
       if (this.#queue.length >= this.#options.maxQueued) {
+        rejections().add(1, { reason: 'busy' });
         reject(new DispatchPlannerBusyError());
         return;
       }
@@ -158,6 +167,7 @@ export class WorkerPoolDispatchPlanner implements DispatchPlanner {
 
   #onTimeout(slot: Slot, id: number): void {
     if (slot.job?.id !== id) return;
+    rejections().add(1, { reason: 'timeout' });
     this.#replace(slot, new DispatchPlannerTimeoutError(this.#options.timeoutMs));
   }
 

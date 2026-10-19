@@ -4,6 +4,7 @@
 # Painel: http://localhost:3000 (admin@fastmeals.com / Admin@123).
 # API:    http://localhost:3001/api · WebSocket: ws://localhost:3002/realtime
 # AWS local (Floci, SNS/SQS): http://localhost:4566
+# Observabilidade (Grafana com métricas, logs e traces): http://localhost:3300
 #
 # Os valores padrão abaixo são de DESENVOLVIMENTO LOCAL (segredos de exemplo,
 # cookie sem Secure por ser HTTP). Para outro ambiente, defina as variáveis
@@ -40,6 +41,15 @@ x-aws-env: &aws-env
   EVENTS_TOPIC_NAME: ${EVENTS_TOPIC_NAME:-fastmeals-events.fifo}
   REALTIME_QUEUE_NAME: ${REALTIME_QUEUE_NAME:-fastmeals-realtime.fifo}
   REALTIME_DLQ_NAME: ${REALTIME_DLQ_NAME:-fastmeals-realtime-dlq.fifo}
+
+# OpenTelemetry dos processos do backend: traces, métricas e logs por OTLP
+# para o otel-lgtm (Collector + Prometheus + Loki + Tempo + Grafana). Para
+# outro backend OTLP, troque OTEL_EXPORTER_OTLP_ENDPOINT; para desligar,
+# OTEL_SDK_DISABLED=true.
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-lgtm:4318}
+  OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+  OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-15000}
 
 services:
   postgres:
@@ -90,6 +100,20 @@ services:
       timeout: 3s
       retries: 20
 
+  # Observabilidade local: OTel Collector (OTLP 4317/4318), Prometheus, Loki,
+  # Tempo e Grafana numa imagem. Nada depende dele: se não estiver de pé, os
+  # processos seguem funcionando e só deixam de exportar.
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.35.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3300}:3000"
+      # OTLP exposto só localmente: `npm run dev` fora do Docker também exporta.
+      - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/fastmeals.yaml:ro
+      - ./observability/grafana/fastmeals-dashboard.json:/otel-lgtm/fastmeals-dashboard.json:ro
+
   # Job de pré-deploy: cria tópico SNS, fila do tempo real, fila morta e a
   # assinatura entre eles (pode rodar de novo sem efeito) e sai.
   messaging-setup:
@@ -133,9 +157,10 @@ services:
 
   api:
     <<: *backend
-    command: ["node", "dist/server.js"]
+    command: ["node", "--import", "./dist/instrumentation.js", "dist/server.js"]
     environment:
-      <<: *backend-env
+      <<: [*backend-env, *otel-env]
+      OTEL_SERVICE_NAME: fastmeals-api
       PORT: "3001"
       # HTTP em localhost: em produção (HTTPS) deixe o padrão (Secure).
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -166,9 +191,10 @@ services:
 
   outbox-relay:
     <<: *backend
-    command: ["node", "dist/outbox-relay.js"]
+    command: ["node", "--import", "./dist/instrumentation.js", "dist/outbox-relay.js"]
     environment:
-      <<: [*backend-env, *aws-env]
+      <<: [*backend-env, *aws-env, *otel-env]
+      OTEL_SERVICE_NAME: fastmeals-outbox-relay
       # O Floci usa a conta 000000000000; na AWS, o ARN do tópico real.
       EVENTS_TOPIC_ARN: ${EVENTS_TOPIC_ARN:-arn:aws:sns:us-east-1:000000000000:fastmeals-events.fifo}
       RELAY_HEALTH_PORT: "3003"
@@ -186,9 +212,10 @@ services:
 
   realtime:
     <<: *backend
-    command: ["node", "dist/realtime-gateway.js"]
+    command: ["node", "--import", "./dist/instrumentation.js", "dist/realtime-gateway.js"]
     environment:
-      <<: [*backend-env, *aws-env]
+      <<: [*backend-env, *aws-env, *otel-env]
+      OTEL_SERVICE_NAME: fastmeals-realtime
       REALTIME_PORT: "3002"
       # O navegador abre o WebSocket a partir da origem do painel (acompanha
       # FRONTEND_PORT, se a 3000 estiver ocupada na máquina).

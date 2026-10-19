@@ -20,7 +20,7 @@ describe('PublishProductUpdateHandler (inscrito pelo Catalog no mediador)', () =
 
   beforeEach(() => {
     appended = [];
-    scope = { outbox: { append: async (messages) => void appended.push(...messages) } };
+    scope = { outbox: { append: async (messages) => void appended.push(...messages) }, afterCommit: () => undefined };
     mediator = new InMemoryEventMediator();
     subscribeCatalogEventHandlers(mediator);
   });

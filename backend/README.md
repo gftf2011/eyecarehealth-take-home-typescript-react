@@ -34,6 +34,7 @@ Pronto: API em http://localhost:3001/api, WebSocket em ws://localhost:3002/realt
 - [Erros](#erros)
 - [Tempo real (WebSocket)](#tempo-real-websocket)
 - [Mensageria (SNS + SQS)](#mensageria-sns--sqs)
+- [Observabilidade (OpenTelemetry)](#observabilidade-opentelemetry)
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Scripts](#scripts)
 - [Estrutura de pastas](#estrutura-de-pastas)
@@ -132,6 +133,7 @@ Sobe, nesta ordem: `postgres`, `redis` e `floci` → `migrate` (aplica as migrat
 | PostgreSQL | `localhost:5432` (usuário `fastmeals` / senha `fastmeals123`) |
 | Redis | `localhost:6379` |
 | Floci (SNS/SQS) | http://localhost:4566 (credenciais `test` / `test`) |
+| Grafana (métricas, logs e traces) | http://localhost:3300/d/fastmeals |
 
 O seed é idempotente: num segundo `up`, ele só avisa que o banco já tem dados. Para recriar tudo do zero, use `npm run docker:reset`.
 
@@ -218,9 +220,9 @@ O tipo está no nome do arquivo, ao lado do código testado:
 
 | Sufixo | O que cobre | Arquivos |
 |---|---|---|
-| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 85 |
-| `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 20 |
-| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 10 |
+| `*.unit.spec.ts` | Domínio e casos de uso com fakes em memória; sem I/O | 86 |
+| `*.integration.spec.ts` | Repositórios, ACLs, consultas, outbox, Redis, SNS/SQS, seed, migrations — contra dependências reais | 21 |
+| `*.e2e.spec.ts` | Requisições HTTP reais na API (`app.inject`) e clientes WebSocket reais no gateway | 11 |
 | `*.architecture.spec.ts` | Regras de arquitetura sobre o código-fonte, com [ArchUnitTS](https://github.com/LukasNiessen/ArchUnitTS) | 3 |
 
 ### Testes de arquitetura
@@ -472,6 +474,55 @@ npm run outbox:redrive -- --all                # devolve todas
 
 No Docker: `docker compose run --rm --no-deps outbox-relay node dist/outbox-redrive.js list` (ou `redrive --all`).
 
+## Observabilidade (OpenTelemetry)
+
+API, relay e gateway exportam **traces, métricas e logs** por OTLP. O SDK é pré-carregado antes da aplicação ([`instrumentation.ts`](src/main/telemetry/instrumentation.ts), `node --import ./dist/instrumentation.js`) e instrumenta HTTP, Fastify, `pg`, `ioredis` e pino. No Compose, tudo vai para o serviço `otel-lgtm` (OTel Collector, Prometheus, Loki, Tempo e Grafana numa imagem):
+
+| O quê | Onde |
+|---|---|
+| Grafana com o dashboard **FastMeals** | http://localhost:3300/d/fastmeals |
+| OTLP para processos fora do Docker (`npm run dev`) | `http://localhost:4318` |
+
+### Um trace por ação, pelos três processos
+
+O contexto do trace da requisição é gravado no outbox junto com o evento (coluna `trace_context`). O relay publica cada mensagem num span de **produtor** filho dele e leva o `traceparent` nos atributos da mensagem SNS; o gateway processa a mensagem da fila num span de **consumidor** filho do produtor. Uma mudança de status no painel aparece, no Tempo, como um trace só:
+
+```
+PATCH /api/orders/:id/status   (fastmeals-api: handler, BEGIN/SELECT/INSERT no outbox/COMMIT)
+└─ publish ordering.order-updates   (fastmeals-outbox-relay)
+   └─ process fastmeals-realtime.fifo   (fastmeals-realtime: PUBLISH no Redis)
+```
+
+O ciclo do relay também é um span (`outbox relay batch`), ligado aos traces das mensagens que publicou.
+
+**Sem ruído de fundo.** O relay consulta o banco a cada 500 ms e o gateway faz long polling na fila; banco, Redis e HTTP de saída só geram spans dentro de um trace que já existe, e health checks e o upgrade do WebSocket não abrem traces.
+
+### Logs
+
+O pino continua escrevendo JSON no stdout e envia cada log também por OTLP, com `trace_id` e `span_id`. No Grafana, de um log se abre o trace (Loki → Tempo), e de um span se veem os logs dele (Tempo → Loki).
+
+### Métricas
+
+| Métrica | Tipo | Atributos | Para quê |
+|---|---|---|---|
+| `fastmeals.http.server.request.duration` | histograma (ms) | método, **rota** (`/api/orders/:id`), status | Vazão, latência p95 e erros por rota; 401 de login, 429 do rate limit e 503 do otimizador no mesmo gráfico |
+| `fastmeals.orders.placed` | contador | — | Pedidos criados, contados **depois do commit** |
+| `fastmeals.orders.status_changes` | contador | status de origem e de destino | Funil de pedidos |
+| `fastmeals.outbox.pending` / `.oldest_pending.age` / `.dead_lettered` | gauge | — | Fila do outbox, atraso até o painel e fila morta |
+| `fastmeals.outbox.messages.published` / `.failed` / `.dead_lettered` | contador | tópico / motivo | Saída do relay |
+| `fastmeals.outbox.delivery.lag` / `.batch.duration` | histograma (ms) | tópico | Do evento até o SNS; duração de cada ciclo |
+| `fastmeals.queue.messages.processed` | contador | fila, resultado | Consumo da fila do tempo real (falhas voltam para a fila) |
+| `fastmeals.realtime.connections` | gauge | `open` / `authenticated` | Painéis conectados por réplica |
+| `fastmeals.realtime.events.forwarded` | contador | tópico | Eventos espalhados entre as réplicas |
+| `fastmeals.optimizer.duration` | histograma (ms) | modo (`inline` / `worker`) | Tempo do algoritmo |
+| `fastmeals.optimizer.pool.load` / `.rejections` | gauge / contador | estado / motivo | Ocupação do pool e 503 (ocupado, timeout) |
+
+As métricas de negócio do Ordering passam por uma porta (`OrderingMetrics`): a aplicação diz o que aconteceu, e o adapter do OpenTelemetry mede. Elas são registradas por um handler de eventos de domínio que agenda o efeito com `afterCommit`: um caso de uso desfeito não entra na conta.
+
+### Configuração
+
+Variáveis padrão do OpenTelemetry: `OTEL_SERVICE_NAME` (no Compose, `fastmeals-api`, `fastmeals-outbox-relay` e `fastmeals-realtime`), `OTEL_EXPORTER_OTLP_ENDPOINT` (qualquer backend OTLP: Grafana Cloud, Datadog, Honeycomb…), `OTEL_METRIC_EXPORT_INTERVAL` (padrão 15 s) e `OTEL_SDK_DISABLED=true` para desligar. Sem o SDK (testes, stack do Playwright), a API do OpenTelemetry vira no-op: nada é medido nem exportado, sem custo.
+
 ---
 
 ## Variáveis de ambiente
@@ -497,6 +548,10 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `BCRYPT_COST` | API, seed | `10` | Custo do bcrypt (10–15) |
 | `OUTBOX_POLL_INTERVAL_MS` / `OUTBOX_BATCH_SIZE` | relay | `500` / `100` | Latência máxima e tamanho do lote |
 | `OUTBOX_MAX_ATTEMPTS` | relay | `5` | Falhas permanentes de uma mensagem até a fila morta |
+| `OTEL_SERVICE_NAME` | API, relay, gateway | — | Nome do serviço nos traces, métricas e logs |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | API, relay, gateway | `http://localhost:4318` | Destino OTLP (no Compose, `http://otel-lgtm:4318`) |
+| `OTEL_METRIC_EXPORT_INTERVAL` | API, relay, gateway | `15000` | Intervalo de exportação das métricas (ms) |
+| `OTEL_SDK_DISABLED` | API, relay, gateway | `false` | `true` desliga a telemetria (no-op) |
 | `RELAY_HEALTH_PORT` | relay | `3003` | Porta interna do health check |
 | `AWS_REGION` | relay, gateway, setup | `us-east-1` | Região AWS |
 | `AWS_ENDPOINT_URL` | relay, gateway, setup | vazio (AWS real) | Endpoint do emulador (`http://localhost:4566` com o Floci) |

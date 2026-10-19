@@ -16,6 +16,8 @@ import { SnsMessagePublisher } from '../shared-kernel/infra/messaging/aws/sns-me
 import type { OutboxDatabase } from '../shared-kernel/infra/outbox/outbox-events.table';
 import { OutboxRelay } from '../shared-kernel/infra/outbox/outbox-relay';
 import { OutboxRelayRunner } from '../shared-kernel/infra/outbox/outbox-relay.runner';
+import { OutboxStats } from '../shared-kernel/infra/outbox/outbox-stats';
+import { meter } from '../shared-kernel/infra/observability/telemetry';
 import { awsClientConfig } from './config/messaging-env';
 import { loadRelayEnv } from './config/relay-env';
 
@@ -48,6 +50,8 @@ async function main(): Promise<void> {
     onError: (error) => log.error({ err: error }, 'Falha no ciclo do outbox relay'),
   });
 
+  observeOutbox(new OutboxStats(db), (error) => log.warn({ err: error }, 'Falha ao medir o outbox'));
+
   health.get('/health', async (_request, reply) => {
     const [database, broker] = await Promise.all([
       check(() => pool.query('SELECT 1')),
@@ -74,6 +78,39 @@ async function main(): Promise<void> {
   log.info(
     { batchSize: env.OUTBOX_BATCH_SIZE, pollIntervalMs: env.OUTBOX_POLL_INTERVAL_MS, maxAttempts: env.OUTBOX_MAX_ATTEMPTS },
     'Outbox relay iniciado',
+  );
+}
+
+/**
+ * Retrato do outbox a cada exportação de métricas (uma consulta para os três
+ * medidores): quantas esperam, há quanto tempo a mais antiga espera (o atraso
+ * até o painel) e quantas estão na fila morta.
+ */
+function observeOutbox(stats: OutboxStats, onError: (error: unknown) => void): void {
+  const pending = meter().createObservableGauge('fastmeals.outbox.pending', {
+    description: 'Mensagens do outbox esperando publicação',
+    unit: '{message}',
+  });
+  const oldestAge = meter().createObservableGauge('fastmeals.outbox.oldest_pending.age', {
+    description: 'Há quanto tempo espera a mensagem pendente mais antiga',
+    unit: 'ms',
+  });
+  const deadLettered = meter().createObservableGauge('fastmeals.outbox.dead_lettered', {
+    description: 'Mensagens na fila morta do outbox',
+    unit: '{message}',
+  });
+  meter().addBatchObservableCallback(
+    async (result) => {
+      try {
+        const snapshot = await stats.snapshot();
+        result.observe(pending, snapshot.pending);
+        result.observe(oldestAge, snapshot.oldestPendingAgeMs);
+        result.observe(deadLettered, snapshot.deadLettered);
+      } catch (error) {
+        onError(error);
+      }
+    },
+    [pending, oldestAge, deadLettered],
   );
 }
 

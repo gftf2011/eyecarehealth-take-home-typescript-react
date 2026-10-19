@@ -12,6 +12,7 @@ import {
   LATER,
   PLACED_AT,
 } from '../../domain/order/testing/order.fixture';
+import { RecordingOrderingMetrics } from '../testing/recording-ordering-metrics';
 import { subscribeOrderingEventHandlers } from '../../main/ordering-event-handlers';
 import { ORDER_UPDATES_TOPIC } from '../messages/order-update.message';
 
@@ -24,9 +25,9 @@ describe('PublishOrderUpdateHandler (inscrito pelo Ordering no mediador)', () =>
 
   beforeEach(() => {
     appended = [];
-    scope = { outbox: { append: async (messages) => void appended.push(...messages) } };
+    scope = { outbox: { append: async (messages) => void appended.push(...messages) }, afterCommit: () => undefined };
     mediator = new InMemoryEventMediator();
-    subscribeOrderingEventHandlers(mediator);
+    subscribeOrderingEventHandlers(mediator, new RecordingOrderingMetrics());
   });
 
   async function publish(events: readonly DomainEvent[]): Promise<void> {

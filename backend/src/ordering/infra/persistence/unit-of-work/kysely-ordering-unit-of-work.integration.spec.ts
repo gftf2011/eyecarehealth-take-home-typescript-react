@@ -34,6 +34,7 @@ import {
   LATER,
   productSnapshot,
 } from '../../../domain/order/testing/order.fixture';
+import { RecordingOrderingMetrics } from '../../../application/testing/recording-ordering-metrics';
 import { subscribeOrderingEventHandlers } from '../../../main/ordering-event-handlers';
 import type { OrderingDatabase } from '../schema/ordering-database';
 import { insertDeliveryPerson, insertProduct } from '../testing/ordering-test-data';
@@ -42,7 +43,7 @@ import { KyselyOrderingUnitOfWork } from './kysely-ordering-unit-of-work';
 const db = connectToTestDatabase<OrderingDatabase>();
 const raw = db as unknown as Kysely<unknown>;
 const mediator = new InMemoryEventMediator();
-subscribeOrderingEventHandlers(mediator);
+subscribeOrderingEventHandlers(mediator, new RecordingOrderingMetrics());
 const unitOfWork = new KyselyOrderingUnitOfWork(db, mediator);
 const NOW = new Date('2025-01-20T16:00:00Z');
 const OTHER_COURIER_ID = '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';

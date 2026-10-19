@@ -1,6 +1,15 @@
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { DeleteMessageBatchCommand, ReceiveMessageCommand, type Message, type SQSClient } from '@aws-sdk/client-sqs';
 
 import type { Clock } from '../../../application';
+import { contextFromCarrier, lazily, meter, tracer } from '../../observability/telemetry';
+
+const processed = lazily(() =>
+  meter().createCounter('fastmeals.queue.messages.processed', {
+    description: 'Mensagens da fila processadas, por resultado (ok ou falha, que volta para a fila)',
+    unit: '{message}',
+  }),
+);
 
 /** Uma mensagem recebida da fila. */
 export type QueueMessage = {
@@ -10,7 +19,12 @@ export type QueueMessage = {
   readonly receiveCount: number;
   /** Grupo FIFO (o agregado); `undefined` numa fila padrão. */
   readonly groupId: string | undefined;
+  /** Atributos de texto da mensagem (tópico lógico, cabeçalhos de trace…). */
+  readonly attributes: Readonly<Record<string, string>>;
 };
+
+/** Cabeçalhos W3C que continuam, aqui, o trace de quem publicou. */
+const TRACE_HEADERS = ['traceparent', 'tracestate'] as const;
 
 export type SqsQueueConsumerOptions = {
   readonly queueUrl: string;
@@ -107,6 +121,7 @@ export class SqsQueueConsumer {
           MaxNumberOfMessages: this.#options.batchSize,
           WaitTimeSeconds: this.#options.waitTimeSeconds,
           MessageSystemAttributeNames: ['ApproximateReceiveCount', 'MessageGroupId'],
+          MessageAttributeNames: ['All'],
         }),
         { abortSignal: this.#abort.signal },
       );
@@ -134,11 +149,16 @@ export class SqsQueueConsumer {
         body: raw.Body ?? '',
         receiveCount: Number(raw.Attributes?.ApproximateReceiveCount ?? '1'),
         groupId: raw.Attributes?.MessageGroupId,
+        attributes: Object.fromEntries(
+          Object.entries(raw.MessageAttributes ?? {}).flatMap(([name, value]) =>
+            value.StringValue === undefined ? [] : [[name, value.StringValue]],
+          ),
+        ),
       };
       // Uma anterior do mesmo grupo falhou: processar esta inverteria a ordem.
       if (message.groupId !== undefined && failedGroups.has(message.groupId)) continue;
       try {
-        await this.#options.handle(message);
+        await this.#traced(message);
         done.push({ Id: String(index), ReceiptHandle: raw.ReceiptHandle });
       } catch (error) {
         if (message.groupId !== undefined) failedGroups.add(message.groupId);
@@ -152,6 +172,44 @@ export class SqsQueueConsumer {
       // Não apagou: as mensagens voltam e saem de novo (o cliente deduplica pelo id).
       this.#options.onError(error);
     }
+  }
+
+  /** Processa a mensagem num span de consumidor, filho do trace de quem a publicou. */
+  async #traced(message: QueueMessage): Promise<void> {
+    const carrier = Object.fromEntries(
+      TRACE_HEADERS.flatMap((header) => {
+        const value = message.attributes[header];
+        return value === undefined ? [] : [[header, value]];
+      }),
+    );
+    const queue = this.#options.queueUrl.split('/').at(-1) ?? this.#options.queueUrl;
+    await tracer().startActiveSpan(
+      `process ${queue}`,
+      {
+        kind: SpanKind.CONSUMER,
+        attributes: {
+          'messaging.system': 'aws_sqs',
+          'messaging.operation.type': 'process',
+          'messaging.destination.name': queue,
+          'messaging.message.id': message.id,
+          'fastmeals.receive_count': message.receiveCount,
+        },
+      },
+      contextFromCarrier(carrier),
+      async (span) => {
+        try {
+          await this.#options.handle(message);
+          processed().add(1, { 'messaging.destination.name': queue, outcome: 'ok' });
+        } catch (error) {
+          processed().add(1, { 'messaging.destination.name': queue, outcome: 'failed' });
+          span.recordException(error instanceof Error ? error : String(error));
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
   }
 
   #backoff(): number {

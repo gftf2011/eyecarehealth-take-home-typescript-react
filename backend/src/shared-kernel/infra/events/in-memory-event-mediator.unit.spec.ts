@@ -44,7 +44,7 @@ class RecordingHandler<TEvent extends DomainEvent> implements DomainEventHandler
 }
 
 function scope(appended: OutboxMessage[] = []): EventHandlingScope {
-  return { outbox: { append: async (messages) => void appended.push(...messages) } };
+  return { outbox: { append: async (messages) => void appended.push(...messages) }, afterCommit: () => undefined };
 }
 
 describe('InMemoryEventMediator', () => {

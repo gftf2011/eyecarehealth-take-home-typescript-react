@@ -23,6 +23,7 @@ import { dispatchOrderRoute } from '../presentation/routes/dispatch-order.route'
 import { getOrderRoute } from '../presentation/routes/get-order.route';
 import { listOrdersRoute } from '../presentation/routes/list-orders.route';
 import { placeOrderRoute } from '../presentation/routes/place-order.route';
+import { OtelOrderingMetrics } from '../infra/observability/otel-ordering-metrics';
 import { subscribeOrderingEventHandlers } from './ordering-event-handlers';
 
 export type OrderingModuleDependencies = {
@@ -40,7 +41,7 @@ export type OrderingModuleDependencies = {
  * rotas e inscreve os handlers de eventos do contexto.
  */
 export function makeOrderingRoutes({ db, clock, events }: OrderingModuleDependencies): Route[] {
-  subscribeOrderingEventHandlers(events);
+  subscribeOrderingEventHandlers(events, new OtelOrderingMetrics());
   const unitOfWork = new KyselyOrderingUnitOfWork(db, events);
 
   return [

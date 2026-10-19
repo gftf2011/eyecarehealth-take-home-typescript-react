@@ -1,6 +1,14 @@
 import { channelOf, MESSAGE_CHANNEL_PREFIX } from '../../shared-kernel/infra/cache/redis/redis-channel';
 import type { RedisConnection } from '../../shared-kernel/infra/cache/redis/redis-connection';
+import { lazily, meter } from '../../shared-kernel/infra/observability/telemetry';
 import { toRealtimeEvent } from './broker-envelope';
+
+const forwarded = lazily(() =>
+  meter().createCounter('fastmeals.realtime.events.forwarded', {
+    description: 'Eventos repassados da fila para as réplicas do gateway, por tópico',
+    unit: '{event}',
+  }),
+);
 
 /** A mensagem da fila não segue o envelope do relay: repetir não adianta. */
 export class InvalidEnvelopeError extends Error {
@@ -28,5 +36,6 @@ export class RealtimeFanoutForwarder {
     const event = toRealtimeEvent(body);
     if (event === null) throw new InvalidEnvelopeError();
     await this.redis.publish(channelOf(event.topic, this.channelPrefix), body);
+    forwarded().add(1, { 'messaging.destination.name': event.topic });
   }
 }

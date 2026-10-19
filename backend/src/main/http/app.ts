@@ -13,6 +13,7 @@ import {
 } from '../../shared-kernel/presentation';
 import type { RateLimitCounter } from '../../shared-kernel/application';
 import { toRateLimitStore } from '../../shared-kernel/presentation/http/fastify/rate-limit-counter.store';
+import { registerHttpMetrics } from './http-metrics';
 import { registerRoutes } from '../../shared-kernel/presentation/http/fastify/register-routes';
 
 /** Verificações do health check por dependência (ex.: `database`, `redis`). */
@@ -50,6 +51,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     logger: options.logger ?? false,
     trustProxy: toFastifyTrustProxy(options.trustProxy ?? false),
   });
+
+  registerHttpMetrics(app);
 
   app.setErrorHandler((error, request, reply) => {
     const response = errorToHttp(toDomainError(error));
