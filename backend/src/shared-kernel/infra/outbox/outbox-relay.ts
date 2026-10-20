@@ -74,6 +74,11 @@ const instruments = lazily(() => ({
 export const DEFAULT_OUTBOX_MAX_ATTEMPTS = 5;
 /** Teto do erro guardado na linha (a pilha inteira não ajuda a investigar). */
 const MAX_ERROR_LENGTH = 2_000;
+/**
+ * A janela de candidatas é 5 vezes o lote: sobra o que escolher quando outra
+ * réplica já travou os agregados mais antigos.
+ */
+const CANDIDATE_WINDOW = 5;
 
 /**
  * Entrega as mensagens do outbox ao broker (transactional outbox, lado da
@@ -98,11 +103,17 @@ export class OutboxRelay implements OutboxRelayCycle {
    * Publica até `limit` mensagens pendentes, na ordem de inserção
    * (`sequence`), para o SNS FIFO entregá-las em ordem por agregado.
    *
+   * - **Custo do tamanho do lote, não do backlog:** a escolha começa pelas
+   *   `limit × 5` pendentes mais antigas (`ORDER BY sequence LIMIT`, no
+   *   índice parcial), nunca por um agrupamento de todas as pendentes. A
+   *   ordem continua certa: se uma mensagem de um agregado está nessa janela,
+   *   a primeira pendente dele também está, porque é mais antiga.
    * - **Um agregado por réplica:** a transação pega um advisory lock por
-   *   agregado (`pg_try_advisory_xact_lock`) e só publica os agregados que
-   *   conseguiu travar. Duas réplicas nunca publicam mensagens do mesmo pedido
-   *   ao mesmo tempo (o que inverteria a ordem), e agregados diferentes
-   *   continuam divididos entre elas.
+   *   agregado (`pg_try_advisory_xact_lock`), do mais antigo para o mais novo,
+   *   até `limit` agregados, e só publica os que conseguiu travar. Duas
+   *   réplicas nunca publicam mensagens do mesmo pedido ao mesmo tempo (o que
+   *   inverteria a ordem); a janela maior que o lote deixa a segunda réplica
+   *   achar agregados livres em vez de voltar de mãos vazias.
    * - O lote inteiro vai ao publisher de uma vez (`PublishBatch` de 10 em 10,
    *   uma faixa sequencial por grupo), com um resultado por mensagem: as
    *   entregues saem da fila, as que falharam ficam.
@@ -115,17 +126,21 @@ export class OutboxRelay implements OutboxRelayCycle {
   async relayBatch(limit: number): Promise<RelayBatchResult> {
     const { result, deadLettered } = await this.db.transaction().execute(async (trx) => {
       const { rows: pending } = await sql<PendingRow>`
-        WITH heads AS (
-          SELECT aggregate_type, aggregate_id, min(sequence) AS first_sequence
+        WITH oldest AS (
+          SELECT aggregate_type, aggregate_id, sequence
           FROM outbox_events
           WHERE published_at IS NULL AND dead_lettered_at IS NULL
+          ORDER BY sequence
+          LIMIT ${limit * CANDIDATE_WINDOW}
+        ), heads AS (
+          SELECT aggregate_type, aggregate_id, min(sequence) AS first_sequence
+          FROM oldest
           GROUP BY aggregate_type, aggregate_id
-          ORDER BY first_sequence
-          LIMIT ${limit}
         ), owned AS MATERIALIZED (
           SELECT aggregate_type, aggregate_id
-          FROM heads
+          FROM (SELECT * FROM heads ORDER BY first_sequence OFFSET 0) AS ordered
           WHERE pg_try_advisory_xact_lock(hashtextextended(aggregate_type || ':' || aggregate_id::text, 0))
+          LIMIT ${limit}
         )
         SELECT e.id, e.aggregate_type, e.aggregate_id, e.event_name, e.event_version, e.payload, e.occurred_at, e.attempts,
                e.trace_context

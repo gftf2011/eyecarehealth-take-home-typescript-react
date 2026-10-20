@@ -37,6 +37,7 @@
     "test:architecture": "vitest run --project architecture",
     "test:integration": "vitest run --project integration",
     "test:e2e": "vitest run --project e2e",
+    "test:load": "load-tests/run.sh",
     "test:watch": "vitest"
   },
   "devDependencies": {

@@ -33,7 +33,9 @@ async function main(): Promise<void> {
   const pool = createPostgresPool(env.DATABASE_URL);
   const db = createKysely<OutboxDatabase>(pool);
   const sns = createSnsClient(awsClientConfig(env));
-  const publisher = new SnsMessagePublisher(sns, env.EVENTS_TOPIC_ARN);
+  const publisher = new SnsMessagePublisher(sns, env.EVENTS_TOPIC_ARN, {
+    concurrency: env.OUTBOX_PUBLISH_CONCURRENCY,
+  });
   // Tópico errado ou inexistente é configuração: falha no boot, não mensagem a mensagem.
   await publisher.ping();
   const clock = new SystemClock();

@@ -30,6 +30,8 @@ x-backend: &backend
     REDIS_URL: redis://redis:6379
     JWT_SECRET: ${JWT_SECRET:-dev-only-access-secret-change-me-32-chars}
     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret-change-me-32-chars}
+    # Validade do access token (a stack de carga usa horas: o k6 entra uma vez só).
+    JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
 
 # Mensageria: SNS/SQS no Floci (emulador local da AWS). Para usar uma conta
 # AWS de verdade, aponte AWS_ENDPOINT_URL para vazio e informe credenciais.
@@ -90,7 +92,9 @@ services:
     environment:
       # URLs de fila com o nome do serviço, alcançáveis pelos outros contêineres.
       FLOCI_HOSTNAME: floci
-      FLOCI_STORAGE_MODE: persistent
+      # Em disco, as filas sobrevivem a um restart; em memória (`memory`), o
+      # Floci é várias vezes mais rápido (a stack de carga usa).
+      FLOCI_STORAGE_MODE: ${FLOCI_STORAGE_MODE:-persistent}
     ports:
       - "127.0.0.1:${FLOCI_PORT:-4566}:4566"
     volumes:
@@ -205,6 +209,7 @@ services:
       RELAY_HEALTH_PORT: "3003"
       OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-500}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-100}
+      OUTBOX_PUBLISH_CONCURRENCY: ${OUTBOX_PUBLISH_CONCURRENCY:-5}
       OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
     depends_on:
       messaging-setup:

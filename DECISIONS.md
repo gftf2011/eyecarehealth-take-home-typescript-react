@@ -830,6 +830,25 @@ Cada ADR traz contexto, decisão, alternativas e consequências (prós e contras
   - ➖ Mudou o contrato: `page` deixou de existir (é ignorado) e `pagination` trocou de forma. O painel e o Swagger foram atualizados juntos.
   - ➖ A busca parcial por nome (`ILIKE`) continua sendo um filtro: com poucos resultados, o índice trigram resolve; com muitos, o PostgreSQL percorre o índice da ordenação e filtra. Em escala maior, o caminho é a busca textual em um serviço próprio.
 
+### ADR-33 — Testes de carga com k6, numa stack isolada
+
+- **Contexto.** Os testes de desempenho do Vitest medem uma consulta por vez, direto no repositório ou no caso de uso. Faltava saber como o sistema inteiro se comporta com várias pessoas usando o painel ao mesmo tempo: nginx, API, banco, outbox e mensageria disputando a mesma máquina.
+- **Decisão.**
+  1. **k6**, em [`backend/load-tests/`](backend/load-tests) (`npm run test:load`), rodando numa imagem fixada (`grafana/k6:1.3.0`) dentro da rede da stack. Não há dependência nova no `package.json`.
+  2. **Stack isolada** (`fastmeals-load`), como a do Playwright: banco novo a cada rodada, portas próprias, rate limit por IP desligado na prática (toda a carga sai de um IP) e sem exportação de telemetria.
+  3. **Volume criado pela API**, não por SQL: os 25.000 pedidos passam pelo caso de uso, pelo outbox e pelo SNS/SQS, e a própria preparação já é um teste de escrita (cerca de 900 req/s, sem erros).
+  4. **Taxa fixa de chegada** (`constant-arrival-rate`), não um número fixo de usuários: se a API fica lenta, as requisições não diminuem sozinhas. A lentidão aparece como latência e como iterações descartadas, que também têm limite.
+  5. **Limites do enunciado como critério**, por endpoint (p95 abaixo de 200 ms nas listagens); o k6 sai com erro se algum falha.
+- **Alternativas.**
+  - *Autocannon ou artillery em Node*: dependência a mais no projeto, e a mistura de cenários com limites por rota é mais trabalhosa.
+  - *Pedidos inseridos por SQL*: mais rápido, mas pularia as regras, o outbox e a mensageria.
+  - *Rodar na esteira a cada commit*: na máquina compartilhada da esteira os números variam demais para servir de limite. Fica manual, e na esteira seria um job agendado.
+- **Consequências.**
+  - ➕ O requisito de 200 ms é conferido no sistema inteiro, com concorrência e escrita acontecendo ao mesmo tempo, não só por consulta.
+  - ➕ O teto ficou medido: cerca de 240 req/s dentro dos limites e saturação perto de 400 req/s, com uma instância da API.
+  - ➖ O k6, a stack e o emulador da AWS dividem a mesma máquina, então os números são um piso. O Floci sozinho usou mais CPU que a API.
+  - ➖ O login não entra na mistura: o bcrypt e o limite de tentativas o tornam um teste à parte.
+
 ---
 
 ## 5. Mudanças no esquema de referência
@@ -975,6 +994,14 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 
 ---
 
+43. **Outbox levando horas para esvaziar depois de um seed grande.** Criar 100 mil pedidos pela API grava mais de 400 mil eventos em poucos minutos, e o relay demorava muito para publicá-los. Havia duas causas, medidas uma de cada vez:
+    - **O Floci gravando em disco.** Com `FLOCI_STORAGE_MODE=persistent`, o emulador publicava cerca de 70 msg/s com um núcleo a 100%, enquanto o PostgreSQL ficava parado. Em memória, a vazão foi para cerca de 470 msg/s: 400 mil eventos passaram de mais de 1 h 30 para uns 15 minutos. A stack de carga usa memória; a de desenvolvimento continua em disco, para as filas sobreviverem a um restart. Em memória, porém, ele disputa CPU com a API e o banco: o teste de carga com 25 mil pedidos falhava já na taxa base (p95 de 1,1 s em todas as rotas) enquanto o emulador publicava os eventos do seed. Agora o teste espera o outbox esvaziar antes de medir.
+    - **A consulta do relay crescia com o backlog.** Para escolher 100 agregados, ela agrupava todas as pendentes. Com 400 mil pendentes, cada lote custava 56–88 ms de banco, fosse de 100 ou de 500 mensagens. Agora o lote sai de uma janela das pendentes mais antigas (`ORDER BY sequence LIMIT`, índice parcial novo), e custa 10–27 ms. A ordem por agregado continua garantida: se uma mensagem de um agregado está na janela, a primeira pendente dele também está. O teste `outbox-relay.performance.integration.spec.ts` monta o backlog de 400 mil e falha com a consulta antiga.
+    - **O que não ajudou:** lotes de 500 e 20 faixas de `PublishBatch` saíram *mais lentos* contra o Floci (333–416 msg/s, contra 436–523 com 100 e 5). Os padrões continuam 100 e 5, agora configuráveis (`OUTBOX_PUBLISH_CONCURRENCY`), porque contra a AWS, com mais latência por chamada, outros valores podem ganhar, e isso só se decide medindo lá.
+    - Contra o Floci, a consulta nova não muda a vazão de ponta a ponta (o emulador é o gargalo). Ela vale quando o broker é rápido e o backlog é grande, e nas réplicas extras do relay, que antes repetiriam a mesma varredura.
+
+44. **Metade dos pedidos de um seed longo falhando.** Numa rodada de carga de 16 minutos, 53% dos `POST /orders` falharam. O k6 entra uma vez e reaproveita o token, que vale 15 minutos: depois disso, toda requisição recebia `401` na hora, e as 53 mil iterações restantes "terminaram" em segundos, só com erros. **Solução:** a stack de carga sobe com `JWT_EXPIRES_IN=4h` (o compose passou a repassar a variável), e o seed para no primeiro sinal (`abortOnFail` acima de 1% de erros), em vez de seguir martelando.
+
 ## 7. Limitações conhecidas e próximos passos
 
 - **Esteira sem deploy.** O [GitHub Actions](.github/workflows/ci.yml) instala, faz lint, testa e gera o build a cada commit na `main` ([ADR-25](#adr-25--esteira-no-github-actions-e-lint-com-oxlint)), mas não publica imagens nem faz deploy. Os testes de ponta a ponta rodam só no Chromium e sem regressão visual.
@@ -982,9 +1009,11 @@ O esquema de [`docs/database-schema.md`](docs/database-schema.md) foi seguido, c
 - **Tema escuro só pelo sistema.** Os tokens já aceitam `data-theme`, mas não há botão para alternar.
 - **Imagens base com tags amplas** (`node:22-alpine`, `postgres:17-alpine`…): recebem correções de segurança, mas o build pode mudar entre máquinas. Fixar a versão exata (ou o digest) deixaria o build idêntico.
 - **Distância em linha reta.** Haversine ignora ruas, rios e trânsito. Com um serviço de rotas, bastaria trocar a função de custo da matriz; o algoritmo continua o mesmo.
+- **Relatórios calculados a cada requisição.** Com 105 mil pedidos no banco, medidos sem carga, a receita de 30 dias leva 177 ms e lê a tabela `orders` inteira (`Seq Scan` nos entregues), e os mais vendidos levam 100 ms. Sob carga, poucos relatórios por segundo já ocupam o PostgreSQL. Os próximos passos são um cache curto (o painel já recarrega no máximo a cada 5 s), totais por dia mantidos pelos eventos de entrega e o ajuste das consultas.
+- **Uma instância da API.** O teste de carga ([ADR-33](#adr-33--testes-de-carga-com-k6-numa-stack-isolada)) mostra o teto de um processo Node nesta máquina: cerca de 240 req/s dentro dos limites, saturação perto de 400 req/s. A API é sem estado (sessão no token, rate limit no Redis), então o próximo passo é subir réplicas atrás do nginx e repetir a medição.
 - **Leituras num único banco.** As listagens já não dependem do volume ([ADR-32](#adr-32--paginação-por-cursor-keyset-sem-offset-e-sem-contagem)), mas leem do mesmo PostgreSQL que grava, sem cache de leitura, e cada página traz os pedidos completos (itens e histórico). Com muito mais tráfego de leitura, os próximos passos seriam uma réplica para as listagens e um formato resumido da lista (o detalhe completo só no modal).
 - **Escala do otimizador.** O cálculo grande não trava mais a API ([ADR-24](#adr-24--otimizador-de-atribuição-fora-da-thread-da-api)), mas continua O(k²·K): ~2 s com 1000 × 1000, e no máximo 2 ao mesmo tempo por instância. Para escalas maiores, o caminho seria dividir por região (o otimizador por bairro) ou limitar os candidatos aos mais próximos de cada pedido.
 - **Tempo real sem histórico.** A fila SQS segura o evento até uma réplica do gateway repassá-lo, mas o Redis pub/sub não guarda mensagens: o painel que estava desconectado recarrega a lista pela API. Com requisitos de replay, o próximo passo seria Redis Streams ou guardar os últimos eventos por tópico.
 - **Observabilidade local, não de produção.** O `otel-lgtm` guarda os dados enquanto o contêiner existe e não tem alertas configurados. Em produção, o caminho é apontar o `OTEL_EXPORTER_OTLP_ENDPOINT` para um backend gerenciado e criar alertas para: atraso do outbox acima de alguns segundos, fila morta maior que zero, p95 das listagens acima de 200 ms e recusas do otimizador.
-- **Floci não é a AWS.** Retentativas de entrega do SNS, latências e limites são aproximações locais. Antes de produção, os mesmos testes de integração deveriam rodar contra uma conta AWS de teste, e a topologia ir para o Terraform (com alarmes na idade da mensagem mais antiga e no tamanho da fila morta).
+- **Floci não é a AWS.** Retentativas de entrega do SNS, latências e limites são aproximações locais. A vazão do relay foi medida só contra o emulador (dificuldade 43); o lote e as faixas de publicação precisam ser ajustados contra a AWS, olhando também a cota de vazão do tópico FIFO. Antes de produção, os mesmos testes de integração deveriam rodar contra uma conta AWS de teste, e a topologia ir para o Terraform (com alarmes na idade da mensagem mais antiga e no tamanho da fila morta).
 - **Revogação imediata de access token.** Hoje vale até expirar (15 min). Se for necessária, uma denylist curta no Redis resolveria.

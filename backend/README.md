@@ -222,11 +222,53 @@ npm run test:unit          # só unitários (rápidos, sem Docker)
 npm run test:architecture  # regras de arquitetura (ArchUnitTS), sem Docker
 npm run test:integration   # adapters contra PostgreSQL, Redis e Floci reais
 npm run test:e2e           # API HTTP e WebSocket de ponta a ponta
+npm run test:load          # carga com k6 numa stack Docker isolada (manual, alguns minutos)
 npm run typecheck          # tsc --noEmit (strict)
 npm run lint               # oxlint com regras de tipo (promises esquecidas, any, sort sem comparador…)
 ```
 
 > **Integração e e2e exigem Docker em execução.** O Vitest sobe PostgreSQL 17, Redis 7 e Floci (SNS/SQS) descartáveis com Testcontainers (uma vez por execução), aplica as migrations reais e destrói tudo ao final. Nada é configurado à mão.
+
+### Testes de carga (k6)
+
+Ficam em [`load-tests/`](load-tests) e medem a API pelo sistema inteiro: nginx, API, PostgreSQL, Redis, outbox, SNS/SQS e tempo real, com o `docker-compose.yml` da raiz. Só exigem Docker (o k6 roda na imagem `grafana/k6:1.3.0`) e não entram na imagem do backend.
+
+```bash
+npm run test:load                                  # 25.000 pedidos + 1 min de carga mista
+ORDERS=50000 DURATION=3m RATE=2 npm run test:load  # mais volume, mais tempo, o dobro da taxa
+KEEP_STACK=1 npm run test:load                     # mantém a stack no fim (http://localhost:3200)
+```
+
+1. Sobe uma stack **isolada** (projeto `fastmeals-load`, portas 3200+, banco novo com o seed). Os dados de desenvolvimento não são tocados.
+2. [`seed-orders.js`](load-tests/seed-orders.js) cria os pedidos **pela API**: 40% pendentes, 20% em preparo, 20% prontos e 20% cancelados. Isso já é carga de escrita, porque cada pedido passa pelo outbox até o tempo real. Depois, o script espera o outbox esvaziar, para os eventos do seed não disputarem CPU com a medição.
+3. [`endpoints.js`](load-tests/endpoints.js) dispara, com **taxa fixa de chegada**, a mistura de um painel em uso:
+
+   | Cenário | Por segundo | O que faz |
+   |---|---|---|
+   | Lista de pedidos | 30 | Filtro e ordenação ao acaso; às vezes segue até 3 páginas pelo cursor |
+   | Detalhe do pedido | 20 | `GET /orders/:id` |
+   | Lista de produtos | 15 | Busca, categoria e ordenação ao acaso |
+   | Relatórios | 5 | Os 4 relatórios, últimos 30 dias |
+   | Entregadores | 5 | `GET /delivery-persons` |
+   | Novo pedido | 5 | `POST /orders` e `PATCH` para `preparing` |
+   | Sugestão de atribuição | 1 | `POST /orders/optimize-assignment` sobre os 5.000 pedidos prontos |
+
+   Os limites seguem o enunciado: p95 abaixo de 200 ms nas listagens e no detalhe, 300 ms nas escritas, 500 ms nos relatórios, 2 s na otimização, menos de 1% de erros e nenhuma requisição descartada por falta de capacidade. Se um deles falha, o k6 sai com erro.
+
+Toda a carga sai de um único IP, então a stack de carga sobe com o rate limit por IP desligado na prática (`RATE_LIMIT_MAX` alto), como a do Playwright. O Floci roda em memória (`FLOCI_STORAGE_MODE=memory`): gravando em disco, o emulador publica cerca de 70 msg/s e o outbox de um seed grande levaria horas para esvaziar. O token é obtido uma vez: o login usa bcrypt de propósito e não entra na mistura. Os resumos em JSON ficam em `backend/load-tests/results/` (fora do Git).
+
+**Resultado medido** (25.000 pedidos, 1 min por rodada; tudo na mesma máquina, com o Docker limitado a 8 CPUs e 4 GB, inclusive o k6):
+
+| Taxa | Requisições/s | p95 das listagens | p95 de `POST /orders` | Erros | Descartadas |
+|---|---|---|---|---|---|
+| 1× | 123 | 38–58 ms | 82 ms | 0% | 6 |
+| 2× | 244 | 35–45 ms | 58 ms | 0% | 4 |
+| 4× | 399 de 490 pedidas | 0,47–0,74 s | 0,73 s | 0% | 2.534 |
+
+- **Em 1× e 2×**, tudo fica abaixo dos limites. A sugestão de atribuição, sobre 5.000 pedidos prontos, tem p95 de 150–210 ms, e o p99 das outras rotas passa de 100 a 400 ms: um cálculo grande ainda carrega os pedidos na thread da API.
+- **Em 4×**, a API não acompanha (~400 req/s) e as filas crescem, ainda sem nenhum erro.
+- **O outbox precisa esvaziar antes da medição.** Os ~55 mil eventos do seed levam cerca de 2 minutos para sair. Sem essa espera, o Floci em memória ocupa até 5 núcleos publicando-os, e o mesmo teste falha já em 1× (p95 de 1,1 s em todas as rotas). Em produção o SNS não estaria nesta máquina.
+- **Leitura honesta:** com uma única instância da API (um processo Node), esse é o teto desta máquina. Escalar é subir réplicas da API atrás do nginx, que já é sem estado ([ADR-33](../DECISIONS.md#adr-33--testes-de-carga-com-k6-numa-stack-isolada)).
 
 ### Tipos de teste
 
@@ -266,6 +308,7 @@ As regras valem para o código de produção: testes e pastas `testing/` podem a
 ### Performance e concorrência (também automatizados)
 
 - **Listagens < 200 ms com 10.000 registros**, inclusive a última página por cursor, com `EXPLAIN` confirmando o índice usado (e, na página profunda, sem `Sort` nem `Seq Scan`): `kysely-product.repository.performance.integration.spec.ts`, `kysely-order.repository.performance.integration.spec.ts`, `kysely-report-queries.performance.integration.spec.ts`.
+- **Carga com k6** sobre 25.000 pedidos, pelo sistema inteiro: [testes de carga](#testes-de-carga-k6).
 - **Otimização < 2 s com 50 pedidos e 30 entregadores**, em memória e no PostgreSQL: `suggest-assignment.usecase.unit.spec.ts`, `kysely-delivery-unit-of-work.integration.spec.ts`.
 - **Concorrência real** (transações em paralelo): sem lost update na mudança de status, nunca duas entregas para o mesmo entregador, remoção de entregador esperando o despacho, relays em paralelo sem duplicar mensagens.
 
@@ -656,7 +699,7 @@ O gateway lê a fila com long polling e, para cada mensagem, publica o envelope 
 | Onde | Como |
 |---|---|
 | Outbox | Coluna `sequence` (identity): a ordem de inserção, confiável mesmo quando os relógios de duas transações empatam ou se invertem |
-| Relay | Advisory lock por agregado (`pg_try_advisory_xact_lock`): duas réplicas nunca publicam o mesmo pedido ao mesmo tempo; agregados diferentes continuam divididos |
+| Relay | Escolhe o lote pela janela das pendentes mais antigas (`ORDER BY sequence LIMIT`, índice parcial): o custo de um lote não cresce com o backlog. Advisory lock por agregado (`pg_try_advisory_xact_lock`): duas réplicas nunca publicam o mesmo pedido ao mesmo tempo; agregados diferentes continuam divididos |
 | SNS | `MessageGroupId` = agregado (`ordering.order:<id>`); `MessageDeduplicationId` = id do outbox, então uma republicação (commit que falhou depois do envio) é descartada em 5 minutos |
 | Publisher | Cada agregado numa faixa sequencial (as faixas correm em paralelo); no máximo uma mensagem por agregado em cada `PublishBatch`; uma falha adia (`deferred`) as seguintes do mesmo agregado |
 | SQS | Fila e fila morta FIFO, com `DeduplicationScope=messageGroup` e `FifoThroughputLimit=perMessageGroupId` (alta vazão) |
@@ -767,6 +810,7 @@ Exemplo completo em [`.env.example`](../.env.example). Cada processo valida as s
 | `API_DOCS_ENABLED` | API | `true` | `false` tira do ar o Swagger UI e o OpenAPI (`/api/docs`) |
 | `BCRYPT_COST` | API, seed | `10` | Custo do bcrypt (10–15) |
 | `OUTBOX_POLL_INTERVAL_MS` / `OUTBOX_BATCH_SIZE` | relay | `500` / `100` | Latência máxima e tamanho do lote |
+| `OUTBOX_PUBLISH_CONCURRENCY` | relay | `5` | `PublishBatch` em paralelo (cada agregado numa só faixa, em ordem) |
 | `OUTBOX_MAX_ATTEMPTS` | relay | `5` | Falhas permanentes de uma mensagem até a fila morta |
 | `OTEL_SERVICE_NAME` | API, relay, gateway | — | Nome do serviço nos traces, métricas e logs |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | API, relay, gateway | `http://localhost:4318` | Destino OTLP (no Compose, `http://otel-lgtm:4318`) |

@@ -8,6 +8,7 @@
 backend/node_modules
 backend/dist
 backend/coverage
+backend/load-tests
 backend/.env
 backend/.env.*
 backend/**/*.log

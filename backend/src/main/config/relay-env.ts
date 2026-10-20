@@ -17,7 +17,17 @@ const relayEnvSchema = z.object({
     .endsWith('.fifo', 'O tópico precisa ser FIFO (ARN terminando em .fifo)'),
   /** Espera entre ciclos sem pendentes: é a latência máxima até o painel. */
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(500),
+  /**
+   * Mensagens por transação. Medido contra o Floci: lotes de 500 saíram mais
+   * lentos que os de 100 (transação mais longa, mais rodadas por agregado).
+   */
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(100),
+  /**
+   * Faixas de `PublishBatch` em paralelo (cada agregado fica numa só, em
+   * ordem). Contra o Floci, mais faixas não aumentaram a vazão; contra a AWS,
+   * com mais latência por chamada, vale medir valores maiores.
+   */
+  OUTBOX_PUBLISH_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
   /** Falhas permanentes de uma mensagem até ela ir para a fila morta. */
   OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(5),
   /** Porta interna só do health check (não é exposta ao público). */
